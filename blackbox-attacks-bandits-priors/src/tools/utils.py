@@ -65,7 +65,7 @@ def get_image(index, imagenet_path=None):
     data_path = os.path.join(imagenet_path, 'val')
     image_paths = sorted([os.path.join(data_path, i) for i in os.listdir(data_path)])
     assert len(image_paths) == 50000
-    labels_path = os.path.join(imagenet_path, 'val_caffe.txt')
+    labels_path = os.path.join(imagenet_path, 'val.txt')
     with open(labels_path) as labels_file:
         labels = [i.split(' ') for i in labels_file.read().strip().split('\n')]
         labels = {os.path.basename(i[0]): int(i[1]) for i in labels}
