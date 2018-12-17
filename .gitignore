@@ -1,10 +1,12 @@
 data/**
 
 imagenet/logs/**
+imagenet/data/**
 imagenet/tools/data/**
 
 gaon_imagenet/imagenet_out/**
 gaon_imagenet/tools/data/**
 
-*.pyc
-*.pyo
+**/*.pyc
+**/*.pyo
+**/*.npy
