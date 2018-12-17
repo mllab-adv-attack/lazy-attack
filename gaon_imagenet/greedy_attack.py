@@ -58,6 +58,8 @@ if __name__ == '__main__':
     parser.add_argument('--dec_v2_reset', default='y', help = 'reset x_m and x_p', type=str)
     # gray scale
     parser.add_argument('--gray', default=2, help = 'gray scale directions', type=int)
+    # targeted
+    parser.add_argument('--targeted', action='store_true')
     params = parser.parse_args()
     for key, val in vars(params).items():
         print('{}={}'.format(key,val))
@@ -144,6 +146,7 @@ class LazyGreedyAttack:
         self.num_correct = tf.reduce_sum(
             tf.cast(self.correct_prediction, tf.int32))
         self.loss = - y_xent
+        
 
     # update loss gain for candid in lazy greedy attack
     def update(self, greedy, adv_image, y, sess):

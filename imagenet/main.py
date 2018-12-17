@@ -90,9 +90,9 @@ if __name__ == '__main__':
     success = False
     
     p = sess.run(preds, feed_dict={x_input: initial_img})
-    if p[0] != orig_class:
+    '''if p[0] != orig_class:
       tf.logging.info('Misclassified, continue to the next image')
-      continue
+      continue'''
     
     count += 1
     if not args.targeted:
