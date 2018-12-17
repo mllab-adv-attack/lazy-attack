@@ -330,6 +330,19 @@ bandit_pytorch2500_newnorm = [6.5, 1330]
 vanilla = [1.8, 686]
 early_stop = [1.8, 639]
 
+# rgb
+mmp = 1062869
+ppm = 1146255
+pmp = 988835
+mpm = 1009322
+mpp = 1174452
+pmm = 1162928
+ppp = 1193967
+mmm = 1201472
+
+p = 13436104
+m = 13384196
+
 #adv
 
 ldg_resize8 = [1.3, 9133]

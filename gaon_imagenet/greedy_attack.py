@@ -1285,12 +1285,7 @@ def run_attack(x_adv, sess, attack, x_full_batch, y_full_batch, percentage_mean)
     print('Output saved at pred.npy')
 
 if __name__ == '__main__':
-    import json
     #import sys
-
-    with open('config.json') as config_file:
-        config = json.load(config_file)
-
 
     configs = tf.ConfigProto()
     configs.gpu_options.allow_growth = True
@@ -1302,7 +1297,7 @@ if __name__ == '__main__':
         # Iterate over the samples batch-by-batch
         num_eval_examples = params.sample_size
         eval_batch_size = 1
-        target_indices = np.load('./imagenet_out/intersection_norm.npy')
+        target_indices = np.load('./../data/intersection_norm.npy')
         num_batches = int(math.ceil(num_eval_examples / eval_batch_size))
         x_adv = [] # adv accumulator
         
@@ -1316,8 +1311,8 @@ if __name__ == '__main__':
             x_candid = []
             y_candid = []
             for i in range(100):
-                #img_batch, y_batch = get_image(target_indices[bstart+i], IMAGENET_PATH)
-                img_batch, y_batch = get_image(bstart+i, IMAGENET_PATH)
+                img_batch, y_batch = get_image(target_indices[bstart+i], IMAGENET_PATH)
+                #img_batch, y_batch = get_image(bstart+i, IMAGENET_PATH)
                 img_batch = np.reshape(img_batch, (-1, *img_batch.shape))
                 x_candid.append(img_batch)
                 y_candid.append(y_batch)
@@ -1342,7 +1337,7 @@ if __name__ == '__main__':
             print(len(x_full_batch))
             if len(x_full_batch) >= num_eval_examples or (bstart == 50000):
                 break
-        np.save('./imagenet_out/tensorflow_{}'.format(params.sample_size), attack_set)
+        #np.save('./imagenet_out/tensorflow_{}'.format(params.sample_size), attack_set)
 
         percentages = []
         total_times = []
@@ -1379,10 +1374,8 @@ if __name__ == '__main__':
 
 
         print('Storing examples')
-        path = config['store_adv_path']
         x_adv = np.concatenate(x_adv, axis=0)
         
-        np.save(path, x_adv)
         if (params.attack_type == 'ldg_dec') or (params.attack_type == 'ldg_dec_v2') :
             np.save('imagenet_out/{}_{}_{}_{}_{}_{}.npy'.format(params.attack_type,
                                                                 params.resize,
@@ -1391,7 +1384,6 @@ if __name__ == '__main__':
                                                                 params.dec_keep,
                                                                 params.max_q), attack.queries)
         pixel_checker(x_full_batch, x_adv)
-        print('Examples stored in {}'.format(path))
         print('Average queries: {:.2f}'.format(np.mean(attack.queries)))
         if params.attack_type == 'ldg_mask':
             print('Average block size: {:.2f}'.format(np.mean(attack.avg_block_size)))

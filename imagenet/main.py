@@ -25,6 +25,7 @@ parser.add_argument('--sample_size', default=1000, type=int)
 parser.add_argument('--save_img', dest='save_img', action='store_true')
 parser.add_argument('--attack', default='LazyLocalSearchBatchAttack', type=str)
 parser.add_argument('--mode', default='val', type=str)
+parser.add_argument('--targeted', action='store_true')
 
 args = parser.parse_args()
 
@@ -50,12 +51,13 @@ if __name__ == '__main__':
     'y_input': y_input,
     'logits': logits,
     'preds': preds,
-    'losses': losses 
+    'losses': losses,
+    'targeted': args.targeted,
   }
 
   # Create directory
-  tf.gfile.MakeDirs('/data_large/unsynced_store/seungyong/output/adv')
-  tf.gfile.MakeDirs('/data_large/unsynced_store/seungyong/output/nat')
+  #tf.gfile.MakeDirs('/data_large/unsynced_store/seungyong/output/adv')
+  #tf.gfile.MakeDirs('/data_large/unsynced_store/seungyong/output/nat')
 
   # Create attack class
   attack_class = getattr(sys.modules[__name__], args.attack)
@@ -75,6 +77,14 @@ if __name__ == '__main__':
     tf.logging.info('')
     initial_img, orig_class = get_image(indices[index], IMAGENET_PATH)
     initial_img = np.expand_dims(initial_img, axis=0)
+
+    # generate target class
+    if args.targeted:
+      target_class = np.random.randint(NUM_LABELS)
+      while (target_class == orig_class):
+        target_class = np.random.randint(NUM_LABELS)
+      target_class = np.expand_dims(target_class, axis=0)
+
     orig_class = np.expand_dims(orig_class, axis=0)
     index += 1
     success = False
@@ -85,8 +95,11 @@ if __name__ == '__main__':
       continue
     
     count += 1
-    
-    adv_img, num_queries = lazy_local_search_attack.perturb(initial_img, orig_class, sess)
+    if not args.targeted:
+      adv_img, num_queries = lazy_local_search_attack.perturb(initial_img, orig_class, sess)
+    else:
+      adv_img, num_queries = lazy_local_search_attack.perturb(initial_img, target_class, sess)
+
     assert(np.amax(np.abs(adv_img-initial_img)) <= args.epsilon+1e-3)    
     
     if args.save_img:
@@ -97,7 +110,12 @@ if __name__ == '__main__':
     
     p = sess.run(preds, feed_dict={x_input: adv_img})
 
-    if p[0] != orig_class:
+    if not args.targeted and p[0] != orig_class:
+      total_num_corrects += 1
+      total_num_queries += num_queries
+      tf.logging.info('Image {} attack success, image index: {}, average queries: {}, success rate: {}'.format(
+        count, indices[index-1], total_num_queries/max(1, total_num_corrects), total_num_corrects/count))
+    elif args.targeted and p[0] == target_class:
       total_num_corrects += 1
       total_num_queries += num_queries
       tf.logging.info('Image {} attack success, image index: {}, average queries: {}, success rate: {}'.format(

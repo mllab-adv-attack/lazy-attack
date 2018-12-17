@@ -1,0 +1,3 @@
+Resnet, 0.05, eps:ldg_dec_v2,
+                        sample_size:10, loss_func:xent
+                        => acc:0.2, percentage:0.5230623206370495

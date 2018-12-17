@@ -14,6 +14,8 @@ class LazyLocalSearchHelper(object):
     self.y_input = model['y_input']
     self.logits = model['logits']
     self.preds = model['preds']
+    self.targeted = model['targeted']
+
     self.probs = tf.nn.softmax(self.logits)
 
     batch_nums = tf.range(0, limit=tf.shape(self.probs)[0])
@@ -25,6 +27,8 @@ class LazyLocalSearchHelper(object):
     max_indices = tf.stack([batch_nums, max_indices], axis=1)
     max_probs = tf.gather_nd(params=self.probs, indices=max_indices)
     self.losses = tf.log(ground_truth_probs) - tf.log(max_probs)
+    if self.targeted:
+        self.losses = -self.losses
     
     self.epsilon = epsilon
  
@@ -59,9 +63,13 @@ class LazyLocalSearchHelper(object):
       feed_dict={self.x_input: image_batch, self.y_input: label_batch})
     num_queries += 1
     curr_loss = losses[0]
-      
-    if preds[0] != label:
-      return noise, num_queries, curr_loss, True
+    
+    if not self.targeted:
+      if preds[0] != label:
+        return noise, num_queries, curr_loss, True
+    else:
+      if preds[0] == label:
+        return noise, num_queries, curr_loss, True
 
     for _ in range(2):
       # First forward passes
@@ -85,7 +93,11 @@ class LazyLocalSearchHelper(object):
           feed_dict={self.x_input: image_batch, self.y_input: label_batch})
         num_queries += bend-bstart
         
-        success_indices,  = np.where(preds!=label)
+        if not self.targeted:
+          success_indices,  = np.where(preds!=label)
+        else:
+          success_indices,  = np.where(preds==label)
+
         if len(success_indices) > 0:
           idx = indices[bstart+success_indices[0]]
           c = channels[bstart+success_indices[0]]
@@ -132,8 +144,13 @@ class LazyLocalSearchHelper(object):
           noise = self._flip_noise(noise, blocks[cand_idx], cand_c)
           A[cand_idx, cand_c] = 1
           # Early stopping
-          if preds[0] != label:
-            return noise, num_queries, curr_loss, True
+          if not self.targeted:
+            if preds[0] != label:
+              return noise, num_queries, curr_loss, True
+          else:
+            if preds[0] == label:
+              return noise, num_queries, curr_loss, True
+
         # If the cardinality has changed, push the element into the priority queue
         else:
           heapq.heappush(priority_queue, (margin, cand_idx, cand_c))
@@ -161,7 +178,11 @@ class LazyLocalSearchHelper(object):
           feed_dict={self.x_input: image_batch, self.y_input: label_batch})
         num_queries += bend-bstart
         
-        success_indices, = np.where(preds!=label)
+        if not self.targeted:
+          success_indices,  = np.where(preds!=label)
+        else:
+          success_indices,  = np.where(preds==label)
+        
         if len(success_indices) > 0:
           idx = indices[bstart+success_indices[0]]
           c = channels[bstart+success_indices[0]]
@@ -207,8 +228,12 @@ class LazyLocalSearchHelper(object):
           noise = self._flip_noise(noise, blocks[cand_idx], cand_c)
           A[cand_idx, cand_c] = 0
           # Early stopping
-          if preds[0] != label:
-            return noise, num_queries, curr_loss, True
+          if not self.targeted:
+            if preds[0] != label:
+              return noise, num_queries, curr_loss, True
+          else:
+            if preds[0] == label:
+              return noise, num_queries, curr_loss, True
         # If the cardinality has changed, push the element into the priority queue
         else:
           heapq.heappush(priority_queue, (margin, cand_idx, cand_c))
