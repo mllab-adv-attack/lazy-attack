@@ -11,6 +11,7 @@ import math
 import tensorflow as tf
 import numpy as np
 import time
+import cv2 as cv
 
 #from PIL import Image
 
@@ -43,7 +44,7 @@ if __name__ == '__main__':
     parser.add_argument('--plot_interval', default=1000, help ='plot interval', type=int)
     parser.add_argument('--max_q', default = 10000, help = 'max queries', type=int)
     # resizing
-    parser.add_argument('--resize', default=64, help = 'resize ratio', type=int)
+    parser.add_argument('--resize', default=128, help = 'resize ratio', type=int)
     # block partition
     parser.add_argument('--block_size', default=16, help = 'block partition size', type=int)
     parser.add_argument('--admm_iter', default=20, help = 'admm max iteration', type=int)
@@ -53,7 +54,7 @@ if __name__ == '__main__':
     parser.add_argument('--admm_tau', default=8, help ='admm tau', type=float)
     # dec method
     parser.add_argument('--dec_scale', default=0.5, help = 'ratio of decreasing size in dec', type=float)
-    parser.add_argument('--dec_keep', default=0.5, help = 'ratio of selection in dec', type=float)
+    parser.add_argument('--dec_keep', default=1, help = 'ratio of selection in dec', type=float)
     parser.add_argument('--dec_select', default='margin', help = 'block selection scheme', type=str)
     parser.add_argument('--dec_v2_reset', default='y', help = 'reset x_m and x_p', type=str)
     # gray scale
@@ -160,48 +161,11 @@ class LazyGreedyAttack:
         if self.targeted:
             self.loss = tf.nn.sparse_softmax_cross_entropy_with_logits(
                 logits=self.logits, labels=self.y_input)
-        
-
-    # update loss gain for candid in lazy greedy attack
-    def update(self, greedy, adv_image, y, sess):
-        xi, yi, zi = greedy.loc
-        img_batch = np.tile(adv_image, (3, 1, 1, 1))
-        label_batch = np.tile(y, 3)
-        img_batch[1,xi,yi,zi] += args.eps
-        img_batch[2,xi,yi,zi] -= args.eps
-        
-        feed_dict = {
-            self.x_input:np.clip(img_batch,0, 1),
-            self.y_input: label_batch}
-        loss, num_correct = sess.run([self.loss,
-                                      self.num_correct],
-                                     feed_dict=feed_dict)
-        greedy.update(loss[1]-loss[0], loss[2]-loss[0])
-        if num_correct == 0:
-            print('attack success!')
-            if args.plot_f == 'y':
-                return None, loss[0]
-            else:
-                return None
-        if args.plot_f == 'y':
-            return greedy, loss[0]
-        else:
-            return greedy
-
-    # NES gradient estimate
-    def grad_est(self, x_adv, y, sess):
-        sigma = 0.25
-        _, xt, yt, zt = x_adv.shape
-        noise_pos = np.random.normal(size=(args.grad_est//2, xt, yt, zt))
-        noise = np.concatenate([noise_pos, -noise_pos], axis=0)
-        eval_points = x_adv + sigma * noise
-        labels = np.tile(y, (len(eval_points)))
-        losses = sess.run([self.loss],
-                          feed_dict={self.x_input: eval_points,
-                                     self.y_input: labels})
-        losses_tiled = np.tile(np.reshape(losses, (-1, 1, 1, 1)), x_adv.shape)
-        grad_estimates = np.mean(losses_tiled * noise, axis=0)/sigma
-        return 2 * args.eps * grad_estimates
+    
+    def _perturb_image(self, image, noise):
+        adv_image = image + cv.resize(np.reshape(noise, (256, 256, 3)), (299, 299), interpolation=cv.INTER_NEAREST)
+        adv_image = np.clip(adv_image, 0, 1)
+        return adv_image
 
     # block partition algorithm
     def block_partition(self, shape):
@@ -540,12 +504,17 @@ class LazyGreedyAttack:
         self.insert_count = 0
         self.put_count = 0
         self.success = False
-        _, xt, yt, zt = x_nat.shape
+        #_, xt, yt, zt = x_nat.shape
         resize = args.resize
+        
+        noise = np.zeros((1, 256, 256, 3))
+        _, xt, yt, zt = noise.shape
+        m_noise = np.ones_like(noise) * (-args.eps)
+        p_noise = np.ones_like(noise) * (args.eps)
 
         # empty&full set initialize
-        x_m = np.clip(x_nat - args.eps, 0, 1)
-        x_p = np.clip(x_nat + args.eps, 0, 1)
+        x_m = self._perturb_image(x_nat, m_noise)
+        x_p = self._perturb_image(x_nat, p_noise)
         
         img_batch = np.concatenate([x_m, x_p])
         label_batch = np.concatenate([y, y])
@@ -575,8 +544,8 @@ class LazyGreedyAttack:
         cur_p = losses[1]
 
         # spare x_m and x_p for comparison
-        x_m_spare = np.copy(x_m)
-        x_p_spare = np.copy(x_p)
+        m_noise_spare = np.copy(m_noise)
+        p_noise_spare = np.copy(p_noise)
 
         # create original pixel set
         orig_block = [(xi, yi, zi) for xi in range(xt) for yi in range(yt) for zi in range(zt)]
@@ -612,6 +581,8 @@ class LazyGreedyAttack:
                     batch_size = num_pixels%batch_size
             img_batch_m = np.tile(x_m, (batch_size, 1, 1, 1))
             img_batch_p = np.tile(x_p, (batch_size, 1, 1, 1))
+            noise_batch_m = np.tile(m_noise, (batch_size, 1, 1, 1))
+            noise_batch_p = np.tile(p_noise, (batch_size, 1, 1, 1))
             img_batch = np.concatenate([img_batch_m, img_batch_p])
             label_batch = np.tile(y, (2*batch_size))
             for j in range(batch_size):
@@ -620,8 +591,10 @@ class LazyGreedyAttack:
                 for xxi in range(resize):
                     for yyi in range(resize):
                         if (xb+xxi, yb+yyi, zi) in orig_block_set:
-                            img_batch[j, xb+xxi, yb+yyi, zb] = x_p[0, xb+xxi, yb+yyi, zb]
-                            img_batch[batch_size + j, xb+xxi, yb+yyi, zb] = x_m[0, xb+xxi, yb+yyi, zb]
+                            noise_batch_m[j, xb+xxi, yb+yyi, zb] = p_noise[0, xb+xxi, yb+yyi, zb]
+                            noise_batch_p[j, xb+xxi, yb+yyi, zb] = m_noise[0, xb+xxi, yb+yyi, zb]
+                img_batch[j] = self._perturb_image(x_nat, noise_batch_m[j])
+                img_batch[batch_size+j] = self._perturb_image(x_nat, noise_batch_p[j])
             feed_dict = {
                 self.x_input: img_batch,
                 self.y_input: label_batch}
@@ -674,11 +647,14 @@ class LazyGreedyAttack:
                 # update candid
                 xi, yi, zi = candid.loc
                 img_batch = np.concatenate([x_m, x_p])
+                noise_batch = np.concatenate([m_noise, p_noise])
                 for xxi in range(resize):
                     for yyi in range(resize):
                         if (xi+xxi, yi+yyi, zi) in orig_block_set:
-                            img_batch[0, xi+xxi, yi+yyi, zi] = x_p[0, xi+xxi, yi+yyi, zi]
-                            img_batch[1, xi+xxi, yi+yyi, zi] = x_m[0, xi+xxi, yi+yyi, zi]
+                            noise_batch[0, xi+xxi, yi+yyi, zi] = p_noise[0, xi+xxi, yi+yyi, zi]
+                            noise_batch[1, xi+xxi, yi+yyi, zi] = m_noise[0, xi+xxi, yi+yyi, zi]
+                img_batch[0] = self._perturb_image(x_nat, noise_batch[0])
+                img_batch[1] = self._perturb_image(x_nat, noise_batch[1])
                 y_batch = np.tile(y, 2)
                 
                 losses, correct_prediction = sess.run([self.loss, self.correct_prediction],
@@ -707,9 +683,9 @@ class LazyGreedyAttack:
                     print("num of queries:", self.query)
                     self.ratios.append((self.put_count + 0.0001) / (self.insert_count + self.put_count + 0.0001))
                     if np.random.uniform(0, 1, 1) >= 0.5:
-                        return x_m
+                        return self._perturb_image(x_nat, m_noise)
                     else:
-                        return x_p
+                        return self._perturb_image(x_nat, p_noise)
 
                 # update candid
                 candid.update(losses[0]-cur_m, losses[1]-cur_p)
@@ -723,13 +699,13 @@ class LazyGreedyAttack:
                         for xxi in range(resize):
                             for yyi in range(resize):
                                 if (xi+xxi, yi+yyi, zi) in orig_block_set:
-                                    x_m[0, xi+xxi, yi+yyi, zi] = x_p[0, xi+xxi, yi+yyi, zi]
+                                    m_noise[0, xi+xxi, yi+yyi, zi] = p_noise[0, xi+xxi, yi+yyi, zi]
                         cur_m = losses[0]
                     else:
                         for xxi in range(resize):
                             for yyi in range(resize):
                                 if (xi+xxi, yi+yyi, zi) in orig_block_set:
-                                    x_p[0, xi+xxi, yi+yyi, zi] = x_m[0, xi+xxi, yi+yyi, zi]
+                                    p_noise[0, xi+xxi, yi+yyi, zi] = m_noise[0, xi+xxi, yi+yyi, zi]
                         cur_p = losses[1]
                 else:
                     self.insert_count+=1
@@ -754,8 +730,8 @@ class LazyGreedyAttack:
                             anchor_pixels.append((xi+xxi, yi+yyi, zi))
                             #re-set x_m, x_p
                             if args.dec_v2_reset == 'y':
-                                x_m[0, xi+xxi, yi+yyi, zi] = x_m_spare[0, xi+xxi, yi+yyi, zi]
-                                x_p[0, xi+xxi, yi+yyi, zi] = x_p_spare[0, xi+xxi, yi+yyi, zi]
+                                m_noise[0, xi+xxi, yi+yyi, zi] = m_noise_spare[0, xi+xxi, yi+yyi, zi]
+                                p_noise[0, xi+xxi, yi+yyi, zi] = p_noise_spare[0, xi+xxi, yi+yyi, zi]
 
                 new_anchor_block = []
                 selected = set()
@@ -780,6 +756,8 @@ class LazyGreedyAttack:
 
             if args.dec_v2_reset == 'y':
                 #update cur_m, cur_p
+                x_m = self._perturb_image(x_nat, m_noise)
+                x_p = self._perturb_image(x_nat, p_noise)
                 img_batch = np.concatenate([x_m, x_p])
                 label_batch = np.concatenate([y, y])
                 
@@ -815,9 +793,9 @@ class LazyGreedyAttack:
         print("num of queries:", self.query)
         self.ratios.append((self.put_count + 0.0001) / (self.insert_count + self.put_count + 0.0001))
         if np.random.uniform(0, 1, 1) >= 0.5:
-            return x_m
+            return self._perturb_image(x_nat, m_noise)
         else:
-            return x_p
+            return self._perturb_image(x_nat, p_noise)
     
     # lazy double greedy with decreasing size - ver2 (only one first pass), gray scale
     def perturb_ldg_dec_gray(self, x_nat, y, sess, ibatch):
@@ -1270,16 +1248,16 @@ def run_attack(x_adv, sess, attack, x_full_batch, y_full_batch, percentage_mean)
     #np.save('out/'+args.attack_type+'_success.npy', success)
     accuracy = total_corr / num_eval_examples
     print('adv Accuracy: {:.2f}%'.format(100.0 * accuracy))
-    with open('out/result.txt', 'a') as f:
-        f.write('''Resnet, {}, eps:{},
-                        sample_size:{}, loss_func:{}
-                        => acc:{}, percentage:{}\n'''.format(args.eps,
-                                                             args.attack_type,
-                                                             args.sample_size,
-                                                             args.loss_func,
-                                                             accuracy,
-                                                             percentage_mean))
-
+    #with open('out/result.txt', 'a') as f:
+    #    f.write('''Resnet, {}, eps:{},
+    #                    sample_size:{}, loss_func:{}
+    #                    => acc:{}, percentage:{}\n'''.format(args.eps,
+    #                                                        args.attack_type,
+    #                                                         args.sample_size,
+    #                                                         args.loss_func,
+    #                                                         accuracy,
+    #                                                         percentage_mean))
+    
 
     total_corr = 0
     for ibatch in range(num_batches):
@@ -1298,8 +1276,8 @@ def run_attack(x_adv, sess, attack, x_full_batch, y_full_batch, percentage_mean)
     accuracy = total_corr / num_eval_examples
     print('nat Accuracy: {:.2f}%'.format(100.0 * accuracy))
     y_pred = np.concatenate(y_pred, axis=0)
-    np.save('pred.npy', y_pred)
-    print('Output saved at pred.npy')
+    #np.save('pred.npy', y_pred)
+    #print('Output saved at pred.npy')
 
 if __name__ == '__main__':
     #import sys
@@ -1384,6 +1362,7 @@ if __name__ == '__main__':
             print('perturb / (perturb + re-insert):{}'.format(percentage_mean))
             end = time.time()
             print('attack time taken:{}'.format(end - start))
+            print('avg. queries, success rate:', np.mean(attack.queries), len(attack.queries)/(ibatch+1) )
             total_times.append(end-start)
             if attack.success:
                 times.append(end-start)
