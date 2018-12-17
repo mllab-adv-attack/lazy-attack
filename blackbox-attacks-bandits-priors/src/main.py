@@ -201,8 +201,11 @@ def main(args):
     num_eval_examples = args.sample_size
     eval_batch_size = min(args.batch_size, num_eval_examples)
 
-    #target_indices = np.load('./out/intersection_norm.npy')
-    target_indices = [i for i in range(50000)]
+    if args.test:
+        target_indices = np.load('./out/intersection_norm.npy')
+    else:
+        target_indices = [i for i in range(50000)]
+    
     if args.shuffle:
         np.random.shuffle(target_indices)
     
@@ -316,6 +319,7 @@ if __name__ == "__main__":
     parser.add_argument('--tiling', action='store_false')
     parser.add_argument('--gradient-iters', default=1, type=int)
     parser.add_argument('--shuffle', action='store_true')
+    parser.add_argument('--test', action='store_true')
     args = parser.parse_args()
 
     args_dict = None
