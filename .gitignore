@@ -1,4 +1,8 @@
 data/**
+
 imagenet/data/**
 imagenet/logs/**
 imagenet/tools/data/**
+
+gaon_imagenet/imagenet_out/**
+gaon_imagenet/tools/data/**

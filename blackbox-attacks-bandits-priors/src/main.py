@@ -201,8 +201,8 @@ def main(args):
     num_eval_examples = args.sample_size
     eval_batch_size = min(args.batch_size, num_eval_examples)
 
-    target_indices = np.load('./out/intersection_norm.npy')
-    #target_indices = [i for i in range(50000)]
+    #target_indices = np.load('./out/intersection_norm.npy')
+    target_indices = [i for i in range(50000)]
     if args.shuffle:
         np.random.shuffle(target_indices)
     
