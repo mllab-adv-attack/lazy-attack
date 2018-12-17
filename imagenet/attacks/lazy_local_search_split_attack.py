@@ -45,7 +45,7 @@ class LazyLocalSearchSplitAttack(object):
     num_queries = 0
     subblocks = []
     block_size = 32
-    num_subblocks = 1
+    num_subblocks = 4
 
     for x in np.arange(0, 256, block_size):
       for y in np.arange(0, 256, block_size):
