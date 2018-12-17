@@ -1,1 +1,4 @@
 data/**
+imagenet/data/**
+imagenet/logs/**
+imagenet/tools/data/**
