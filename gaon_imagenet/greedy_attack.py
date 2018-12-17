@@ -141,6 +141,10 @@ class LazyGreedyAttack:
         self.y_input = tf.placeholder(tf.int32, None)
         
         self.logits, self.predictions = model(sess, self.x_input, args.model_dir)
+        self.predictions = tf.cast(self.predictions, tf.int32)
+        self.correct_prediction = tf.equal(self.predictions, self.y_input)
+        self.num_correct = tf.reduce_sum(
+            tf.cast(self.correct_prediction, tf.int32))
         
         self.probs = tf.nn.softmax(self.logits)
 
@@ -1263,7 +1267,7 @@ def run_attack(x_adv, sess, attack, x_full_batch, y_full_batch, percentage_mean)
         success.append(np.array(np.nonzero(np.invert(correct_prediction)))+ibatch*eval_batch_size)
 
     success = np.concatenate(success, axis=1)
-    np.save('out/'+args.attack_type+'_success.npy', success)
+    #np.save('out/'+args.attack_type+'_success.npy', success)
     accuracy = total_corr / num_eval_examples
     print('adv Accuracy: {:.2f}%'.format(100.0 * accuracy))
     with open('out/result.txt', 'a') as f:

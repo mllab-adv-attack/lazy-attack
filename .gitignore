@@ -5,6 +5,7 @@ imagenet/data/**
 imagenet/tools/data/**
 
 gaon_imagenet/imagenet_out/**
+gaon_imagenet/out/**
 gaon_imagenet/tools/data/**
 
 **/*.pyc
