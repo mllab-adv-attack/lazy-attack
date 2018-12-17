@@ -40,7 +40,6 @@ class LazyLocalSearchHelper(object):
   def _flip_noise(self, noise, block, channel):
     noise_new = np.copy(noise)
     upper_left, lower_right = block 
-    #noise_new[0, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], ...] *= -1
     noise_new[0, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], channel] *= -1
     return noise_new
 
@@ -110,7 +109,6 @@ class LazyLocalSearchHelper(object):
           idx = indices[bstart+i]
           c = channels[bstart+i]
           margin = losses[i]-curr_loss
-          #heapq.heappush(priority_queue, (margin, idx))
           heapq.heappush(priority_queue, (margin, idx, c))
       
       # Pick the best element and perturb the image   

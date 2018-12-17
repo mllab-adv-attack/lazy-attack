@@ -54,8 +54,7 @@ class LazyLocalSearchSplitAttack(object):
         xs, ys = np.where(np.zeros([block_size, block_size], np.int32)==0)
         xs += x
         ys += y
-        #curr_order = np.random.permutation(len(xs))
-        curr_order = np.arange(0, len(xs))
+        curr_order = np.random.permutation(len(xs))
         subblock_size = len(xs)//num_subblocks
         for i in range(num_subblocks):
           start = i*subblock_size
