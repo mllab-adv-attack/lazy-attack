@@ -1297,7 +1297,7 @@ if __name__ == '__main__':
         # Iterate over the samples batch-by-batch
         num_eval_examples = params.sample_size
         eval_batch_size = 1
-        target_indices = np.load('./imagenet_out/intersection_norm.npy')
+        target_indices = np.load('./../data/intersection_norm.npy')
         num_batches = int(math.ceil(num_eval_examples / eval_batch_size))
         x_adv = [] # adv accumulator
         
