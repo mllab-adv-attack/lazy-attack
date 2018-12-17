@@ -60,14 +60,14 @@ if __name__ == '__main__':
     parser.add_argument('--gray', default=2, help = 'gray scale directions', type=int)
     # targeted
     parser.add_argument('--targeted', action='store_true')
-    params = parser.parse_args()
-    for key, val in vars(params).items():
+    args = parser.parse_args()
+    for key, val in vars(args).items():
         print('{}={}'.format(key,val))
 
 def plot(li, num):
-    if num % params.plot_interval == 0:
+    if num % args.plot_interval == 0:
         x = [(i+1) for i in range(len(li))]
-        if params.plot_f == 'y':
+        if args.plot_f == 'y':
             ylabel = 'F(S)'
         else:
             ylabel = 'loss gain'
@@ -75,9 +75,9 @@ def plot(li, num):
         plt.legend([ylabel])
         plt.xlabel('# perturbs')
         plt.ylabel(ylabel)
-        plt.title('{}, eps: {}, loss: {}, #{}'.format(params.attack_type, params.eps, params.loss_func, num))
-        plt.savefig('out/resnet_'+ylabel+'_graph_{}_{}_{}_{}.png'.format(params.attack_type,
-                                                                         params.eps, params.loss_func,
+        plt.title('{}, eps: {}, loss: {}, #{}'.format(args.attack_type, args.eps, args.loss_func, num))
+        plt.savefig('out/resnet_'+ylabel+'_graph_{}_{}_{}_{}.png'.format(args.attack_type,
+                                                                         args.eps, args.loss_func,
                                                                          num))
         plt.close()
 
@@ -130,22 +130,32 @@ class LazyGreedyAttack:
         self.dec_block = []
         self.success = False
         self.query_exceed = False
+        self.targeted = args.targeted
         # mask
         self.avg_block_size = []
-        for i in range(params.admm_iter):
+        for i in range(args.admm_iter):
             self.block_success_stat[i] = 0
             self.admm_converge_stat[i] = 0
         
-        self.model_x = tf.placeholder(tf.float32, (None, 299, 299, 3))
-        self.model_y = tf.placeholder(tf.int64, None)
+        self.x_input = tf.placeholder(tf.float32, (None, 299, 299, 3))
+        self.y_input = tf.placeholder(tf.int32, None)
         
-        self.logits, self.predictions = model(sess, self.model_x, params.model_dir)
-        y_xent = tf.nn.sparse_softmax_cross_entropy_with_logits(
-            logits = self.logits, labels = self.model_y)
-        self.correct_prediction = tf.equal(self.predictions, self.model_y)
-        self.num_correct = tf.reduce_sum(
-            tf.cast(self.correct_prediction, tf.int32))
-        self.loss = - y_xent
+        self.logits, self.predictions = model(sess, self.x_input, args.model_dir)
+        
+        self.probs = tf.nn.softmax(self.logits)
+
+        batch_nums = tf.range(0, limit=tf.shape(self.probs)[0])
+        indices = tf.stack([batch_nums, self.y_input], axis=1)
+
+        ground_truth_probs = tf.gather_nd(params=self.probs, indices=indices)
+        top_2 = tf.nn.top_k(self.probs, k=2)
+        max_indices = tf.where(tf.equal(top_2.indices[:, 0], self.y_input), top_2.indices[:, 1], top_2.indices[:, 0])
+        max_indices = tf.stack([batch_nums, max_indices], axis=1)
+        max_probs = tf.gather_nd(params=self.probs, indices=max_indices)
+        self.loss = tf.log(ground_truth_probs) - tf.log(max_probs)
+        if self.targeted:
+            self.loss = tf.nn.sparse_softmax_cross_entropy_with_logits(
+                logits=self.logits, labels=self.y_input)
         
 
     # update loss gain for candid in lazy greedy attack
@@ -153,23 +163,23 @@ class LazyGreedyAttack:
         xi, yi, zi = greedy.loc
         img_batch = np.tile(adv_image, (3, 1, 1, 1))
         label_batch = np.tile(y, 3)
-        img_batch[1,xi,yi,zi] += params.eps
-        img_batch[2,xi,yi,zi] -= params.eps
+        img_batch[1,xi,yi,zi] += args.eps
+        img_batch[2,xi,yi,zi] -= args.eps
         
         feed_dict = {
-            self.model_x:np.clip(img_batch,0, 1),
-            self.model_y: label_batch}
+            self.x_input:np.clip(img_batch,0, 1),
+            self.y_input: label_batch}
         loss, num_correct = sess.run([self.loss,
                                       self.num_correct],
                                      feed_dict=feed_dict)
         greedy.update(loss[1]-loss[0], loss[2]-loss[0])
         if num_correct == 0:
             print('attack success!')
-            if params.plot_f == 'y':
+            if args.plot_f == 'y':
                 return None, loss[0]
             else:
                 return None
-        if params.plot_f == 'y':
+        if args.plot_f == 'y':
             return greedy, loss[0]
         else:
             return greedy
@@ -178,22 +188,22 @@ class LazyGreedyAttack:
     def grad_est(self, x_adv, y, sess):
         sigma = 0.25
         _, xt, yt, zt = x_adv.shape
-        noise_pos = np.random.normal(size=(params.grad_est//2, xt, yt, zt))
+        noise_pos = np.random.normal(size=(args.grad_est//2, xt, yt, zt))
         noise = np.concatenate([noise_pos, -noise_pos], axis=0)
         eval_points = x_adv + sigma * noise
         labels = np.tile(y, (len(eval_points)))
         losses = sess.run([self.loss],
-                          feed_dict={self.model_x: eval_points,
-                                     self.model_y: labels})
+                          feed_dict={self.x_input: eval_points,
+                                     self.y_input: labels})
         losses_tiled = np.tile(np.reshape(losses, (-1, 1, 1, 1)), x_adv.shape)
         grad_estimates = np.mean(losses_tiled * noise, axis=0)/sigma
-        return 2 * params.eps * grad_estimates
+        return 2 * args.eps * grad_estimates
 
     # block partition algorithm
     def block_partition(self, shape):
         
-        block_size = params.block_size
-        overlap = params.overlap
+        block_size = args.block_size
+        overlap = args.overlap
         xt, yt, zt = shape
         num_block_rows = xt//block_size
         num_block_cols = yt//block_size
@@ -225,7 +235,7 @@ class LazyGreedyAttack:
         return np.dot(yk, block_dist) + (rho / 2) * np.dot(block_dist, block_dist)
 
     # helper function for lazy double greedy ({-1, 1}) w.r.t. given block
-    def ldg_block_seg(self, x_adv, y, sess, ibatch, block, x_m, x_p, yk=0, rho=0, Resize = params.resize):
+    def ldg_block_seg(self, x_adv, y, sess, ibatch, block, x_m, x_p, yk=0, rho=0, Resize = args.resize):
         insert_count = 0
         put_count = 0
         queue = PeekablePriorityQueue()
@@ -260,17 +270,17 @@ class LazyGreedyAttack:
             block_x_m[0, xi, yi, zi] = x_m[0, xi, yi, zi]
             block_x_p[0, xi, yi, zi] = x_p[0, xi, yi, zi]
 
-        cur_m = sess.run(self.loss, feed_dict={self.model_x:block_x_m,
-                                               self.model_y:y})
+        cur_m = sess.run(self.loss, feed_dict={self.x_input:block_x_m,
+                                               self.y_input:y})
         
-        cur_p = sess.run(self.loss, feed_dict={self.model_x:block_x_p,
-                                               self.model_y:y})
+        cur_p = sess.run(self.loss, feed_dict={self.x_input:block_x_p,
+                                               self.y_input:y})
 
-        if params.attack_type == 'ldg_block' and params.block_scheme == 'admm':
+        if args.attack_type == 'ldg_block' and args.block_scheme == 'admm':
             cur_m += self.admm_loss(block, block_x_m, x_adv, yk, rho)
             cur_p += self.admm_loss(block, block_x_p, x_adv, yk, rho)
         
-        if params.grad_est > 0:
+        if args.grad_est > 0:
             #start = time.time()
             print('admm + NES not implemented yet!!!!!!!')
             m_est = self.grad_est(block_x_m, y, sess)
@@ -280,7 +290,7 @@ class LazyGreedyAttack:
                     for zi in range(zt):
                         if (xi, yi, zi) in block:
                             queue.put(Greedy([xi, yi, zi], m_est[xi, yi, zi], -p_est[xi, yi, zi], False))
-            num_queries = 2 * params.grad_est
+            num_queries = 2 * args.grad_est
             #end = time.time()
             #print('first pass time:', end-start)
         else:
@@ -307,15 +317,15 @@ class LazyGreedyAttack:
                                 img_batch[j, xb+xxi, yb+yyi, zb] = block_x_p[0, xb+xxi, yb+yyi, zb]
                                 img_batch[batch_size + j, xb+xxi, yb+yyi, zb] = block_x_m[0, xb+xxi, yb+yyi, zb]
                 feed_dict = {
-                    self.model_x: img_batch,
-                    self.model_y: label_batch}
+                    self.x_input: img_batch,
+                    self.y_input: label_batch}
                 losses = sess.run(self.loss,
                                   feed_dict=feed_dict)
                 for pos in range(losses.size//2):
                     xb, yb, zb = anchor_block[block_index2]
                     block_index2 += 1
                     
-                    if params.attack_type == 'ldg_block' and params.block_scheme == 'admm':
+                    if args.attack_type == 'ldg_block' and args.block_scheme == 'admm':
                         losses[pos] += self.admm_loss(block, img_batch[pos], x_adv, yk, rho)
                         losses[batch_size+pos] += self.admm_loss(block, img_batch[batch_size+pos], x_adv, yk, rho)
                     
@@ -347,8 +357,8 @@ class LazyGreedyAttack:
             y_batch = np.tile(y, 2)
             
             losses, correct_prediction = sess.run([self.loss, self.correct_prediction],
-                                                  feed_dict={self.model_x: img_batch,
-                                                             self.model_y: y_batch})
+                                                  feed_dict={self.x_input: img_batch,
+                                                             self.y_input: y_batch})
             num_queries += 2
             success = np.array([0, 1])[np.invert(correct_prediction)]
             for i in success:
@@ -358,7 +368,7 @@ class LazyGreedyAttack:
                 self.success = True
                 return np.reshape(img_batch[i], (1, *img_batch[i].shape))
 
-            if params.attack_type=='ldg_dec' and params.max_q and (num_queries + self.query) >= params.max_q:
+            if args.attack_type=='ldg_dec' and args.max_q and (num_queries + self.query) >= args.max_q:
                 self.insert_count += insert_count
                 self.put_count += put_count
                 self.query += num_queries
@@ -366,7 +376,7 @@ class LazyGreedyAttack:
                 return block_x_m
 
 
-            if params.attack_type == 'ldg_block' and params.block_scheme == 'admm':
+            if args.attack_type == 'ldg_block' and args.block_scheme == 'admm':
                 losses[0] += self.admm_loss(block, img_batch[0], x_adv, yk, rho)
                 losses[1] += self.admm_loss(block, img_batch[1], x_adv, yk, rho)
 
@@ -389,11 +399,11 @@ class LazyGreedyAttack:
                                 block_x_p[0, xi+xxi, yi+yyi, zi] = block_x_m[0, xi+xxi, yi+yyi, zi]
                     cur_p = losses[1]
                 #dec
-                if params.dec_select == 'rank':
-                    if put_count <= num_pixels*params.dec_keep:
+                if args.dec_select == 'rank':
+                    if put_count <= num_pixels*args.dec_keep:
                         new_block_rank.append((xi, yi, zi))
-                elif params.dec_select == 'reverse':
-                    if put_count >= num_pixels*params.dec_keep:
+                elif args.dec_select == 'reverse':
+                    if put_count >= num_pixels*args.dec_keep:
                         new_block_rank.append((xi, yi, zi))
 
                 
@@ -410,14 +420,14 @@ class LazyGreedyAttack:
         #print(losses[0])
 
         # dec - block selection
-        if params.attack_type == 'ldg_dec':
+        if args.attack_type == 'ldg_dec':
             
-            if params.dec_select == 'rank' or params.dec_select == 'reverse':
+            if args.dec_select == 'rank' or args.dec_select == 'reverse':
                 new_dec_block = new_block_rank
             
-            elif params.dec_select == 'margin':
+            elif args.dec_select == 'margin':
                 new_dec_block = []
-                for i in range(int(num_pixels * params.dec_keep)):
+                for i in range(int(num_pixels * args.dec_keep)):
                     new_dec_block.append(margin_queue.get().loc)
             
             else:
@@ -432,25 +442,25 @@ class LazyGreedyAttack:
                                 self.dec_block.append((xi+xxi, yi+yyi, zi))
             
         assert np.amax(np.abs(block_x_p-block_x_m)) < 0.0001
-        assert np.amax(np.abs(block_x_m-x_adv)) < 2 * params.eps + 0.0001
+        assert np.amax(np.abs(block_x_m-x_adv)) < 2 * args.eps + 0.0001
         return block_x_m
     
     # choose attack type
     def perturb(self, x_nat, y, sess, ibatch):
 
-        if params.attack_type == 'ldg':
+        if args.attack_type == 'ldg':
             print('performing lazy double greedy attack w/ resizing')
             return self.perturb_ldg(x_nat, y, sess, ibatch)
-        elif params.attack_type == 'ldg_block':
+        elif args.attack_type == 'ldg_block':
             print('performing lazy double greedy attack w/ block partition')
             return self.perturb_ldg_block(x_nat, y, sess, ibatch)
-        elif params.attack_type == 'ldg_dec':
+        elif args.attack_type == 'ldg_dec':
             print('performing lazy double greedy attack w/ decreasing size')
             return self.perturb_ldg_dec(x_nat, y, sess, ibatch)
-        elif params.attack_type == 'ldg_dec_v2':
+        elif args.attack_type == 'ldg_dec_v2':
             print('performing lazy double greedy attack w/ decreasing size - ver.2')
             return self.perturb_ldg_dec_v2(x_nat, y, sess, ibatch)
-        elif params.attack_type == 'ldg_dec_gray':
+        elif args.attack_type == 'ldg_dec_gray':
             print('performing lazy double greedy attack w/ decreasing size - ver.2, gray scale')
             return self.perturb_ldg_dec_gray(x_nat, y, sess, ibatch)
         else:
@@ -464,8 +474,8 @@ class LazyGreedyAttack:
         self.success = False
         _, xt, yt, zt = x_nat.shape
 
-        x_m = np.clip(x_nat - params.eps, 0, 1)
-        x_p = np.clip(x_nat + params.eps, 0, 1)
+        x_m = np.clip(x_nat - args.eps, 0, 1)
+        x_p = np.clip(x_nat + args.eps, 0, 1)
 
         whole_block = [(xi, yi, zi) for xi in range(xt) for yi in range(yt) for zi in range(zt)]
         
@@ -476,7 +486,7 @@ class LazyGreedyAttack:
             self.queries.append(self.query)
         else:
             print("attack failed")
-        assert np.amax(np.abs(x_adv-x_nat)) < params.eps + 0.0001
+        assert np.amax(np.abs(x_adv-x_nat)) < args.eps + 0.0001
         print("num of re-inserted pixels:", self.insert_count)
         print("num of perturbed pixels:", self.put_count)
         print("num of queries:", self.query)
@@ -491,10 +501,10 @@ class LazyGreedyAttack:
         self.query_exceed = False
         self.success = False
         _, xt, yt, zt = x_nat.shape
-        resize = params.resize
+        resize = args.resize
 
-        x_m = np.clip(x_nat - params.eps, 0, 1)
-        x_p = np.clip(x_nat + params.eps, 0, 1)
+        x_m = np.clip(x_nat - args.eps, 0, 1)
+        x_p = np.clip(x_nat + args.eps, 0, 1)
 
         self.dec_block = [(xi, yi, zi) for xi in range(xt) for yi in range(yt) for zi in range(zt)]
 
@@ -504,7 +514,7 @@ class LazyGreedyAttack:
         while(resize>=1 and len(self.dec_block) > 0 and not self.success and not self.query_exceed):
             print('round:', rounds)
             x_adv = self.ldg_block_seg(x_adv, y, sess, ibatch, self.dec_block, x_m, x_p, Resize=resize)
-            resize = int(resize * params.dec_scale)
+            resize = int(resize * args.dec_scale)
             rounds+=1
         
         if self.success:
@@ -512,7 +522,7 @@ class LazyGreedyAttack:
             self.queries.append(self.query)
         else:
             print("attack failed")
-        assert np.amax(np.abs(x_adv-x_nat)) < params.eps + 0.0001
+        assert np.amax(np.abs(x_adv-x_nat)) < args.eps + 0.0001
         print("num of re-inserted pixels:", self.insert_count)
         print("num of perturbed pixels:", self.put_count)
         print("num of queries:", self.query)
@@ -527,18 +537,18 @@ class LazyGreedyAttack:
         self.put_count = 0
         self.success = False
         _, xt, yt, zt = x_nat.shape
-        resize = params.resize
+        resize = args.resize
 
         # empty&full set initialize
-        x_m = np.clip(x_nat - params.eps, 0, 1)
-        x_p = np.clip(x_nat + params.eps, 0, 1)
+        x_m = np.clip(x_nat - args.eps, 0, 1)
+        x_p = np.clip(x_nat + args.eps, 0, 1)
         
         img_batch = np.concatenate([x_m, x_p])
         label_batch = np.concatenate([y, y])
         
         feed_dict = {
-            self.model_x: img_batch,
-            self.model_y: label_batch}
+            self.x_input: img_batch,
+            self.y_input: label_batch}
         losses, correct_prediction = sess.run([self.loss, self.correct_prediction],
                                               feed_dict=feed_dict)
         
@@ -587,7 +597,7 @@ class LazyGreedyAttack:
 
         orig_block_set = set(orig_block)
         #start = time.time()
-        batch_size = min(params.batch_size, num_pixels)
+        batch_size = min(args.batch_size, num_pixels)
         num_batches = num_pixels//batch_size
         block_index1, block_index2 = 0, 0
         for ith_batch in range(num_batches+1):
@@ -609,8 +619,8 @@ class LazyGreedyAttack:
                             img_batch[j, xb+xxi, yb+yyi, zb] = x_p[0, xb+xxi, yb+yyi, zb]
                             img_batch[batch_size + j, xb+xxi, yb+yyi, zb] = x_m[0, xb+xxi, yb+yyi, zb]
             feed_dict = {
-                self.model_x: img_batch,
-                self.model_y: label_batch}
+                self.x_input: img_batch,
+                self.y_input: label_batch}
             losses, correct_prediction = sess.run([self.loss, self.correct_prediction],
                                                   feed_dict=feed_dict)
             
@@ -668,8 +678,8 @@ class LazyGreedyAttack:
                 y_batch = np.tile(y, 2)
                 
                 losses, correct_prediction = sess.run([self.loss, self.correct_prediction],
-                                                      feed_dict={self.model_x: img_batch,
-                                                                 self.model_y: y_batch})
+                                                      feed_dict={self.x_input: img_batch,
+                                                                 self.y_input: y_batch})
                 self.query += 2
                 success = np.array([0, 1])[np.invert(correct_prediction)]
                 
@@ -686,7 +696,7 @@ class LazyGreedyAttack:
                     return np.reshape(img_batch[i], (1, *img_batch[i].shape))
 
                 # max query check
-                if params.max_q and self.query >= params.max_q:
+                if args.max_q and self.query >= args.max_q:
                     print("attack failed")
                     print("num of re-inserted pixels:", self.insert_count)
                     print("num of perturbed pixels:", self.put_count)
@@ -722,13 +732,13 @@ class LazyGreedyAttack:
                     queue.put(candid)
 
             # termination condition
-            new_resize = int(resize * params.dec_scale)
+            new_resize = int(resize * args.dec_scale)
             if new_resize == 0:
                 break
 
             # pick new anchor blocks
             new_num_pixels = 0
-            for i in range(int(num_pixels * params.dec_keep)):
+            for i in range(int(num_pixels * args.dec_keep)):
                 candid = new_queue.get()
                 xi, yi, zi = candid.loc
                 margin = candid.getVal()
@@ -739,7 +749,7 @@ class LazyGreedyAttack:
                         if (xi+xxi, yi+yyi, zi) in orig_block_set:
                             anchor_pixels.append((xi+xxi, yi+yyi, zi))
                             #re-set x_m, x_p
-                            if params.dec_v2_reset == 'y':
+                            if args.dec_v2_reset == 'y':
                                 x_m[0, xi+xxi, yi+yyi, zi] = x_m_spare[0, xi+xxi, yi+yyi, zi]
                                 x_p[0, xi+xxi, yi+yyi, zi] = x_p_spare[0, xi+xxi, yi+yyi, zi]
 
@@ -764,14 +774,14 @@ class LazyGreedyAttack:
             if new_num_pixels == 0:
                 break
 
-            if params.dec_v2_reset == 'y':
+            if args.dec_v2_reset == 'y':
                 #update cur_m, cur_p
                 img_batch = np.concatenate([x_m, x_p])
                 label_batch = np.concatenate([y, y])
                 
                 feed_dict = {
-                    self.model_x: img_batch,
-                    self.model_y: label_batch}
+                    self.x_input: img_batch,
+                    self.y_input: label_batch}
                 losses, correct_prediction = sess.run([self.loss, self.correct_prediction],
                                                       feed_dict=feed_dict)
                 
@@ -795,7 +805,7 @@ class LazyGreedyAttack:
         
         print("attack failed")
         assert np.amax(np.abs(x_m-x_p)) < 0.0001
-        assert np.amax(np.abs(x_m-x_nat)) < params.eps + 0.0001
+        assert np.amax(np.abs(x_m-x_nat)) < args.eps + 0.0001
         print("num of re-inserted pixels:", self.insert_count)
         print("num of perturbed pixels:", self.put_count)
         print("num of queries:", self.query)
@@ -813,18 +823,18 @@ class LazyGreedyAttack:
         self.put_count = 0
         self.success = False
         _, xt, yt, zt = x_nat.shape
-        resize = params.resize
+        resize = args.resize
 
         # empty&full set initialize
-        x_m = np.clip(x_nat - params.eps, 0, 1)
-        x_p = np.clip(x_nat + params.eps, 0, 1)
+        x_m = np.clip(x_nat - args.eps, 0, 1)
+        x_p = np.clip(x_nat + args.eps, 0, 1)
         
         img_batch = np.concatenate([x_m, x_p])
         label_batch = np.concatenate([y, y])
         
         feed_dict = {
-            self.model_x: img_batch,
-            self.model_y: label_batch}
+            self.x_input: img_batch,
+            self.y_input: label_batch}
         losses, correct_prediction = sess.run([self.loss, self.correct_prediction],
                                               feed_dict=feed_dict)
         
@@ -873,7 +883,7 @@ class LazyGreedyAttack:
 
         orig_block_set = set(orig_block)
         #start = time.time()
-        batch_size = min(params.batch_size, num_pixels)
+        batch_size = min(args.batch_size, num_pixels)
         num_batches = num_pixels//batch_size
         block_index1, block_index2 = 0, 0
         for ith_batch in range(num_batches+1):
@@ -895,8 +905,8 @@ class LazyGreedyAttack:
                             img_batch[j, xb+xxi, yb+yyi, :] = x_p[0, xb+xxi, yb+yyi, :]
                             img_batch[batch_size + j, xb+xxi, yb+yyi, :] = x_m[0, xb+xxi, yb+yyi, :]
             feed_dict = {
-                self.model_x: img_batch,
-                self.model_y: label_batch}
+                self.x_input: img_batch,
+                self.y_input: label_batch}
             losses, correct_prediction = sess.run([self.loss, self.correct_prediction],
                                                   feed_dict=feed_dict)
             
@@ -954,8 +964,8 @@ class LazyGreedyAttack:
                 y_batch = np.tile(y, 2)
                 
                 losses, correct_prediction = sess.run([self.loss, self.correct_prediction],
-                                                      feed_dict={self.model_x: img_batch,
-                                                                 self.model_y: y_batch})
+                                                      feed_dict={self.x_input: img_batch,
+                                                                 self.y_input: y_batch})
                 self.query += 2
                 success = np.array([0, 1])[np.invert(correct_prediction)]
                 
@@ -972,7 +982,7 @@ class LazyGreedyAttack:
                     return np.reshape(img_batch[i], (1, *img_batch[i].shape))
 
                 # max query check
-                if params.max_q and self.query >= params.max_q:
+                if args.max_q and self.query >= args.max_q:
                     print("attack failed")
                     print("num of re-inserted pixels:", self.insert_count)
                     print("num of perturbed pixels:", self.put_count)
@@ -1008,13 +1018,13 @@ class LazyGreedyAttack:
                     queue.put(candid)
 
             # termination condition
-            new_resize = int(resize * params.dec_scale)
+            new_resize = int(resize * args.dec_scale)
             if new_resize == 0:
                 break
 
             # pick new anchor blocks
             new_num_pixels = 0
-            for i in range(int(num_pixels * params.dec_keep)):
+            for i in range(int(num_pixels * args.dec_keep)):
                 candid = new_queue.get()
                 xi, yi = candid.loc
                 margin = candid.getVal()
@@ -1025,7 +1035,7 @@ class LazyGreedyAttack:
                         if (xi+xxi, yi+yyi) in orig_block_set:
                             anchor_pixels.append((xi+xxi, yi+yyi))
                             #re-set x_m, x_p
-                            if params.dec_v2_reset == 'y':
+                            if args.dec_v2_reset == 'y':
                                 x_m[0, xi+xxi, yi+yyi, :] = x_m_spare[0, xi+xxi, yi+yyi, :]
                                 x_p[0, xi+xxi, yi+yyi, :] = x_p_spare[0, xi+xxi, yi+yyi, :]
 
@@ -1050,14 +1060,14 @@ class LazyGreedyAttack:
             if new_num_pixels == 0:
                 break
 
-            if params.dec_v2_reset == 'y':
+            if args.dec_v2_reset == 'y':
                 #update cur_m, cur_p
                 img_batch = np.concatenate([x_m, x_p])
                 label_batch = np.concatenate([y, y])
                 
                 feed_dict = {
-                    self.model_x: img_batch,
-                    self.model_y: label_batch}
+                    self.x_input: img_batch,
+                    self.y_input: label_batch}
                 losses, correct_prediction = sess.run([self.loss, self.correct_prediction],
                                                       feed_dict=feed_dict)
                 
@@ -1081,7 +1091,7 @@ class LazyGreedyAttack:
         
         print("attack failed")
         assert np.amax(np.abs(x_m-x_p)) < 0.0001
-        assert np.amax(np.abs(x_m-x_nat)) < params.eps + 0.0001
+        assert np.amax(np.abs(x_m-x_nat)) < args.eps + 0.0001
         print("num of re-inserted pixels:", self.insert_count)
         print("num of perturbed pixels:", self.put_count)
         print("num of queries:", self.query)
@@ -1097,10 +1107,10 @@ class LazyGreedyAttack:
         self.insert_count = 0
         self.put_count = 0
         x_adv = np.copy(x_nat)
-        x_m = np.clip(x_nat - params.eps, 0, 1)
-        x_p = np.clip(x_nat + params.eps, 0, 1)
+        x_m = np.clip(x_nat - args.eps, 0, 1)
+        x_p = np.clip(x_nat + args.eps, 0, 1)
 
-        block_size = params.block_size
+        block_size = args.block_size
         _, xt, yt, zt = x_nat.shape
 
         assert (xt%block_size==0 and yt%block_size==0)
@@ -1111,15 +1121,15 @@ class LazyGreedyAttack:
         yk_li = []
         for block in blocks:
             yk_li.append(np.zeros(len(block)))
-        rho = params.admm_rho
-        tau = params.admm_tau
+        rho = args.admm_rho
+        tau = args.admm_tau
 
         img_indices = [(xi,yi,zi) for xi in range(xt) for yi in range(yt) for zi in range(zt)]
 
         iter_round = 0
         accumul_put_count = 0
         accumul_insert_count = 0
-        while(iter_round < params.admm_iter):
+        while(iter_round < args.admm_iter):
             print('{}th round...'.format(iter_round))
             indices_count = dict()
             for index in img_indices:
@@ -1159,7 +1169,7 @@ class LazyGreedyAttack:
             x_adv = np.copy(x_adv_new)
 
             #admm update(yk)
-            if params.block_scheme == 'admm':
+            if args.block_scheme == 'admm':
 
                 for i in range(len(yk_li)):
                     block = blocks[i]
@@ -1182,14 +1192,14 @@ class LazyGreedyAttack:
                     self.admm_converge_stat[iter_round] += 1
                     break
 
-            if params.early_stop == 'y':
+            if args.early_stop == 'y':
             
                 num_correct = sess.run(self.num_correct,
-                                              feed_dict={self.model_x: x_adv,
-                                                         self.model_y: y})
+                                              feed_dict={self.x_input: x_adv,
+                                                         self.y_input: y})
                 self.query += 1
 
-                assert np.amax(np.abs(x_adv-x_nat)) < params.eps+0.0001
+                assert np.amax(np.abs(x_adv-x_nat)) < args.eps+0.0001
                 if num_correct == 0:
                     print("attack success!")
                     print("num of re-inserted pixels:", self.insert_count)
@@ -1229,7 +1239,7 @@ def run_attack(x_adv, sess, attack, x_full_batch, y_full_batch, percentage_mean)
     l_inf = np.amax(np.abs(x_nat-x_adv))
 
     # error checking
-    if l_inf > params.eps + 0.0001:
+    if l_inf > args.eps + 0.0001:
         print('breached maximum perturbation')
         print('l_inf value:{}'.format(l_inf))
         return
@@ -1243,8 +1253,8 @@ def run_attack(x_adv, sess, attack, x_full_batch, y_full_batch, percentage_mean)
         x_batch = x_adv[bstart:bend,:]
         y_batch = y_full_batch[bstart:bend]
 
-        dict_adv = {attack.model_x: x_batch,
-                    attack.model_y: y_batch}
+        dict_adv = {attack.x_input: x_batch,
+                    attack.y_input: y_batch}
         cur_corr, y_pred_batch, correct_prediction = \
             sess.run([attack.num_correct, attack.predictions, attack.correct_prediction],
                      feed_dict=dict_adv)
@@ -1253,16 +1263,16 @@ def run_attack(x_adv, sess, attack, x_full_batch, y_full_batch, percentage_mean)
         success.append(np.array(np.nonzero(np.invert(correct_prediction)))+ibatch*eval_batch_size)
 
     success = np.concatenate(success, axis=1)
-    np.save('out/'+params.attack_type+'_success.npy', success)
+    np.save('out/'+args.attack_type+'_success.npy', success)
     accuracy = total_corr / num_eval_examples
     print('adv Accuracy: {:.2f}%'.format(100.0 * accuracy))
     with open('out/result.txt', 'a') as f:
         f.write('''Resnet, {}, eps:{},
                         sample_size:{}, loss_func:{}
-                        => acc:{}, percentage:{}\n'''.format(params.eps,
-                                                             params.attack_type,
-                                                             params.sample_size,
-                                                             params.loss_func,
+                        => acc:{}, percentage:{}\n'''.format(args.eps,
+                                                             args.attack_type,
+                                                             args.sample_size,
+                                                             args.loss_func,
                                                              accuracy,
                                                              percentage_mean))
 
@@ -1275,8 +1285,8 @@ def run_attack(x_adv, sess, attack, x_full_batch, y_full_batch, percentage_mean)
         x_batch = x_full_batch[bstart:bend,:]
         y_batch = y_full_batch[bstart:bend]
 
-        dict_adv = {attack.model_x: x_batch,
-                    attack.model_y: y_batch}
+        dict_adv = {attack.x_input: x_batch,
+                    attack.y_input: y_batch}
         cur_corr, y_pred_batch = sess.run([attack.num_correct, attack.predictions],
                                           feed_dict=dict_adv)
         total_corr += cur_corr
@@ -1295,10 +1305,10 @@ if __name__ == '__main__':
     with tf.Session(config=configs) as sess:
         # set attack
         attack = LazyGreedyAttack(sess, model,
-                                  params.eps,
-                                  params.loss_func)
+                                  args.eps,
+                                  args.loss_func)
         # Iterate over the samples batch-by-batch
-        num_eval_examples = params.sample_size
+        num_eval_examples = args.sample_size
         eval_batch_size = 1
         target_indices = np.load('./../data/intersection_norm.npy')
         num_batches = int(math.ceil(num_eval_examples / eval_batch_size))
@@ -1322,8 +1332,8 @@ if __name__ == '__main__':
             x_candid = np.concatenate(x_candid, axis=0)
             y_candid = np.array(y_candid)
             logits, preds = sess.run([attack.logits, attack.predictions],
-                                     feed_dict={attack.model_x: x_candid,
-                                                attack.model_y: y_candid})
+                                     feed_dict={attack.x_input: x_candid,
+                                                attack.y_input: y_candid})
             idx = np.where(preds == y_candid)
             for i in idx[0]:
                 attack_set.append(bstart+i)
@@ -1340,7 +1350,7 @@ if __name__ == '__main__':
             print(len(x_full_batch))
             if len(x_full_batch) >= num_eval_examples or (bstart == 50000):
                 break
-        #np.save('./imagenet_out/tensorflow_{}'.format(params.sample_size), attack_set)
+        #np.save('./imagenet_out/tensorflow_{}'.format(args.sample_size), attack_set)
 
         percentages = []
         total_times = []
@@ -1379,23 +1389,23 @@ if __name__ == '__main__':
         print('Storing examples')
         x_adv = np.concatenate(x_adv, axis=0)
         
-        if (params.attack_type == 'ldg_dec') or (params.attack_type == 'ldg_dec_v2') :
-            np.save('imagenet_out/{}_{}_{}_{}_{}_{}.npy'.format(params.attack_type,
-                                                                params.resize,
-                                                                params.dec_select,
-                                                                params.dec_scale,
-                                                                params.dec_keep,
-                                                                params.max_q), attack.queries)
+        if (args.attack_type == 'ldg_dec') or (args.attack_type == 'ldg_dec_v2') :
+            np.save('imagenet_out/{}_{}_{}_{}_{}_{}.npy'.format(args.attack_type,
+                                                                args.resize,
+                                                                args.dec_select,
+                                                                args.dec_scale,
+                                                                args.dec_keep,
+                                                                args.max_q), attack.queries)
         pixel_checker(x_full_batch, x_adv)
         print('Average queries: {:.2f}'.format(np.mean(attack.queries)))
-        if params.attack_type == 'ldg_mask':
+        if args.attack_type == 'ldg_mask':
             print('Average block size: {:.2f}'.format(np.mean(attack.avg_block_size)))
         if not all(x == 0 for x in attack.block_success_stat.values()):
             print('success round count:', attack.block_success_stat)
-        for key, val in vars(params).items():
+        for key, val in vars(args).items():
             print('{}={}'.format(key,val))
 
-        if params.test == 'y':
+        if args.test == 'y':
             # error checking
             if np.amax(x_adv) > 1.0001 or \
                     np.amin(x_adv) < -0.0001 or \

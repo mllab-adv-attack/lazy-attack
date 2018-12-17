@@ -320,6 +320,7 @@ bandit_benchmark500 = [5.6, 1029]
 
 bandit_tensorflow_torchprocessing = [7.6, 1412]
 bandit_tensorflow_fd_eta = [11.6, 1361]
+bandit_tensorflow2000_shuffle = [8.3, 1313]
 
 bandit_tensorflow_newnorm10000 = [7.9, 1408]
 
