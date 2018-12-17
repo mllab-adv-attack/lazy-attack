@@ -10,12 +10,10 @@ import itertools
 from attacks.lazy_local_search_helper_new import LazyLocalSearchHelperNew
 
 np.random.seed(0)
-
 SubBlock = collections.namedtuple('SubBlock', 'upper_left, lower_right, xs, ys')
 
-
 class LazyLocalSearchSplitAttack(object):
-  def __init__(self, model, epsilon, loss_func, max_queries=10000, **kwargs):
+  def __init__(self, model, epsilon, max_queries=10000, **kwargs):
     # Setting
     self.max_queries = max_queries
     self.epsilon = epsilon

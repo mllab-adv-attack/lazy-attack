@@ -24,7 +24,7 @@ parser.add_argument('--img_index_start', default=0, type=int)
 parser.add_argument('--sample_size', default=1000, type=int)
 parser.add_argument('--save_img', dest='save_img', action='store_true')
 parser.add_argument('--attack', default='LazyLocalSearchBatchAttack', type=str)
-parser.add_argumnet('--mode', default='val', type=str)
+parser.add_argument('--mode', default='val', type=str)
 
 args = parser.parse_args()
 
