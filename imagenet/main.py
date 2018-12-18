@@ -59,7 +59,7 @@ if __name__ == '__main__':
   #tf.gfile.MakeDirs('/data_large/unsynced_store/seungyong/output/adv')
   #tf.gfile.MakeDirs('/data_large/unsynced_store/seungyong/output/nat')
 
-  # Create attack class
+  # Create attack class.
   attack_class = getattr(sys.modules[__name__], args.attack)
   lazy_local_search_attack = attack_class(model, args.epsilon, args.max_queries)
 
@@ -75,51 +75,60 @@ if __name__ == '__main__':
 
   while count < args.sample_size:
     tf.logging.info('')
+
+    # Get image and label.
     initial_img, orig_class = get_image(indices[index], IMAGENET_PATH)
     initial_img = np.expand_dims(initial_img, axis=0)
 
-    # generate target class
+    # Generate target class(the same method as in NES attack).
     if args.targeted:
-      target_class = np.random.randint(NUM_LABELS)
-      while (target_class == orig_class):
+      rng = np.random.RandomState(indices[index])
+      target_class = orig_class
+      while target_class == orig_class:
         target_class = np.random.randint(NUM_LABELS)
       target_class = np.expand_dims(target_class, axis=0)
 
     orig_class = np.expand_dims(orig_class, axis=0)
-    index += 1
-    success = False
-    
-    p = sess.run(preds, feed_dict={x_input: initial_img})
-    '''if p[0] != orig_class:
-      tf.logging.info('Misclassified, continue to the next image')
-      continue'''
-    
+   
+    # If untargeted, check if the image is correctly classified. 
+    if not args.targeted:
+      p = sess.run(preds, feed_dict={x_input: initial_img})
+      if p[0] != orig_class:
+        tf.logging.info('Misclassified, continue to the next image')
+      continue
     count += 1
+
+    # Run attack.
     if not args.targeted:
       adv_img, num_queries = lazy_local_search_attack.perturb(initial_img, orig_class, sess)
     else:
       adv_img, num_queries = lazy_local_search_attack.perturb(initial_img, target_class, sess)
-
+    
+    # Check if the adversarial image satisfies the constraint.
     assert(np.amax(np.abs(adv_img-initial_img)) <= args.epsilon+1e-3)    
     
+    # Save the adversarial image.
     if args.save_img:
       adv_image = Image.fromarray(np.ndarray.astype(adv_img[0, :, :, :]*255, np.uint8))
-      adv_image.save('/data_large/unsynced_store/seungyong/output/adv/{}_adv.jpg'.format(indices[index-1]))
+      adv_image.save('/data_large/unsynced_store/seungyong/output/adv/{}_adv.jpg'.format(indices[index]))
       image = Image.fromarray(np.ndarray.astype(initial_img[0, :, :, :]*255, np.uint8))
-      image.save('/data_large/unsynced_store/seungyong/output/nat/{}_nat.jpg'.format(indices[index-1]))
+      image.save('/data_large/unsynced_store/seungyong/output/nat/{}_nat.jpg'.format(indices[index]))
     
+    # Test the adversarial image.
     p = sess.run(preds, feed_dict={x_input: adv_img})
 
     if not args.targeted and p[0] != orig_class:
       total_num_corrects += 1
       total_num_queries += num_queries
       tf.logging.info('Image {} attack success, image index: {}, average queries: {}, success rate: {}'.format(
-        count, indices[index-1], total_num_queries/max(1, total_num_corrects), total_num_corrects/count))
+        count, indices[index], total_num_queries/max(1, total_num_corrects), total_num_corrects/count))
     elif args.targeted and p[0] == target_class:
       total_num_corrects += 1
       total_num_queries += num_queries
       tf.logging.info('Image {} attack success, image index: {}, average queries: {}, success rate: {}'.format(
-        count, indices[index-1], total_num_queries/max(1, total_num_corrects), total_num_corrects/count))
+        count, indices[index], total_num_queries/max(1, total_num_corrects), total_num_corrects/count))
     else:
       tf.logging.info('Image {} attack fails, image index: {}, average queries: {}, success rate: {}'.format(
-        count, indices[index-1], total_num_queries/max(1, total_num_corrects), total_num_corrects/count))
+        count, indices[index], total_num_queries/max(1, total_num_corrects), total_num_corrects/count))
+
+    index += 1
