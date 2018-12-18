@@ -28,8 +28,8 @@ class LazyLocalSearchHelper(object):
     max_probs = tf.gather_nd(params=self.probs, indices=max_indices)
     self.losses = tf.log(ground_truth_probs) - tf.log(max_probs)
     if self.targeted:
-        self.losses = tf.nn.sparse_softmax_cross_entropy_with_logits(
-            logits=self.logits, labels=self.y_input)
+      self.losses = tf.nn.sparse_softmax_cross_entropy_with_logits(
+        logits=self.logits, labels=self.y_input)
     
     self.epsilon = epsilon
  
@@ -71,7 +71,7 @@ class LazyLocalSearchHelper(object):
       if preds[0] == label:
         return noise, num_queries, curr_loss, True
 
-    for _ in range(2):
+    for _ in range(1):
       # First forward passes
       indices, channels = np.where(A==0)
       

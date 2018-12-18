@@ -50,41 +50,40 @@ class LazyLocalSearchBatchAttack(object):
     block_size = 32
     upper_left = [0, 0]
     lower_right = [256, 256]
-   
+
+    # Split image into blocks   
     blocks = self._split_block([upper_left, lower_right], block_size) 
 
-    noise = np.zeros([1, 256, 256, 3], dtype=np.float32)
-    for block in blocks:
-      for channel in range(3):
-        direction = np.int32(np.sign(np.random.uniform(-1, 1)))
-        noise = self._add_noise(noise, block, channel, direction)
+    # Noise initialization
+    noise = -self.epsilon*np.ones([1, 256, 256, 3], dtype=np.float32)
 
+    # Variables
     num_blocks = len(blocks)
     batch_size = 32
     curr_order = np.random.permutation(num_blocks)
 
+    # Main loop
     while block_size > 0:
+      # Run batch
       num_batches = num_blocks // batch_size
       for i in range(num_batches):
         bstart = i*batch_size
         bend = bstart + batch_size
         blocks_batch = [blocks[curr_order[idx]] for idx in range(bstart, bend)]
-           
         noise, queries, loss, success = self.lazy_local_search.perturb(image, noise, label, sess, blocks_batch)
         num_queries += queries
-        tf.logging.info("Block size: {}, batch: {}, loss: {}, num queries: {}".format(
+        tf.logging.info("Block size: {}, batch: {}, loss: {:.4f}, num queries: {}".format(
           block_size, i, loss, num_queries))
         if num_queries > self.max_queries:
           return adv_image, num_queries
         adv_image = self._perturb_image(image, noise)
         if success:
           return adv_image, num_queries
-
-      block_size //= 2
       
+      # Create Next batch
+      block_size //= 2
       if block_size <= 0:
         return adv_image, num_queries
-
       blocks = self._split_block([upper_left, lower_right], block_size)
       num_blocks = len(blocks)
       curr_order = np.random.permutation(num_blocks)
