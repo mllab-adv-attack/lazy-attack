@@ -84,6 +84,7 @@ def linf_proj(image, eps):
         return orig + ch.clamp(new_x - orig, -eps, eps)
     return proj
 
+# added. image normalizer
 def batch_norm(image):
     '''new_image = image.clone()
     new_image[:, 0, :, :] = (new_image[:, 0, :, :]-0.485)/0.229
@@ -207,7 +208,8 @@ def main(args):
     
     imagenet_loader = DataLoader(imagenet, batch_size=args.batch_size,
                                  shuffle=False)
-    
+   
+    # data loader using code from NES
     num_eval_examples = args.sample_size
     eval_batch_size = min(args.batch_size, num_eval_examples)
 
@@ -260,7 +262,8 @@ def main(args):
         print(len(attack_set), bstart, len(attack_set)/bstart)
         if len(x_full_batch) >= num_eval_examples or (bstart==50000):
             break
-    #np.save('./out/pytorch_{}.npy'.format(args.sample_size), attack_set)
+    np.save('./out/pytorch_{}.npy'.format(args.sample_size), attack_set)
+    exit()
     average_queries_per_success = 0.0
     total_correctly_classified_ims = 0.0
     success_rate_total = 0.0
@@ -312,6 +315,7 @@ class Parameters():
         return self.params[x.lower()]
 
 if __name__ == "__main__":
+    # modified to use bandit(linf) as default
     parser = argparse.ArgumentParser()
     parser.add_argument('--max-queries', default=10000, type=int)
     parser.add_argument('--fd-eta', default=0.1, type=float, help='\eta, used to estimate the derivative via finite differences')

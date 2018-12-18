@@ -341,6 +341,9 @@ bandit_pytorch2000_shuffle = [5.6, 1240]
 vanilla = [1.8, 686]
 early_stop = [1.8, 639]
 
+# targeted
+ours = [0.1, 11920]
+
 # rgb
 mmp = 1062869
 ppm = 1146255
