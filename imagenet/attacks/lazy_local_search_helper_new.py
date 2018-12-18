@@ -95,14 +95,14 @@ class LazyLocalSearchHelperNew(object):
         losses, preds = sess.run([self.losses, self.preds],
 					feed_dict={self.x_input: image_batch, self.y_input: label_batch})
         num_queries += bend-bstart
-
- 				success_indices,  = np.where(preds==label)
+        
+        success_indices,  = np.where(preds==label)
         if len(success_indices) > 0:
-           idx = indices[bstart+success_indices[0]]
-           c = channels[bstart+success_indices[0]]
-           noise = self._flip_noise(noise, blocks[idx], c)
-           curr_loss = losses[success_indices[0]]
-					return noise, num_queries, curr_loss, True
+          idx = indices[bstart+success_indices[0]]
+          c = channels[bstart+success_indices[0]]
+          noise = self._flip_noise(noise, blocks[idx], c)
+          curr_loss = losses[success_indices[0]]
+          return noise, num_queries, curr_loss, True
  
         # Push into the priority queue
         for i in range(bend-bstart):
@@ -167,17 +167,17 @@ class LazyLocalSearchHelperNew(object):
           image_batch[i:i+1, ...] = self._perturb_image(
             image, self._flip_noise(noise, blocks[idx], c))
         
-				losses, preds = sess.run([self.losses, self.preds],
-					feed_dict={self.x_input: image_batch, self.y_input: label_batch})
+        losses, preds = sess.run([self.losses, self.preds],
+          feed_dict={self.x_input: image_batch, self.y_input: label_batch})
         num_queries += bend-bstart
         
- 				success_indices,  = np.where(preds==label)
+        success_indices,  = np.where(preds==label)
         if len(success_indices) > 0:
-           idx = indices[bstart+success_indices[0]]
-           c = channels[bstart+success_indices[0]]
-           noise = self._flip_noise(noise, blocks[idx], c)
-           curr_loss = losses[success_indices[0]]
-					return noise, num_queries, curr_loss, True
+          idx = indices[bstart+success_indices[0]]
+          c = channels[bstart+success_indices[0]]
+          noise = self._flip_noise(noise, blocks[idx], c)
+          curr_loss = losses[success_indices[0]]
+          return noise, num_queries, curr_loss, True
 
         # Push into the priority queue
         for i in range(bend-bstart):
