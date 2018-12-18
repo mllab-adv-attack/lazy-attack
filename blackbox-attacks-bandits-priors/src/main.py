@@ -214,7 +214,7 @@ def main(args):
     eval_batch_size = min(args.batch_size, num_eval_examples)
 
     if args.test:
-        target_indices = np.load('./out/intersection_norm.npy')
+        target_indices = np.load('./../../data/correctly_classified_set.npy')
     else:
         target_indices = [i for i in range(50000)]
     
@@ -236,7 +236,7 @@ def main(args):
         x_candid = []
         y_candid = []
         for i in range(100):
-            img_batch, y_batch = get_image(target_indices[bstart+i], IMAGENET_PATH)
+            img_batch, y_batch = get_image(target_indices[args.img_index_start+bstart+i], IMAGENET_PATH)
             img_batch = ch.Tensor(img_batch)
             img_batch = ch.transpose(img_batch, 0, 1)
             img_batch = ch.transpose(img_batch, 0, 2)
@@ -334,6 +334,7 @@ if __name__ == "__main__":
     parser.add_argument('--gradient-iters', default=1, type=int)
     parser.add_argument('--shuffle', action='store_true')
     parser.add_argument('--test', action='store_true')
+    parser.add_argument('--img_index_start', default=0, type=int)
     args = parser.parse_args()
 
     args_dict = None

@@ -170,7 +170,7 @@ if __name__ == '__main__':
         num_eval_examples = args.sample_size
         eval_batch_size = 100
         if args.test:
-            target_indices = np.load('./../data/intersection_norm.npy')
+            target_indices = np.load('./../data/correctly_classified_set.npy')
         else:
             target_indices = np.array([i for i in range(50000)])
         if args.shuffle:
