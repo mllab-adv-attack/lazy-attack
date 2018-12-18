@@ -32,7 +32,7 @@ args = parser.parse_args()
 if __name__ == '__main__':
   tf.logging.set_verbosity(tf.logging.INFO)
   
-  # Print hyper-parameters
+  # Print hyperparameters
   for key, val in vars(args).items():
     tf.logging.info('{}={}'.format(key, val))
   
@@ -67,12 +67,14 @@ if __name__ == '__main__':
   index = args.img_index_start
   total_num_corrects = 0
   total_num_queries = 0
-  
+ 
+  # Create a set of indices. 
   if args.mode == 'test':
     indices = np.load('./data/intersection_norm.npy')
   else: 
     indices = np.arange(0, 50000)
 
+  # Main loop
   while count < args.sample_size:
     tf.logging.info('')
 
@@ -96,6 +98,7 @@ if __name__ == '__main__':
       if p[0] != orig_class:
         tf.logging.info('Misclassified, continue to the next image')
       continue
+    
     count += 1
 
     # Run attack.
