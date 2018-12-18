@@ -262,8 +262,8 @@ def main(args):
         print(len(attack_set), bstart, len(attack_set)/bstart)
         if len(x_full_batch) >= num_eval_examples or (bstart==50000):
             break
-    np.save('./out/pytorch_{}.npy'.format(args.sample_size), attack_set)
-    exit()
+    #np.save('./out/pytorch_{}.npy'.format(args.sample_size), attack_set)
+    #exit()
     average_queries_per_success = 0.0
     total_correctly_classified_ims = 0.0
     success_rate_total = 0.0
