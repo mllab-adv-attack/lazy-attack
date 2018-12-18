@@ -4,6 +4,8 @@ imagenet/logs/**
 imagenet/data/**
 imagenet/tools/data/**
 
+nes/tools/data/**
+
 gaon_imagenet/imagenet_out/**
 gaon_imagenet/out/**
 gaon_imagenet/tools/data/**
