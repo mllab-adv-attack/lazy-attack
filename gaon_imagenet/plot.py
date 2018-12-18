@@ -312,6 +312,7 @@ ldg_dec_v2_128_05_075 = [0.1, 3553]
 
 #intersection
 ldg_dec_v2_128_05_1_10000 = [5.4, 1178]
+ldg_dec_v2_128_05_1_10000_new = [4.3, 988]
 
 #bandit
 bandit = [7.4, 1437]
@@ -325,10 +326,16 @@ bandit_tensorflow2500_shuffle = [7.3, 1449]
 bandit_tensorflow1000all_shuffle = [7.1, 1486]
 bandit_tensorflow2500all_shuffle = [7.6, 1419]
 
+bandit_tensorflow1000all_shuffle_new1 = [5.6, 1355]
+bandit_tensorflow1000all_shuffle_new2 = [7.5, 1440]
+bandit_tensorflow1000test_new = [7.5, 1376]
+
+
 bandit_tensorflow_newnorm10000 = [7.9, 1408]
 
 bandit_pytorch1000 = [6.4, 1287]
 bandit_pytorch2500_newnorm = [6.5, 1330]
+bandit_pytorch2000_shuffle = [5.6, 1240]
 
 # first pass
 vanilla = [1.8, 686]

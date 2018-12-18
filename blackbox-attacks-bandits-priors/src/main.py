@@ -91,7 +91,17 @@ def batch_norm(image):
     new_image[:, 2, :, :] = (new_image[:, 2, :, :]-0.406)/0.225
     return new_image
     '''
-    return (image-ch.FloatTensor([0.485, 0.456, 0.406]).view(1,-1,1,1).cuda())/(ch.FloatTensor([0.229, 0.224, 0.225]).view(1,-1,1,1).cuda())
+    #return (image-ch.FloatTensor([0.485, 0.456, 0.406]).view(1,-1,1,1).cuda())/(ch.FloatTensor([0.229, 0.224, 0.225]).view(1,-1,1,1).cuda())
+    
+    mean = [0.485, 0.456, 0.406]
+    std = [0.229, 0.224, 0.225]
+
+    new_image = image.clone()
+    n = list(new_image.size())[0]
+    for i in range(n):
+        transforms.Normalize(mean, std)(new_image[i,:,:,:])
+    return new_image
+
 
 ##
 # Main functions
