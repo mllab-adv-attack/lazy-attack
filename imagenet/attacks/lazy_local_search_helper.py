@@ -190,9 +190,9 @@ class LazyLocalSearchHelper(object):
         
         # Early stopping
         if self.targeted:
-          success_indices,  = np.where(probs_diff[0] > 0)
+          success_indices,  = np.where(probs_diff > 0)
         else:
-          success_indices,  = np.where(probs_diff[0] < 0)
+          success_indices,  = np.where(probs_diff < 0)
         
         if len(success_indices) > 0:
           idx = indices[bstart+success_indices[0]]
@@ -243,7 +243,7 @@ class LazyLocalSearchHelper(object):
             if probs_diff[0] > 0:
               return noise, num_queries, curr_loss, True
           else:
-            if probs_diff[0] > 0:
+            if probs_diff[0] < 0:
               return noise, num_queries, curr_loss, True
         # If the cardinality has changed, push the element into the priority queue
         else:

@@ -71,7 +71,7 @@ if __name__ == '__main__':
   if args.targeted:
     indices = np.load('../data/indices_targeted.npy')
   else:
-    indices = np.load('../data/intersection_norm.npy')
+    indices = np.load('../data/correctly_classified_set.npy')
 
   # Main loop
   while count < args.sample_size:
