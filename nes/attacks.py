@@ -6,11 +6,13 @@ from tools.logging_utils import *
 from tools.inception_v3_imagenet import model
 from tools.imagenet_labels import label_to_name
 
-np.random.seed(0)
 IMAGENET_PATH="../data"
 NUM_LABELS=1000
 
 def main(args, gpus):
+  # Set random seed
+  np.random.seed(0)
+
   # Set verbosity
   tf.logging.set_verbosity(tf.logging.INFO)
 

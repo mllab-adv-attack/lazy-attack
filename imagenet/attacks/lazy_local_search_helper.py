@@ -55,6 +55,13 @@ class LazyLocalSearchHelper(object):
     
     # Setting
     A = np.zeros([len(blocks), 3], np.int32)
+    for i, block in enumerate(blocks):
+      for channel in range(3):
+        upper_left, _ = block
+        x = upper_left[0]
+        y = upper_left[1]
+        if noise[0, x, y, channel] > 0:
+          A[i, channel] = 1
 
     # Calculate current loss
     image_batch = self._perturb_image(image, noise)
@@ -144,10 +151,10 @@ class LazyLocalSearchHelper(object):
           A[cand_idx, cand_c] = 1
           # Early stopping
           if not self.targeted:
-            if preds[0] != label:
+            if preds != label:
               return noise, num_queries, curr_loss, True
           else:
-            if preds[0] == label:
+            if preds == label:
               return noise, num_queries, curr_loss, True
 
         # If the cardinality has changed, push the element into the priority queue
@@ -228,10 +235,10 @@ class LazyLocalSearchHelper(object):
           A[cand_idx, cand_c] = 0
           # Early stopping
           if not self.targeted:
-            if preds[0] != label:
+            if preds != label:
               return noise, num_queries, curr_loss, True
           else:
-            if preds[0] == label:
+            if preds == label:
               return noise, num_queries, curr_loss, True
         # If the cardinality has changed, push the element into the priority queue
         else:
