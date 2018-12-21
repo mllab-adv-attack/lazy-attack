@@ -357,6 +357,23 @@ mmm = 1201472
 p = 13436104
 m = 13384196
 
+# baseline!
+
+# untargeted 10000
+pgd = [0.05, 20]
+
+bandit1 = [7.64, 1425]
+bandit2 = [7.12, 1359]
+bandit3 = [7.76, 1406]
+bandit4 = [7.92, 1453]
+bandit = [7.61, 1410]
+
+bandit_all1 = [7.80, 1363]
+bandit_all2 = [7.72, 1294]
+bandit_all3 = [7.68, 1355]
+bandit_all4 = [6.28, 1324]
+bandit_all = [7.37, 1334]
+
 #adv
 
 ldg_resize8 = [1.3, 9133]

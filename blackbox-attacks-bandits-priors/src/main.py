@@ -103,7 +103,6 @@ def batch_norm(image):
         transforms.Normalize(mean, std)(new_image[i,:,:,:])
     return new_image
 
-
 ##
 # Main functions
 ##
@@ -260,6 +259,11 @@ def main(args):
             y_full_batch = np.concatenate((y_full_batch, y_masked[:index]))
         bstart += 100
         print(len(attack_set), bstart, len(attack_set)/bstart)
+        
+        if args.test and len(attack_set) != bstart:
+            print("wrong correctly classified set")
+            raise Exception
+
         if len(x_full_batch) >= num_eval_examples or (bstart==50000):
             break
     #np.save('./out/pytorch_{}.npy'.format(args.sample_size), attack_set)
@@ -327,7 +331,7 @@ if __name__ == "__main__":
     parser.add_argument('--json-config', type=str, help='a config file to be passed in instead of arguments')
     parser.add_argument('--epsilon', default=0.05, type=float, help='the lp perturbation bound')
     parser.add_argument('--batch-size', default=500, type=int, help='batch size for bandits')
-    parser.add_argument('--sample-size', default=1000, type=int, help='sample size for bandits')
+    parser.add_argument('--sample_size', default=1000, type=int, help='sample size for bandits')
     parser.add_argument('--log-progress', action='store_false')
     parser.add_argument('--nes', action='store_true')
     parser.add_argument('--tiling', action='store_false')

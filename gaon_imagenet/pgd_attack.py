@@ -32,7 +32,8 @@ if __name__ == '__main__':
     parser.add_argument('--eps', default=0.05, help='Attack eps', type=float)
     parser.add_argument('--sample_size', default=1000, help='sample size', type=int)
     parser.add_argument('--num_steps', default=20, help='pgd steps', type=int)
-    parser.add_argument('--step_size', default=0.002, help='pgd step size', type=float)
+    parser.add_argument('--step_size', default=0.01, help='pgd step size', type=float)
+    parser.add_argument('--img_index_start', default=0, type=int)
     parser.add_argument('--model_dir', default='nat', help='model name', type=str)
     parser.add_argument('--targeted', action='store_true')
     parser.add_argument('--test', action='store_true')
@@ -189,7 +190,7 @@ if __name__ == '__main__':
             x_candid = []
             y_candid = []
             for i in range(100):
-                img_batch, y_batch = get_image(target_indices[bstart+i], IMAGENET_PATH)
+                img_batch, y_batch = get_image(target_indices[args.img_index_start+bstart+i], IMAGENET_PATH)
                 #img_batch, y_batch = get_image(bstart+i, IMAGENET_PATH)
                 img_batch = np.reshape(img_batch, (-1, *img_batch.shape))
                 x_candid.append(img_batch)

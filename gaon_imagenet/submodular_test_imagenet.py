@@ -18,7 +18,7 @@ plt.switch_backend('agg')
 from tools.inception_v3_imagenet import model
 from tools.utils import get_image
 
-IMAGENET_PATH = './data/'
+IMAGENET_PATH = './../data/'
 
 if __name__ == '__main__':
     import argparse
@@ -29,7 +29,6 @@ if __name__ == '__main__':
     parser.add_argument('--samples_per_batch', default=200, help='samples per batch', type=int)
     parser.add_argument('--loss_func', default='xent', help='loss func', type=str)
     parser.add_argument('--model_dir', default='nat', help='model name', type=str)
-    parser.add_argument('--log', default = 'n', help='use logged value', type=str)
     params = parser.parse_args()
     for key, val in vars(params).items():
         print('{}={}'.format(key,val))
@@ -52,12 +51,7 @@ class Submodular:
         self.correct_prediction = tf.equal(self.predictions, self.model_y)
         self.num_correct = tf.reduce_sum(
                 tf.cast(self.correct_prediction, tf.int32))
-        if params.log == 'y':
-            print('using log softmax')
-            self.loss = tf.math.log(y_xent)
-        else:
-            print('using softmax')
-            self.loss = y_xent
+        self.loss = y_xent
 
     def test(self, x_nat, y, sess, ibatch):
         _, xt, yt, zt = x_nat.shape
