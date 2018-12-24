@@ -16,22 +16,24 @@ class LazyLocalSearchHelper(object):
     self.preds = model['preds']
     self.targeted = model['targeted']
 
-    self.probs = tf.nn.softmax(self.logits)
+    probs = tf.nn.softmax(self.logits)
 
-    batch_nums = tf.range(0, limit=tf.shape(self.probs)[0])
+    batch_nums = tf.range(0, limit=tf.shape(probs)[0])
     indices = tf.stack([batch_nums, self.y_input], axis=1)
 
-    ground_truth_probs = tf.gather_nd(params=self.probs, indices=indices)
-    top_2 = tf.nn.top_k(self.probs, k=2)
+    ground_truth_probs = tf.gather_nd(params=probs, indices=indices)
+    
+    top_2 = tf.nn.top_k(probs, k=2)
     max_indices = tf.where(tf.equal(top_2.indices[:, 0], self.y_input), top_2.indices[:, 1], top_2.indices[:, 0])
     max_indices = tf.stack([batch_nums, max_indices], axis=1)
-    max_probs = tf.gather_nd(params=self.probs, indices=max_indices)
-    self.probs_diff = ground_truth_probs - max_probs
+    max_probs = tf.gather_nd(params=probs, indices=max_indices)
     
     if self.targeted:
       self.losses = tf.nn.sparse_softmax_cross_entropy_with_logits(
         logits=self.logits, labels=self.y_input)
     else:
+      #self.losses = -tf.nn.sparse_softmax_cross_entropy_with_logits(
+      #  logits=self.logits, labels=self.y_input)
       self.losses = tf.log(ground_truth_probs) - tf.log(max_probs)
     
     self.epsilon = epsilon
@@ -63,6 +65,7 @@ class LazyLocalSearchHelper(object):
         upper_left, _ = block
         x = upper_left[0]
         y = upper_left[1]
+        # If flipped, set A to be 1.
         if noise[0, x, y, channel] > 0:
           A[i, channel] = 1
 
@@ -85,7 +88,7 @@ class LazyLocalSearchHelper(object):
       # First forward passes
       indices, channels = np.where(A==0)
       
-      batch_size = 100
+      batch_size = 1
       num_batches = int(math.ceil(len(indices)/batch_size))
       
       for ibatch in range(num_batches):
@@ -104,19 +107,10 @@ class LazyLocalSearchHelper(object):
           feed_dict={self.x_input: image_batch, self.y_input: label_batch})
         num_queries += bend-bstart
         
-        """
         # Early stopping 
-        if self.targeted:
-          success_indices,  = np.where(preds == label)
-        else:
-          success_indices,  = np.where(preds != label)
-
-        if len(success_indices) > 0:
-          noise = noise_batch[success_indices[0]:success_indices[0]+1]
-          curr_loss = losses[success_indices[0]]
-          return noise, num_queries, curr_loss, True
-        """
-
+        if (self.targeted and preds == label) or (not self.targeted and preds != label):
+          return noise_batch, num_queries, losses[0], True
+        
         # Push into the priority queue
         for i in range(bend-bstart):
           idx = indices[bstart+i]
@@ -171,7 +165,7 @@ class LazyLocalSearchHelper(object):
       # Now delete element
       indices, channels = np.where(A==1)
        
-      batch_size = 100
+      batch_size = 1
       num_batches = int(math.ceil(len(indices)/batch_size))   
       
       for ibatch in range(num_batches):
@@ -190,18 +184,9 @@ class LazyLocalSearchHelper(object):
           feed_dict={self.x_input: image_batch, self.y_input: label_batch})
         num_queries += bend-bstart
         
-        """        
-        # Early stopping
-        if self.targeted:
-          success_indices,  = np.where(preds == label)
-        else:
-          success_indices,  = np.where(preds != label)
-        
-        if len(success_indices) > 0:
-          noise = noise_batch[success_indices[0]:success_indices[0]+1]
-          curr_loss = losses[success_indices[0]]
-          return noise, num_queries, curr_loss, True
-        """
+        # Early stopping 
+        if (self.targeted and preds == label) or (not self.targeted and preds != label):
+          return noise_batch, num_queries, losses[0], True
 
         # Push into the priority queue
         for i in range(bend-bstart):

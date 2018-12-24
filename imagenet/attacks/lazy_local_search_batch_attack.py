@@ -1,8 +1,6 @@
 import cv2
 import tensorflow as tf
 import numpy as np
-import heapq
-import math
 import time
 import itertools
 
@@ -10,8 +8,9 @@ from attacks.lazy_local_search_helper import LazyLocalSearchHelper
 
 np.random.seed(0)
 
+
 class LazyLocalSearchBatchAttack(object):
-  def __init__(self, model, epsilon, max_queries=10000, **kwargs):
+  def __init__(self, model, epsilon, max_queries, **kwargs):
     # Setting
     self.max_queries = max_queries
     self.epsilon = epsilon
@@ -39,7 +38,10 @@ class LazyLocalSearchBatchAttack(object):
     noise_new[0, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], channel] = direction*self.epsilon
     return noise_new
 
-  def perturb(self, image, label, sess):		
+  def perturb(self, image, label, index, sess):
+    # Fix random seed by index
+    np.random.seed(index)
+
     # Class variable
     self.width = image.shape[1]
     self.height = image.shape[2]

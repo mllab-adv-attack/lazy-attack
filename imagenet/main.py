@@ -18,10 +18,10 @@ IMAGENET_PATH = '../data'
 NUM_LABELS = 1000
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--max_queries', default=100000, type=int)
+parser.add_argument('--max_queries', default=10000, type=int)
 parser.add_argument('--epsilon', default='0.05', type=float)
 parser.add_argument('--img_index_start', default=0, type=int)
-parser.add_argument('--sample_size', default=100, type=int)
+parser.add_argument('--sample_size', default=1000, type=int)
 parser.add_argument('--save_img', dest='save_img', action='store_true')
 parser.add_argument('--attack', default='LazyLocalSearchBatchAttack', type=str)
 parser.add_argument('--targeted', action='store_true')
@@ -29,8 +29,9 @@ parser.add_argument('--targeted', action='store_true')
 args = parser.parse_args()
 
 if __name__ == '__main__':
+  # Set verbosity
   tf.logging.set_verbosity(tf.logging.INFO)
-  
+    
   # Create session
   sess = tf.InteractiveSession()
 
@@ -39,21 +40,15 @@ if __name__ == '__main__':
   y_input = tf.placeholder(dtype=tf.int32, shape=[None])
   
   logits, preds = model(sess, x_input)
-  labels = tf.one_hot(y_input, NUM_LABELS)
-  losses = tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=labels)
+  
   model = {
     'x_input': x_input,
     'y_input': y_input,
     'logits': logits,
     'preds': preds,
-    'losses': losses,
     'targeted': args.targeted,
   }
 
-  # Create directory
-  #tf.gfile.MakeDirs('/data_large/unsynced_store/seungyong/output/adv')
-  #tf.gfile.MakeDirs('/data_large/unsynced_store/seungyong/output/nat')
-  
   # Print hyperparameters
   for key, val in vars(args).items():
     tf.logging.info('{}={}'.format(key, val))
@@ -62,18 +57,18 @@ if __name__ == '__main__':
   attack_class = getattr(sys.modules[__name__], args.attack)
   lazy_local_search_attack = attack_class(model, args.epsilon, args.max_queries)
 
-  count = 0
-  index = args.img_index_start
-  total_num_corrects = 0
-  total_num_queries = 0
- 
-  # Create a set of indices. 
+  # Load indices. 
   if args.targeted:
     indices = np.load('../data/indices_targeted.npy')
   else:
-    indices = np.load('../data/correctly_classified_set.npy')
+    indices = np.load('../data/indices_untargeted.npy')
 
   # Main loop
+  count = 0
+  index = args.img_index_start
+  total_num_corrects = 0
+  total_num_queries = []
+ 
   while count < args.sample_size:
     tf.logging.info('')
     
@@ -100,13 +95,13 @@ if __name__ == '__main__':
     
     # Run attack.
     if not args.targeted:
-      tf.logging.info('Untargeted attack on {}th image starts, img index: {}, orig class: {}'.format(
+      tf.logging.info('Untargeted attack on {}th image starts, index: {}, orig class: {}'.format(
         count, indices[index], orig_class[0]))
-      adv_img, num_queries = lazy_local_search_attack.perturb(initial_img, orig_class, sess)
+      adv_img, num_queries = lazy_local_search_attack.perturb(initial_img, orig_class, indices[index], sess)
     else:
-      tf.logging.info('Targeted attack on {}th image starts, img index: {}, orig class: {}, target class: {}'.format(
+      tf.logging.info('Targeted attack on {}th image starts, index: {}, orig class: {}, target class: {}'.format(
         count, indices[index], orig_class[0], target_class[0]))
-      adv_img, num_queries = lazy_local_search_attack.perturb(initial_img, target_class, sess)
+      adv_img, num_queries = lazy_local_search_attack.perturb(initial_img, target_class, indices[index], sess)
     
     # Check if the adversarial image satisfies the constraint.
     assert(np.amax(np.abs(adv_img-initial_img)) <= args.epsilon+1e-3)    
@@ -123,16 +118,29 @@ if __name__ == '__main__':
 
     if not args.targeted and p != orig_class:
       total_num_corrects += 1
-      total_num_queries += num_queries
-      tf.logging.info('Image {} attack successes, final class {}, image index: {}, average queries: {:.4f}, success rate: {:.4f}'.format(
-        count, p[0], indices[index], total_num_queries/max(1, total_num_corrects), total_num_corrects/count))
+      total_num_queries.append(num_queries)
+      average_queries = 0 if len(total_num_queries) == 0 else np.mean(total_num_queries)
+      median_queries = 0 if len(total_num_queries) == 0 else np.median(total_num_queries)
+      tf.logging.info('Attack successes, avg queries: {:.4f}, med queries: {}, success rate: {:.4f}'.format(
+        average_queries, median_queries, total_num_corrects/count))
+    
     elif args.targeted and p == target_class:
       total_num_corrects += 1
-      total_num_queries += num_queries
-      tf.logging.info('Image {} attack successes, image index: {}, average queries: {:.4f}, success rate: {:.4f}'.format(
-        count, indices[index], total_num_queries/max(1, total_num_corrects), total_num_corrects/count))
+      total_num_queries.append(num_queries)
+      average_queries = 0 if len(total_num_queries) == 0 else np.mean(total_num_queries)
+      median_queries = 0 if len(total_num_queries) == 0 else np.median(total_num_queries)
+      tf.logging.info('Attack successes, avg queries: {:.4f}, med queries: {}, success rate: {:.4f}'.format(
+        average_queries, median_queries, total_num_corrects/count))
+    
     else:
-      tf.logging.info('Image {} attack fails, image index: {}, average queries: {:.4f}, success rate: {:.4f}'.format(
-        count, indices[index], total_num_queries/max(1, total_num_corrects), total_num_corrects/count))
+      average_queries = 0 if len(total_num_queries) == 0 else np.mean(total_num_queries)
+      median_queries = 0 if len(total_num_queries) == 0 else np.median(total_num_queries)
+      tf.logging.info('Attack fails, avg queries: {:.4f}, med queries: {}, success rate: {:.4f}'.format(
+        average_queries, median_queries, total_num_corrects/count))
 
     index += 1
+  
+  targeted = 'targeted' if args.targeted else 'untargeted'
+  filename = '/data_large/unsynced_store/seungyong/output/lls_{}_{}.npy'.format(
+    targeted, args.img_index_start+args.sample_size)
+  np.save(filename, total_num_queries)
