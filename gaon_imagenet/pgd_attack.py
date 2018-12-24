@@ -36,8 +36,6 @@ if __name__ == '__main__':
     parser.add_argument('--img_index_start', default=0, type=int)
     parser.add_argument('--model_dir', default='nat', help='model name', type=str)
     parser.add_argument('--targeted', action='store_true')
-    parser.add_argument('--test', action='store_true')
-    parser.add_argument('--shuffle', action='store_true')
     parser.add_argument('--rand', action='store_true')
     args = parser.parse_args()
     for key, val in vars(args).items():
@@ -170,12 +168,7 @@ if __name__ == '__main__':
         # Iterate over the samples batch-by-batch
         num_eval_examples = args.sample_size
         eval_batch_size = 100
-        if args.test:
-            target_indices = np.load('./../data/correctly_classified_set.npy')
-        else:
-            target_indices = np.array([i for i in range(50000)])
-        if args.shuffle:
-            np.random.shuffle(target_indices)
+        target_indices = np.load('./../data/untargeted_shuffle.npy')
 
         num_batches = int(math.ceil(num_eval_examples / eval_batch_size))
         x_adv = [] # adv accumulator

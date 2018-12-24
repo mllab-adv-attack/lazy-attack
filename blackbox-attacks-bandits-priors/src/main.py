@@ -174,9 +174,9 @@ def make_adversarial_examples(image, true_label, args):
             if not (image - orig_images).max() <= args.epsilon + 1e-3:
                 raise ValueError("OOB")
 
-        ## Continue query count
-        not_dones_mask = not_dones_mask*((model_to_fool(batch_norm(image)).argmax(1) == true_label).float())
+        ## Continue query count (modified)
         total_queries += 2*args.gradient_iters*not_dones_mask
+        not_dones_mask = not_dones_mask*((model_to_fool(batch_norm(image)).argmax(1) == true_label).float())
 
         ## Logging stuff
         new_losses = L(image)
@@ -213,7 +213,7 @@ def main(args):
     eval_batch_size = min(args.batch_size, num_eval_examples)
 
     if args.test:
-        target_indices = np.load('./../../data/correctly_classified_set.npy')
+        target_indices = np.load('./../../data/untargeted_shuffle.npy')
     else:
         target_indices = [i for i in range(50000)]
     
@@ -228,7 +228,6 @@ def main(args):
     y_full_batch = []
 
     attack_set = []
-    
     
     print('loading image data')
     while(True):
@@ -248,6 +247,8 @@ def main(args):
         for i in idx[0]:
             attack_set.append(bstart+i)
         x_candid = x_candid.cpu().numpy()
+        for i in range(100):
+            np.save('./out/tf_img_{}'.format(args.img_index_start+bstart+i+1), x_candid[i])
         x_masked = x_candid[idx]
         y_masked = y_candid[idx]
         if bstart == 0:
@@ -271,7 +272,6 @@ def main(args):
     average_queries_per_success = 0.0
     total_correctly_classified_ims = 0.0
     success_rate_total = 0.0
-    total_success_ims = 0.0
 
     '''
     for i, (images, targets) in enumerate(imagenet_loader):
@@ -298,12 +298,10 @@ def main(args):
         average_queries_per_success += res['success_rate']*res['average_queries']*res['num_correctly_classified']
         success_rate_total += res['success_rate']*res['num_correctly_classified']
         total_correctly_classified_ims += res['num_correctly_classified']
-        total_success_ims += res['success_rate']*res['num_correctly_classified']
     
 
-    return average_queries_per_success/total_success_ims, \
-        success_rate_total/total_correctly_classified_ims, \
-        total_success_ims
+    return average_queries_per_success/success_rate_total, \
+        success_rate_total/total_correctly_classified_ims \
 
 class Parameters():
     '''
@@ -321,21 +319,21 @@ class Parameters():
 if __name__ == "__main__":
     # modified to use bandit(linf) as default
     parser = argparse.ArgumentParser()
-    parser.add_argument('--max-queries', default=10000, type=int)
-    parser.add_argument('--fd-eta', default=0.1, type=float, help='\eta, used to estimate the derivative via finite differences')
-    parser.add_argument('--image-lr', default=0.005, type=float, help='Learning rate for the image (iterative attack)')
-    parser.add_argument('--online-lr', default=100, type=float, help='Learning rate for the prior')
-    parser.add_argument('--mode', default='linf', type=str, help='Which lp constraint to run bandits [linf|l2]')
-    parser.add_argument('--exploration', default=0.01, type=float, help='\delta, parameterizes the exploration to be done around the prior')
-    parser.add_argument('--tile-size', default=50, type=int, help='the side length of each tile (for the tiling prior)')
-    parser.add_argument('--json-config', type=str, help='a config file to be passed in instead of arguments')
-    parser.add_argument('--epsilon', default=0.05, type=float, help='the lp perturbation bound')
-    parser.add_argument('--batch-size', default=500, type=int, help='batch size for bandits')
+    parser.add_argument('--max-queries', type=int)
+    parser.add_argument('--fd-eta', type=float, help='\eta, used to estimate the derivative via finite differences')
+    parser.add_argument('--image-lr', type=float, help='Learning rate for the image (iterative attack)')
+    parser.add_argument('--online-lr', type=float, help='Learning rate for the prior')
+    parser.add_argument('--mode', type=str, help='Which lp constraint to run bandits [linf|l2]')
+    parser.add_argument('--exploration', type=float, help='\delta, parameterizes the exploration to be done around the prior')
+    parser.add_argument('--tile-size',default=50,  type=int, help='the side length of each tile (for the tiling prior)')
+    parser.add_argument('--json-config', default='configs/nes-linf.json', type=str, help='a config file to be passed in instead of arguments')
+    parser.add_argument('--epsilon', type=float, help='the lp perturbation bound')
+    parser.add_argument('--batch-size', type=int, help='batch size for bandits')
     parser.add_argument('--sample_size', default=1000, type=int, help='sample size for bandits')
     parser.add_argument('--log-progress', action='store_false')
     parser.add_argument('--nes', action='store_true')
-    parser.add_argument('--tiling', action='store_false')
-    parser.add_argument('--gradient-iters', default=1, type=int)
+    parser.add_argument('--tiling', action='store_true')
+    parser.add_argument('--gradient-iters', type=int)
     parser.add_argument('--shuffle', action='store_true')
     parser.add_argument('--test', action='store_true')
     parser.add_argument('--img_index_start', default=0, type=int)
@@ -358,5 +356,4 @@ if __name__ == "__main__":
         args_dict = defaults
 
     with ch.no_grad():
-        print("Queries, Success, orig_correct = ", main(args))
-
+        print("Queries, Success = ", main(args))

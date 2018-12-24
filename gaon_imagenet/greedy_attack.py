@@ -1292,7 +1292,7 @@ if __name__ == '__main__':
         # Iterate over the samples batch-by-batch
         num_eval_examples = args.sample_size
         eval_batch_size = 1
-        target_indices = np.load('./../data/correctly_classified_set.npy')
+        target_indices = np.load('./../data/untargeted_shuffle.npy')
         num_batches = int(math.ceil(num_eval_examples / eval_batch_size))
         x_adv = [] # adv accumulator
         

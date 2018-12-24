@@ -360,7 +360,7 @@ m = 13384196
 # baseline!
 
 # untargeted 10000
-pgd = [0.05, 20]
+pgd = [0.08, 20]
 
 bandit1 = [7.64, 1425]
 bandit2 = [7.12, 1359]
@@ -373,6 +373,32 @@ bandit_all2 = [7.72, 1294]
 bandit_all3 = [7.68, 1355]
 bandit_all4 = [6.28, 1324]
 bandit_all = [7.37, 1334]
+
+bandit_ch_rand = [6.94, 1353]
+
+bandit_ch1 = [7.0, 1346]
+bandit_ch2 = [8.9, 1535]
+bandit_ch3 = [7.4, 1427]
+bandit_ch4 = [3.7, 1021]
+bandit_ch = [6.75, 1332]
+
+bandit_new1 = [7.6, 1346]
+bandit_new2 = [7.24, 1365]
+bandit_new3 = [8.65, 1361]
+bandit_new4 = [6.8, 1336]
+bandit_new = [7.57, 1352]
+
+nes1 = [20.3, 1540]
+nes2 = [18.8, 1500]
+nes3 = [20.0, 1646]
+nes4 = [21.0, 1581]
+nes = [20.0, 1567]
+
+nes_fix1 = [20.1, 1627]
+nes_fix2 = [18.2, 1662]
+nes_fix3 = [19.2, 1758]
+nes_fix4 = [21.1, 1666]
+nes_fix = [19.65, 1678.25]
 
 #adv
 

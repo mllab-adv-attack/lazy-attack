@@ -66,18 +66,21 @@ class Submodular:
             label_batch = np.tile(y, (4*batch_size))
             
             for j in range(batch_size):
-                A_size = np.random.randint(len(samples))
-                shuffled = np.random.permutation(samples)
-                A = shuffled[:A_size]
-                
                 B_size = np.random.randint(len(samples))
                 shuffled = np.random.permutation(samples)
                 B = shuffled[:B_size]
+                
+                A_size = np.random.randint(len(B)-1)
+                A = B[:A_size]
+
+                e = B[-1]
 
                 A = set([tuple(x) for x in A])
                 B = set([tuple(x) for x in B])
-                intersect = A & B
-                union = A | B
+                Ae = set(A)
+                Be = set(B)
+                Ae.add(tuple(e))
+                Be.add(tuple(e))
                 
                 A_noise = np.ones_like(np.reshape(x_nat, (xt, yt, zt))) * (- params.eps)
                 for tup in A:
@@ -92,13 +95,13 @@ class Submodular:
                 img_batch[batch_size+j] = np.clip(x_nat + B_noise, 0, 1)
 
                 intersect_noise = np.ones_like(np.reshape(x_nat, (xt, yt, zt))) * (- params.eps)
-                for tup in intersect:
+                for tup in Ae:
                     xi, yi, zi = tup
                     intersect_noise[xi, yi, zi] *= -1
                 img_batch[batch_size*2+j] = np.clip(x_nat + intersect_noise, 0, 1)
                 
                 union_noise = np.ones_like(np.reshape(x_nat, (xt, yt, zt))) * (- params.eps)
-                for tup in union:
+                for tup in Be:
                     xi, yi, zi = tup
                     union_noise[xi, yi, zi] *= -1
                 img_batch[batch_size*3+j] = np.clip(x_nat + union_noise, 0, 1)
@@ -106,7 +109,7 @@ class Submodular:
             losses = sess.run(self.loss, feed_dict={self.model_x: img_batch,
                                                     self.model_y: label_batch})
             for j in range(batch_size):
-                if losses[j] + losses[batch_size+j] >= losses[batch_size*2+j] + losses[batch_size*3+j]:
+                if losses[batch_size*2+j] - losses[j] >= losses[batch_size*3+j] - losses[batch_size*1+j]:
                     count += 1
         
         return count / params.samples_per_batch
