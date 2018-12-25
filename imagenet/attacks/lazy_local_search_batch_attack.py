@@ -83,10 +83,10 @@ class LazyLocalSearchBatchAttack(object):
           return adv_image, num_queries
       
       # Create Next batch
-      block_size //= 2
-      if block_size <= 0:
-        return adv_image, num_queries
-      blocks = self._split_block([upper_left, lower_right], block_size)
-      num_blocks = len(blocks)
+      if block_size >= 2:
+        block_size //= 2
+        blocks = self._split_block([upper_left, lower_right], block_size)
+        num_blocks = len(blocks)
+      
       curr_order = np.random.permutation(num_blocks)
 

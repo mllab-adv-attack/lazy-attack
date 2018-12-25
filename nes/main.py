@@ -1,84 +1,119 @@
-import os
-import json
-import shutil
 import argparse
-from tensorflow.python.client import device_lib
+import inspect
+import json
+import numpy as np
+import pickle
+from PIL import Image
+import sys
+import tensorflow as tf
 
-import attacks 
+from tools.inception_v3_imagenet import model
+from tools.utils import *
+from attacks.nes_attack import NES_Attack
 
-BATCH_SIZE = 50
-SIGMA = 1e-3
-EPSILON = 0.05
-SAMPLES_PER_DRAW = 50
-LEARNING_RATE = 1e-2
-LOG_ITERS_FACTOR = 2
 IMAGENET_PATH = '../data'
+NUM_LABELS = 1000
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--samples-per-draw', type=int, default=SAMPLES_PER_DRAW)
-    parser.add_argument('--batch-size', type=int, default=BATCH_SIZE)
-    parser.add_argument('--target-class', type=int, help='negative => untargeted')
-    parser.add_argument('--orig-class', type=int)
-    parser.add_argument('--sigma', type=float, default=SIGMA)
-    parser.add_argument('--epsilon', type=float, default=EPSILON)
-    parser.add_argument('--learning-rate', type=float, default=LEARNING_RATE)
-    parser.add_argument('--img-path', type=str)
-    parser.add_argument('--img-index', type=int)
-    parser.add_argument('--log-iters', type=int, default=1)
-    parser.add_argument('--restore', type=str, help='restore path of img')
-    parser.add_argument('--momentum', type=float, default=0.0)
-    parser.add_argument('--max-queries', type=int, default=10000)
-    parser.add_argument('--save-iters', type=int, default=50)
-    parser.add_argument('--plateau-drop', type=float, default=2.0)
-    parser.add_argument('--min-lr-ratio', type=int, default=200)
-    parser.add_argument('--plateau-length', type=int, default=5)
-    parser.add_argument('--gpus', type=int, help='number of GPUs to use')
-    parser.add_argument('--imagenet-path', type=str)
-    parser.add_argument('--visualize', action='store_true')
-    parser.add_argument('--max-lr', type=float, default=1e-2)
-    parser.add_argument('--min-lr', type=float, default=5e-5)
-    parser.add_argument('--sample-size', type=int, default=100)
-    # PARTIAL INFORMATION ARGUMENTS
-    parser.add_argument('--top-k', type=int, default=-1)
-    parser.add_argument('--adv-thresh', type=float, default=-1.0)
-    # LABEL ONLY ARGUMENTS
-    parser.add_argument('--label-only', action='store_true')
-    parser.add_argument('--zero-iters', type=int, default=100, help="how many points to use for the proxy score")
-    parser.add_argument('--label-only-sigma', type=float, default=1e-3, help="distribution width for proxy score")
-    parser.add_argument('--starting-eps', type=float, default=1.0)
-    parser.add_argument('--starting-delta-eps', type=float, default=0.5)
-    parser.add_argument('--min-delta-eps', type=float, default=0.1)
-    parser.add_argument('--conservative', type=int, default=2, help="How conservative we should be in epsilon decay; increase if no convergence")
-    args = parser.parse_args()
+parser = argparse.ArgumentParser()
+parser.add_argument('--max_queries', default=10000, type=int)
+parser.add_argument('--epsilon', default='0.05', type=float)
+parser.add_argument('--img_index_start', default=0, type=int)
+parser.add_argument('--sample_size', default=1000, type=int)
+parser.add_argument('--save_img', dest='save_img', action='store_true')
 
-    # Data checks
-    if not (args.img_path is None and args.img_index is not None or
-            args.img_path is not None and args.img_index is None):
-        raise ValueError('can only set one of img-path, img-index')
-    if args.img_path and not (args.orig_class or args.target_class):
-        raise ValueError('orig and target class required with image path')
-    if (args.target_class is None and args.img_index is None):
-        raise ValueError('must give target class if not using index')
-    assert args.samples_per_draw % args.batch_size == 0
-    gpus = get_available_gpus()
-    if args.gpus:
-        if args.gpus > len(gpus):
-            raise RuntimeError('not enough GPUs! (requested %d, found %d)' % (args.gpus, len(gpus)))
-        gpus = gpus[:args.gpus]
-    if not gpus:
-        raise NotImplementedError('no support for using CPU-only because lazy')
-    if args.batch_size % (2*len(gpus)) != 0:
-        raise ValueError('batch size must be divisible by 2 * number of GPUs (batch_size=%d, gpus=%d)' % (
-            batch_size,
-            len(gpus)
-        ))
+parser.add_argument('--batch_size', default=50, type=int)
+parser.add_argument('--sigma', default=1e-3, type=float)
+parser.add_argument('--max_lr', default=1e-2, type=float)
+parser.add_argument('--min_lr', default=5e-5, type=float)
+parser.add_argument('--plateau_length', default=5, type=int)
+parser.add_argument('--plateau_drop', default=2.0, type=float)
+parser.add_argument('--momentum', default=0.75, type=float)
 
-    attacks.main(args, gpus)
+parser.add_argument('--targeted', action='store_true')
 
-def get_available_gpus():
-    local_device_protos = device_lib.list_local_devices()
-    return [x.name for x in local_device_protos if x.device_type == 'GPU']
+args = parser.parse_args()
 
-if __name__ == "__main__":
-    main()
+if __name__ == '__main__':
+  # Set verbosity
+  tf.logging.set_verbosity(tf.logging.INFO)
+    
+  # Create session
+  sess = tf.InteractiveSession()
+
+  # Create attack class.
+  nes_attack = NES_Attack(sess, args)
+  
+   # Print hyperparameters
+  for key, val in vars(args).items():
+    tf.logging.info('{}={}'.format(key, val))
+
+  # Load indices
+  if args.targeted:
+    indices = np.load('../data/indices_targeted.npy')
+  else:
+    indices = np.load('../data/indices_untargeted.npy')
+    
+  # Main loop 
+  count = 0
+  index = args.img_index_start
+  total_num_corrects = 0
+  total_num_queries = []
+ 
+  while count < args.sample_size:
+    tf.logging.info('')
+    
+    # Get image and label.
+    initial_img, orig_class = get_image(indices[index], IMAGENET_PATH)
+    initial_img = np.expand_dims(initial_img, axis=0)
+
+    # Generate target class(the same method as in NES attack).
+    if args.targeted:
+      target_class = pseudorandom_target(indices[index], NUM_LABELS, orig_class)
+      target_class = np.expand_dims(target_class, axis=0)
+    
+    orig_class = np.expand_dims(orig_class, axis=0)
+    
+    count += 1
+   
+    # Run attack
+    if args.targeted: 
+      tf.logging.info('Targeted attack on {}th image starts, index: {}, orig class: {}, target class: {}'.format(
+          count, indices[index], orig_class[0], target_class[0]))
+      adv_img, num_queries, success = nes_attack.perturb(initial_img, target_class, sess)
+    else:
+      tf.logging.info('Untargeted attack on {}th image starts, index: {}, orig class: {}'.format(
+          count, indices[index], orig_class[0]))
+      adv_img, num_queries, success = nes_attack.perturb(initial_img, orig_class, sess)
+    
+    # Check if the adversarial image satisfies the constraint.
+    assert(np.amax(np.abs(adv_img-initial_img)) <= args.epsilon+1e-3)    
+    
+    # Save the adversarial image.
+    if args.save_img:
+      adv_image = Image.fromarray(np.ndarray.astype(adv_img[0, :, :, :]*255, np.uint8))
+      adv_image.save('/data_large/unsynced_store/seungyong/output/adv/{}_adv.jpg'.format(indices[index]))
+      image = Image.fromarray(np.ndarray.astype(initial_img[0, :, :, :]*255, np.uint8))
+      image.save('/data_large/unsynced_store/seungyong/output/nat/{}_nat.jpg'.format(indices[index]))
+    
+    if success:
+      total_num_corrects += 1
+      total_num_queries.append(num_queries)
+      average_queries = 0 if len(total_num_queries) == 0 else np.mean(total_num_queries)
+      median_queries = 0 if len(total_num_queries) == 0 else np.median(total_num_queries)
+      tf.logging.info('Attack successes, avg queries: {:.4f}, med queries: {}, success rate: {:.4f}'.format(
+        average_queries, median_queries, total_num_corrects/count))
+    
+    else:
+      average_queries = 0 if len(total_num_queries) == 0 else np.mean(total_num_queries)
+      median_queries = 0 if len(total_num_queries) == 0 else np.median(total_num_queries)
+      tf.logging.info('Attack fails, avg queries: {:.4f}, med queries: {}, success rate: {:.4f}'.format(
+        average_queries, median_queries, total_num_corrects/count))
+    
+    index += 1
+  
+  """  
+  targeted = 'targeted' if args.targeted else 'untargeted' 
+  filename = '/data_large/unsynced_store/seungyong/output/nes_{}_{}_{}.npy'.format(
+    targeted, args.momentum, args.img_index_start+args.sample_size)
+  np.save(filename, total_num_queries)
+  """

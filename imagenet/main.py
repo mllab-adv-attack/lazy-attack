@@ -18,10 +18,10 @@ IMAGENET_PATH = '../data'
 NUM_LABELS = 1000
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--max_queries', default=10000, type=int)
+parser.add_argument('--max_queries', default=100000, type=int)
 parser.add_argument('--epsilon', default='0.05', type=float)
 parser.add_argument('--img_index_start', default=0, type=int)
-parser.add_argument('--sample_size', default=1000, type=int)
+parser.add_argument('--sample_size', default=100, type=int)
 parser.add_argument('--save_img', dest='save_img', action='store_true')
 parser.add_argument('--attack', default='LazyLocalSearchBatchAttack', type=str)
 parser.add_argument('--targeted', action='store_true')
@@ -139,8 +139,9 @@ if __name__ == '__main__':
         average_queries, median_queries, total_num_corrects/count))
 
     index += 1
-  
+  """  
   targeted = 'targeted' if args.targeted else 'untargeted'
   filename = '/data_large/unsynced_store/seungyong/output/lls_{}_{}.npy'.format(
     targeted, args.img_index_start+args.sample_size)
   np.save(filename, total_num_queries)
+  """
