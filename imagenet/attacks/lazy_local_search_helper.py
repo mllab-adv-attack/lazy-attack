@@ -88,7 +88,7 @@ class LazyLocalSearchHelper(object):
       # First forward passes
       indices, channels = np.where(A==0)
       
-      batch_size = 100
+      batch_size = 1
       num_batches = int(math.ceil(len(indices)/batch_size))
       
       for ibatch in range(num_batches):
@@ -107,11 +107,9 @@ class LazyLocalSearchHelper(object):
           feed_dict={self.x_input: image_batch, self.y_input: label_batch})
         num_queries += bend-bstart
         
-        """
         # Early stopping 
         if (self.targeted and preds == label) or (not self.targeted and preds != label):
           return noise_batch, num_queries, losses[0], True
-        """
 
         # Push into the priority queue
         for i in range(bend-bstart):
@@ -167,7 +165,7 @@ class LazyLocalSearchHelper(object):
       # Now delete element
       indices, channels = np.where(A==1)
        
-      batch_size = 100
+      batch_size = 1
       num_batches = int(math.ceil(len(indices)/batch_size))   
       
       for ibatch in range(num_batches):
@@ -186,11 +184,9 @@ class LazyLocalSearchHelper(object):
           feed_dict={self.x_input: image_batch, self.y_input: label_batch})
         num_queries += bend-bstart
         
-        """
         # Early stopping 
         if (self.targeted and preds == label) or (not self.targeted and preds != label):
           return noise_batch, num_queries, losses[0], True
-        """
 
         # Push into the priority queue
         for i in range(bend-bstart):
