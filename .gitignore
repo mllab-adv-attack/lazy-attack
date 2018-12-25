@@ -3,6 +3,7 @@ data/**
 imagenet/logs/**
 imagenet/data/**
 imagenet/tools/data/**
+imagenet/out/**
 
 nes/tools/data/**
 

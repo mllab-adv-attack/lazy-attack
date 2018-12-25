@@ -213,7 +213,7 @@ def main(args):
     eval_batch_size = min(args.batch_size, num_eval_examples)
 
     if args.test:
-        target_indices = np.load('./../../data/untargeted_shuffle.npy')
+        target_indices = np.load('./../../data/indices_untargeted.npy')
     else:
         target_indices = [i for i in range(50000)]
     

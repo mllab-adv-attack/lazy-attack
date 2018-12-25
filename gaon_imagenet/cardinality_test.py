@@ -25,8 +25,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
     parser.add_argument('--eps', default='0.05', help='Attack eps', type=float)
-    parser.add_argument('--sample_size', default=100, help='sample size', type=int)
-    parser.add_argument('--samples_per_batch', default=100, help='samples per batch', type=int)
+    parser.add_argument('--sample_size', default=10, help='sample size', type=int)
+    parser.add_argument('--samples_per_batch', default=1000, help='samples per batch', type=int)
     parser.add_argument('--loss_func', default='xent', help='loss func', type=str)
     parser.add_argument('--model_dir', default='nat', help='model name', type=str)
     params = parser.parse_args()
@@ -55,64 +55,48 @@ class Submodular:
 
     def test(self, x_nat, y, sess, ibatch):
         _, xt, yt, zt = x_nat.shape
-        batch_size = 50
+        batch_size = 200
         assert params.samples_per_batch % batch_size == 0
         num_batches = int(math.ceil(params.samples_per_batch / batch_size))
         samples = [(xi, yi, zi) for xi in range(xt) for yi in range(yt) for zi in range(zt)]
-        
-        count = 0
+
+        set_size_li = []
+        loss_li = []
+
         for i in range(num_batches):
-            img_batch = np.tile(x_nat, (4*batch_size, 1, 1, 1))
-            label_batch = np.tile(y, (4*batch_size))
+            img_batch = np.tile(x_nat, (batch_size, 1, 1, 1))
+            label_batch = np.tile(y, (batch_size))
             
             for j in range(batch_size):
-                B_size = np.random.randint(len(samples))
-                shuffled = np.random.permutation(samples)
-                B = shuffled[:B_size]
+                A_size = np.random.randint(len(samples))
+                np.random.shuffle(samples)
+                A = samples[:A_size]
                 
-                A_size = np.random.randint(len(B)-1)
-                A = B[:A_size]
-
-                e = B[-1]
-
+                set_size_li.append(A_size)
+                
                 A = set([tuple(x) for x in A])
-                B = set([tuple(x) for x in B])
-                Ae = set(A)
-                Be = set(B)
-                Ae.add(tuple(e))
-                Be.add(tuple(e))
                 
                 A_noise = np.ones_like(np.reshape(x_nat, (xt, yt, zt))) * (- params.eps)
                 for tup in A:
                     xi, yi, zi = tup
                     A_noise[xi, yi, zi] *= -1
                 img_batch[j] = np.clip(x_nat + A_noise, 0, 1)
-               
-                B_noise = np.ones_like(np.reshape(x_nat, (xt, yt, zt))) * (- params.eps)
-                for tup in B:
-                    xi, yi, zi = tup
-                    B_noise[xi, yi, zi] *= -1
-                img_batch[batch_size+j] = np.clip(x_nat + B_noise, 0, 1)
-
-                intersect_noise = np.ones_like(np.reshape(x_nat, (xt, yt, zt))) * (- params.eps)
-                for tup in Ae:
-                    xi, yi, zi = tup
-                    intersect_noise[xi, yi, zi] *= -1
-                img_batch[batch_size*2+j] = np.clip(x_nat + intersect_noise, 0, 1)
-                
-                union_noise = np.ones_like(np.reshape(x_nat, (xt, yt, zt))) * (- params.eps)
-                for tup in Be:
-                    xi, yi, zi = tup
-                    union_noise[xi, yi, zi] *= -1
-                img_batch[batch_size*3+j] = np.clip(x_nat + union_noise, 0, 1)
            
             losses = sess.run(self.loss, feed_dict={self.model_x: img_batch,
                                                     self.model_y: label_batch})
             for j in range(batch_size):
-                if losses[batch_size*2+j] - losses[j] >= losses[batch_size*3+j] - losses[batch_size*1+j]:
-                    count += 1
-        
-        return count / params.samples_per_batch
+                loss_li.append(losses[j])
+
+        self.plot(set_size_li, loss_li, ibatch)
+
+    def plot(self, size_li, loss_li, ibatch):
+       
+        plt.figure()
+        plt.scatter(size_li, loss_li, s=9)
+        plt.title('index {}, sample size {}'.format(ibatch, params.samples_per_batch))
+        plt.xlabel('|S|')
+        plt.ylabel('F(S)')
+        plt.savefig('./imagenet_out/card_{}_{}.png'.format(ibatch, params.samples_per_batch))
 
 if __name__ == '__main__':
 
@@ -140,7 +124,7 @@ if __name__ == '__main__':
         while(True):
             x_candid = []
             y_candid = []
-            for i in range(100):
+            for i in range(10):
                 img_batch, y_batch = get_image(target_indices[bstart+i], IMAGENET_PATH)
                 img_batch = np.reshape(img_batch, (-1, *img_batch.shape))
                 if i == 0:
@@ -162,7 +146,7 @@ if __name__ == '__main__':
                 index = min(num_eval_examples-len(x_full_batch), len(x_masked))
                 x_full_batch = np.concatenate((x_full_batch, x_masked[:index]))
                 y_full_batch = np.concatenate((y_full_batch, y_masked[:index]))
-            bstart += 100
+            bstart += 10
             print(len(x_full_batch))
             if len(x_full_batch) >= num_eval_examples:
                     break
@@ -178,14 +162,8 @@ if __name__ == '__main__':
 
             start = time.time()
 
-            percentage = tester.test(x_batch, y_batch, sess, ibatch)
-            percentages.append(percentage)
-            percentage_mean = sum(percentages) / len(percentages)
-            print('submodularity percentage:{:.2f}% over {} samples'.format(percentage*100, params.samples_per_batch))
-            print('percentage mean:{:.2f}%'.format(percentage_mean*100))
+            tester.test(x_batch, y_batch, sess, target_indices[ibatch])
+            
             end = time.time()
             print('time taken:{}'.format(end - start))
             print()
-        
-        print('eps:{}, loss function:{}'.format(params.eps, params.loss_func))
-        print('percentage mean:{:.2f}%'.format(percentage_mean*100))

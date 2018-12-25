@@ -113,7 +113,7 @@ class Submodular:
 
 if __name__ == '__main__':
 
-    target_indices = np.load('./../data/untargeted_shuffle.npy')
+    target_indices = np.load('./../data/indices_untargeted.npy')
 
     configs = tf.ConfigProto()
     configs.gpu_options.allow_growth = True
