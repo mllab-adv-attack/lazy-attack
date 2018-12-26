@@ -1,11 +1,11 @@
 data/**
 
-imagenet/logs/**
-imagenet/data/**
-imagenet/tools/data/**
-imagenet/out/**
+lls-imagenet/logs/**
+lls-imagenet/data/**
+lls-imagenet/tools/data/**
+lls-imagenet/out/**
 
-nes/tools/data/**
+nes-imagenet/tools/data/**
 
 gaon_imagenet/imagenet_out/**
 gaon_imagenet/out/**

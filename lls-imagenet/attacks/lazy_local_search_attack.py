@@ -9,7 +9,7 @@ from attacks.lazy_local_search_helper import LazyLocalSearchHelper
 np.random.seed(0)
 
 
-class LazyLocalSearchBatchAttack(object):
+class LazyLocalSearchAttack(object):
   def __init__(self, model, epsilon, max_queries, **kwargs):
     # Setting
     self.max_queries = max_queries
@@ -83,10 +83,10 @@ class LazyLocalSearchBatchAttack(object):
           return adv_image, num_queries
       
       # Create Next batch
-      block_size //= 2
-      if block_size <= 0:
-        return adv_image, num_queries
-      blocks = self._split_block([upper_left, lower_right], block_size)
-      num_blocks = len(blocks)
+      if block_size >= 2:
+        block_size //= 2
+        blocks = self._split_block([upper_left, lower_right], block_size)
+        num_blocks = len(blocks)
+      
       curr_order = np.random.permutation(num_blocks)
 

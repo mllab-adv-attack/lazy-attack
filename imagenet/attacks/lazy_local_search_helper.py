@@ -110,7 +110,7 @@ class LazyLocalSearchHelper(object):
         # Early stopping 
         if (self.targeted and preds == label) or (not self.targeted and preds != label):
           return noise_batch, num_queries, losses[0], True
-        
+
         # Push into the priority queue
         for i in range(bend-bstart):
           idx = indices[bstart+i]

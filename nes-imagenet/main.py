@@ -111,9 +111,8 @@ if __name__ == '__main__':
     
     index += 1
   
-  """  
   targeted = 'targeted' if args.targeted else 'untargeted' 
   filename = '/data_large/unsynced_store/seungyong/output/nes_{}_{}_{}.npy'.format(
     targeted, args.momentum, args.img_index_start+args.sample_size)
   np.save(filename, total_num_queries)
-  """
+
