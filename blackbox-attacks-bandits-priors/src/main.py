@@ -247,8 +247,6 @@ def main(args):
         for i in idx[0]:
             attack_set.append(bstart+i)
         x_candid = x_candid.cpu().numpy()
-        for i in range(100):
-            np.save('./out/tf_img_{}'.format(args.img_index_start+bstart+i+1), x_candid[i])
         x_masked = x_candid[idx]
         y_masked = y_candid[idx]
         if bstart == 0:
@@ -286,6 +284,8 @@ def main(args):
         total_correctly_classified_ims += res['num_correctly_classified']
         total_success_ims += res['success_rate']*res['num_correctly_classified']
     '''
+    
+    success_indices = []
 
     print("Iterating over {} batches\n".format(num_batches))
     for ibatch in range(num_batches):
@@ -298,6 +298,13 @@ def main(args):
         average_queries_per_success += res['success_rate']*res['average_queries']*res['num_correctly_classified']
         success_rate_total += res['success_rate']*res['num_correctly_classified']
         total_correctly_classified_ims += res['num_correctly_classified']
+
+        success_indices_batch = res['success']
+        for i in range(bend-bstart):
+            if success_indices_batch[i] != 0:
+                success_indices.append(target_indices[args.img_index_start+bstart+i])
+
+    #np.save('./out/indices_nes_success_{}_{}.npy'.format(args.img_index_start, args.sample_size), success_indices)
     
 
     return average_queries_per_success/success_rate_total, \
@@ -326,17 +333,18 @@ if __name__ == "__main__":
     parser.add_argument('--mode', type=str, help='Which lp constraint to run bandits [linf|l2]')
     parser.add_argument('--exploration', type=float, help='\delta, parameterizes the exploration to be done around the prior')
     parser.add_argument('--tile-size',default=50,  type=int, help='the side length of each tile (for the tiling prior)')
-    parser.add_argument('--json-config', default='configs/nes-linf.json', type=str, help='a config file to be passed in instead of arguments')
+    parser.add_argument('--json-config', default='configs/linf.json', type=str, help='a config file to be passed in instead of arguments')
     parser.add_argument('--epsilon', type=float, help='the lp perturbation bound')
     parser.add_argument('--batch-size', type=int, help='batch size for bandits')
     parser.add_argument('--sample_size', default=1000, type=int, help='sample size for bandits')
     parser.add_argument('--log-progress', action='store_false')
     parser.add_argument('--nes', action='store_true')
-    parser.add_argument('--tiling', action='store_true')
+    parser.add_argument('--tiling', action='store_false')
     parser.add_argument('--gradient-iters', type=int)
     parser.add_argument('--shuffle', action='store_true')
-    parser.add_argument('--test', action='store_true')
+    parser.add_argument('--test', action='store_false')
     parser.add_argument('--img_index_start', default=0, type=int)
+    parser.add_argument('--targeted', action='store_true')
     args = parser.parse_args()
 
     args_dict = None
