@@ -9,7 +9,7 @@ from attacks.lazy_local_search_helper import LazyLocalSearchHelper
 np.random.seed(0)
 
 
-class LazyLocalSearchAttack(object):
+class LazyLocalSearchBatchAttack(object):
   def __init__(self, model, loss_func, epsilon, max_queries, **kwargs):
     # Setting
     self.max_queries = max_queries
