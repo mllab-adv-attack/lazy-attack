@@ -10,7 +10,7 @@ import json
 #added
 import math
 import numpy as np
-from tools.utils import get_image
+from tools.utils import get_image, pseudorandom_target
 
 IMAGENET_PATH = './../../data/'
 #IMAGENET_PATH = './../../torch_data/'
@@ -103,6 +103,19 @@ def batch_norm(image):
         transforms.Normalize(mean, std)(new_image[i,:,:,:])
     return new_image
 
+def cw_loss(true_label):
+    soft = ch.nn.Softmax(1)
+    one = ch.eye(1000)
+    one_hot = one.index_select(0, true_label).float()
+
+    def cw(image):
+        softmax = soft(model_to_fool(batch_norm(image)))
+        gt_val, _ = ch.max((softmax * one_hot), 1)
+        max_val, _ = ch.max((softmax * (1-one_hot)), 1)
+        return -ch.log(gt_val) + ch.log(max_val)
+
+    return cw
+
 ##
 # Main functions
 ##
@@ -112,12 +125,13 @@ def make_adversarial_examples(image, true_label, args):
     The main process for generating adversarial examples with priors.
     '''
     # Initial setup
+    batch_size = list(image.size())[0]
     prior_size = IMAGENET_SL if not args.tiling else args.tile_size
     print("prior size:", prior_size)
     upsampler = Upsample(size=(IMAGENET_SL, IMAGENET_SL))
-    total_queries = ch.zeros(args.batch_size)
-    prior = ch.zeros(args.batch_size, 3, prior_size, prior_size)
-    dim = prior.nelement()/args.batch_size
+    total_queries = ch.zeros(batch_size)
+    prior = ch.zeros(batch_size, 3, prior_size, prior_size)
+    dim = prior.nelement()/batch_size
     prior_step = gd_prior_step if args.mode == 'l2' else eg_step
     image_step = l2_image_step if args.mode == 'l2' else linf_step
     proj_maker = l2_proj if args.mode == 'l2' else linf_proj
@@ -125,17 +139,30 @@ def make_adversarial_examples(image, true_label, args):
 
     # Loss function
     criterion = ch.nn.CrossEntropyLoss(reduction='none')
-    L =  lambda x: criterion(model_to_fool(batch_norm(x)), true_label)
+    if args.cw:
+        cw_func = cw_loss(true_label)
+        L = lambda x: cw_func(x)
+    else:
+        L =  lambda x: criterion(model_to_fool(batch_norm(x)), true_label)
+    
     losses = L(image)
 
     # Original classifications
     orig_images = image.clone()
     orig_classes = model_to_fool(batch_norm(image)).argmax(1).cuda()
-    correct_classified_mask = (orig_classes == true_label).float()
+    if args.targeted:
+        correct_classified_mask = (orig_classes != true_label).float()
+    else:
+        correct_classified_mask = (orig_classes == true_label).float()
     total_ims = correct_classified_mask.sum()
+    print('initially correct images:', total_ims.cpu().numpy())
     not_dones_mask = correct_classified_mask.clone()
 
-    while not ch.any(total_queries > args.max_queries):
+    if args.targeted:
+        max_queries = 100000
+    else:
+        max_queries = args.max_queries
+    while not ch.any(total_queries > max_queries):
         if not args.nes:
             ## Updating the prior: 
             # Create noise for exporation, estimate the gradient, and take a PGD step
@@ -151,13 +178,20 @@ def make_adversarial_examples(image, true_label, args):
             # 2-query gradient estimate
             est_grad = est_deriv.view(-1, 1, 1, 1)*exp_noise
             # Update the prior with the estimated gradient
-            prior = prior_step(prior, est_grad, args.online_lr)
+            if args.targeted:
+                prior = prior_step(prior, -est_grad, args.online_lr)
+            else:
+                prior = prior_step(prior, est_grad, args.online_lr)
+
         else:
             prior = ch.zeros_like(image)
             for _ in range(args.gradient_iters):
                 exp_noise = ch.randn_like(image)/(dim**0.5) 
                 est_deriv = (L(image + args.fd_eta*exp_noise) - L(image - args.fd_eta*exp_noise))/args.fd_eta
-                prior += est_deriv.view(-1, 1, 1, 1)*exp_noise
+                if args.targeted:
+                    prior -= est_deriv.view(-1, 1, 1, 1)*exp_noise
+                else:
+                    prior += est_deriv.view(-1, 1, 1, 1)*exp_noise
 
         # Preserve images that are already done
         prior = prior*not_dones_mask.view(-1, 1, 1, 1)
@@ -176,7 +210,10 @@ def make_adversarial_examples(image, true_label, args):
 
         ## Continue query count (modified)
         total_queries += 2*args.gradient_iters*not_dones_mask
-        not_dones_mask = not_dones_mask*((model_to_fool(batch_norm(image)).argmax(1) == true_label).float())
+        if args.targeted:
+            not_dones_mask = not_dones_mask*((model_to_fool(batch_norm(image)).argmax(1) != true_label).float())
+        else:
+            not_dones_mask = not_dones_mask*((model_to_fool(batch_norm(image)).argmax(1) == true_label).float())
 
         ## Logging stuff
         new_losses = L(image)
@@ -188,6 +225,7 @@ def make_adversarial_examples(image, true_label, args):
         max_curr_queries = total_queries.max().cpu().item()
         if args.log_progress and max_curr_queries%100==0:
             print("Queries: %d | Success rate: %f | Average queries: %f" % (max_curr_queries, current_success_rate, success_queries))
+            print("curr loss:", np.mean(new_losses.cpu().numpy()))
         if current_success_rate == 1.0:
             break
 
@@ -200,7 +238,7 @@ def make_adversarial_examples(image, true_label, args):
             'images_adv': image.cpu().numpy(), # Adversarial images
             'all_queries': total_queries.cpu().numpy(), # Number of queries used for each image
             'correctly_classified': correct_classified_mask.cpu().numpy(), # 0/1 mask for whether image was originally classified
-            'success': success_mask.cpu().numpy() # 0/1 mask for whether the attack succeeds on each image
+            'success': success_mask.cpu().numpy(), # 0/1 mask for whether the attack succeeds on each image
     }
 
 def main(args):
@@ -212,10 +250,10 @@ def main(args):
     num_eval_examples = args.sample_size
     eval_batch_size = min(args.batch_size, num_eval_examples)
 
-    if args.test:
-        target_indices = np.load('./../../data/indices_untargeted.npy')
+    if args.targeted:
+        target_indices = np.load('./../../data/indices_targeted.npy')
     else:
-        target_indices = [i for i in range(50000)]
+        target_indices = np.load('./../../data/indices_untargeted.npy')
     
     if args.shuffle:
         np.random.shuffle(target_indices)
@@ -239,11 +277,22 @@ def main(args):
             img_batch = ch.transpose(img_batch, 0, 1)
             img_batch = ch.transpose(img_batch, 0, 2)
             x_candid.append(img_batch.view(-1, 3, 299, 299))
+
+            if args.targeted:
+                target_class = pseudorandom_target(target_indices[args.img_index_start+bstart+i], 1000, y_batch)
+                y_batch = target_class
             y_candid.append(y_batch)
+            
         x_candid = ch.cat(x_candid)
         y_candid = np.array(y_candid)
-        preds = model_to_fool(batch_norm(x_candid).cuda()).argmax(1).cpu().numpy()
-        idx = np.where(preds == y_candid)
+    
+        if args.targeted:
+            preds = model_to_fool(batch_norm(x_candid).cuda()).argmax(1).cpu().numpy()
+            idx = np.where(preds != y_candid)
+        else:
+            preds = model_to_fool(batch_norm(x_candid).cuda()).argmax(1).cpu().numpy()
+            idx = np.where(preds == y_candid)
+        
         for i in idx[0]:
             attack_set.append(bstart+i)
         x_candid = x_candid.cpu().numpy()
@@ -258,10 +307,6 @@ def main(args):
             y_full_batch = np.concatenate((y_full_batch, y_masked[:index]))
         bstart += 100
         print(len(attack_set), bstart, len(attack_set)/bstart)
-        
-        if args.test and len(attack_set) != bstart:
-            print("wrong correctly classified set")
-            raise Exception
 
         if len(x_full_batch) >= num_eval_examples or (bstart==50000):
             break
@@ -286,6 +331,7 @@ def main(args):
     '''
     
     success_indices = []
+    total_queries = []
 
     print("Iterating over {} batches\n".format(num_batches))
     for ibatch in range(num_batches):
@@ -299,13 +345,24 @@ def main(args):
         success_rate_total += res['success_rate']*res['num_correctly_classified']
         total_correctly_classified_ims += res['num_correctly_classified']
 
-        success_indices_batch = res['success']
         for i in range(bend-bstart):
-            if success_indices_batch[i] != 0:
-                success_indices.append(target_indices[args.img_index_start+bstart+i])
+            success_indices.append(res['success'][i])
+            total_queries.append(res['all_queries'][i])
 
-    #np.save('./out/indices_nes_success_{}_{}.npy'.format(args.img_index_start, args.sample_size), success_indices)
-    
+    if args.targeted:
+        if args.nes:
+            np.save('./out/queries_nes_targeted_{}_{}.npy'.format(args.img_index_start, args.sample_size), total_queries)
+            np.save('./out/indices_nes_targeted_{}_{}.npy'.format(args.img_index_start, args.sample_size), success_indices)
+        else:
+            np.save('./out/queries_bandit_targeted_{}_{}.npy'.format(args.img_index_start, args.sample_size), total_queries)
+            np.save('./out/indices_bandit_targeted_{}_{}.npy'.format(args.img_index_start, args.sample_size), success_indices)
+    else:
+        if args.nes:
+            np.save('./out/queries_nes_untargeted_{}_{}.npy'.format(args.img_index_start, args.sample_size), total_queries)
+            np.save('./out/indices_nes_untargeted_{}_{}.npy'.format(args.img_index_start, args.sample_size), success_indices)
+        else:
+            np.save('./out/queries_bandit_untargeted_{}_{}.npy'.format(args.img_index_start, args.sample_size), total_queries)
+            np.save('./out/indices_bandit_untargeted_{}_{}.npy'.format(args.img_index_start, args.sample_size), success_indices)
 
     return average_queries_per_success/success_rate_total, \
         success_rate_total/total_correctly_classified_ims \
@@ -342,9 +399,9 @@ if __name__ == "__main__":
     parser.add_argument('--tiling', action='store_false')
     parser.add_argument('--gradient-iters', type=int)
     parser.add_argument('--shuffle', action='store_true')
-    parser.add_argument('--test', action='store_false')
     parser.add_argument('--img_index_start', default=0, type=int)
     parser.add_argument('--targeted', action='store_true')
+    parser.add_argument('--cw', action='store_true')
     args = parser.parse_args()
 
     args_dict = None
