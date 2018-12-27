@@ -1,11 +1,12 @@
 import numpy as np
+import sys
 import tensorflow as tf
 
 from tools.utils import *
 from tools.inception_v3_imagenet import model
 
 
-class NES_Attack(object):
+class NESAttack(object):
   def __init__(self, sess, args):
     # Hyperparameter setting
     self.max_queries = args.max_queries
@@ -31,8 +32,32 @@ class NES_Attack(object):
     label_batch = tf.tile(self.y_input, [self.batch_size])
 
     logits, _ = model(sess, image_batch)
-    losses = tf.nn.sparse_softmax_cross_entropy_with_logits(
-      logits=logits, labels=label_batch)
+    probs = tf.nn.softmax(logits)
+    batch_num = tf.range(0, limit=tf.shape(probs)[0])
+    indices = tf.stack([batch_num, label_batch], axis=1)
+    ground_truth_probs = tf.gather_nd(params=probs, indices=indices)
+    top_2 = tf.nn.top_k(probs, k=2)
+    max_indices = tf.where(tf.equal(top_2.indices[:, 0], label_batch), top_2.indices[:, 1], top_2.indices[:, 0])
+    max_indices = tf.stack([batch_num, max_indices], axis=1)
+    max_probs = tf.gather_nd(params=probs, indices=max_indices)
+     
+    if args.targeted:
+      if args.loss_func == 'xent':
+        losses = tf.nn.sparse_softmax_cross_entropy_with_logits(
+          logits=logits, labels=label_batch)
+      else:
+        tf.logging.info('Loss function must be xent')
+        sys.exit()
+    else:
+      if args.loss_func == 'xent':
+        losses = tf.nn.sparse_softmax_cross_entropy_with_logits(
+          logits=logits, labels=label_batch)
+      elif args.loss_func == 'cw':
+        losses = tf.log(max_probs+1e-10) - tf.log(ground_truth_probs+1e-10)
+      else:
+        tf.logging.info('Loss function must be xent or cw')
+        sys.exit()
+
     losses_tiled = tf.tile(tf.reshape(losses, [-1, 1, 1, 1]), [1, 299, 299, 3])
     self.grad_estimate = tf.reduce_mean(losses_tiled*noise, axis=0)/self.sigma
     self.loss = tf.reduce_mean(losses, axis=0)

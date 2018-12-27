@@ -10,13 +10,13 @@ np.random.seed(0)
 
 
 class LazyLocalSearchAttack(object):
-  def __init__(self, model, epsilon, max_queries, **kwargs):
+  def __init__(self, model, loss_func, epsilon, max_queries, **kwargs):
     # Setting
     self.max_queries = max_queries
     self.epsilon = epsilon
      
     # Load lazy local search helper
-    self.lazy_local_search = LazyLocalSearchHelper(model, epsilon)
+    self.lazy_local_search = LazyLocalSearchHelper(model, loss_func, epsilon)
  
   def _perturb_image(self, image, noise):
     adv_image = image + cv2.resize(noise[0, ...], (self.width, self.height), interpolation=cv2.INTER_NEAREST)
@@ -77,10 +77,10 @@ class LazyLocalSearchAttack(object):
         tf.logging.info("Block size: {}, batch: {}, loss: {:.4f}, num queries: {}".format(
           block_size, i, loss, num_queries))
         if num_queries > self.max_queries:
-          return adv_image, num_queries
+          return adv_image, num_queries, False
         adv_image = self._perturb_image(image, noise)
         if success:
-          return adv_image, num_queries
+          return adv_image, num_queries, True
       
       # Create Next batch
       if block_size >= 2:

@@ -3,13 +3,17 @@ import tensorflow as tf
 import numpy as np
 import heapq
 import math
+import sys
 import time
 
 SIZE = 299
 
 class LazyLocalSearchHelper(object):
-  def __init__(self, model, epsilon, **kwargs):
-    # Setting
+  def __init__(self, model, loss_func, epsilon, **kwargs):
+    # Hyperparameter setting 
+    self.epsilon = epsilon
+
+    # Network setting
     self.x_input = model['x_input']
     self.y_input = model['y_input']
     self.logits = model['logits']
@@ -17,26 +21,30 @@ class LazyLocalSearchHelper(object):
     self.targeted = model['targeted']
 
     probs = tf.nn.softmax(self.logits)
-
-    batch_nums = tf.range(0, limit=tf.shape(probs)[0])
-    indices = tf.stack([batch_nums, self.y_input], axis=1)
-
+    batch_num = tf.range(0, limit=tf.shape(probs)[0])
+    indices = tf.stack([batch_num, self.y_input], axis=1)
     ground_truth_probs = tf.gather_nd(params=probs, indices=indices)
-    
     top_2 = tf.nn.top_k(probs, k=2)
     max_indices = tf.where(tf.equal(top_2.indices[:, 0], self.y_input), top_2.indices[:, 1], top_2.indices[:, 0])
-    max_indices = tf.stack([batch_nums, max_indices], axis=1)
+    max_indices = tf.stack([batch_num, max_indices], axis=1)
     max_probs = tf.gather_nd(params=probs, indices=max_indices)
     
     if self.targeted:
-      self.losses = tf.nn.sparse_softmax_cross_entropy_with_logits(
-        logits=self.logits, labels=self.y_input)
+      if loss_func == 'xent':
+        self.losses = tf.nn.sparse_softmax_cross_entropy_with_logits(
+          logits=self.logits, labels=self.y_input)
+      else:
+        tf.logging.info('Loss function must be xent')
+        sys.exit() 
     else:
-      #self.losses = -tf.nn.sparse_softmax_cross_entropy_with_logits(
-      #  logits=self.logits, labels=self.y_input)
-      self.losses = tf.log(ground_truth_probs) - tf.log(max_probs)
-    
-    self.epsilon = epsilon
+      if loss_func == 'xent':
+        self.losses = -tf.nn.sparse_softmax_cross_entropy_with_logits(
+          logits=self.logits, labels=self.y_input)
+      elif loss_func == 'cw':
+        self.losses = tf.log(ground_truth_probs+1e-10) - tf.log(max_probs+1e-10)
+      else:
+        tf.logging.info('Loss function must be xent or cw')
+        sys.exit() 
  
   def _perturb_image(self, image, noise):
     adv_image = image + cv2.resize(noise[0, ...], (self.width, self.height), interpolation=cv2.INTER_NEAREST)
@@ -88,7 +96,7 @@ class LazyLocalSearchHelper(object):
       # First forward passes
       indices, channels = np.where(A==0)
       
-      batch_size = 1
+      batch_size = 100
       num_batches = int(math.ceil(len(indices)/batch_size))
       
       for ibatch in range(num_batches):
@@ -105,11 +113,15 @@ class LazyLocalSearchHelper(object):
         
         losses, preds = sess.run([self.losses, self.preds], 
           feed_dict={self.x_input: image_batch, self.y_input: label_batch})
-        num_queries += bend-bstart
         
         # Early stopping 
-        if (self.targeted and preds == label) or (not self.targeted and preds != label):
-          return noise_batch, num_queries, losses[0], True
+        success_indices,  = np.where(preds == label) if self.targeted else np.where(preds != label)
+        if len(success_indices) > 0:
+          noise[0, ...] = noise_batch[success_indices[0], ...]
+          curr_loss = losses[success_indices[0]]
+          num_queries += success_indices[0] + 1
+          return noise, num_queries, curr_loss, True 
+        num_queries += bend-bstart
 
         # Push into the priority queue
         for i in range(bend-bstart):
@@ -165,7 +177,7 @@ class LazyLocalSearchHelper(object):
       # Now delete element
       indices, channels = np.where(A==1)
        
-      batch_size = 1
+      batch_size = 100
       num_batches = int(math.ceil(len(indices)/batch_size))   
       
       for ibatch in range(num_batches):
@@ -182,19 +194,23 @@ class LazyLocalSearchHelper(object):
         
         losses, preds = sess.run([self.losses, self.preds],
           feed_dict={self.x_input: image_batch, self.y_input: label_batch})
-        num_queries += bend-bstart
         
         # Early stopping 
-        if (self.targeted and preds == label) or (not self.targeted and preds != label):
-          return noise_batch, num_queries, losses[0], True
-
+        success_indices,  = np.where(preds == label) if self.targeted else np.where(preds != label)
+        if len(success_indices) > 0:
+          noise[0, ...] = noise_batch[success_indices[0], ...]
+          curr_loss = losses[success_indices[0]]
+          num_queries += success_indices[0] + 1
+          return noise, num_queries, curr_loss, True 
+        num_queries += bend-bstart
+        
         # Push into the priority queue
         for i in range(bend-bstart):
           idx = indices[bstart+i]
           c = channels[bstart+i]
-          margin = losses[i] - curr_loss
+          margin = losses[i]-curr_loss
           heapq.heappush(priority_queue, (margin, idx, c))
-    
+
       # Pick the best element and perturb the image   
       best_margin, best_idx, best_c = heapq.heappop(priority_queue)
       curr_loss += best_margin
