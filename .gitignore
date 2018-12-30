@@ -6,6 +6,7 @@ lls-imagenet/tools/data/**
 lls-imagenet/out/**
 
 nes-imagenet/tools/data/**
+bandit-imagenet/tools/data/**
 
 gaon_imagenet/imagenet_out/**
 gaon_imagenet/out/**
