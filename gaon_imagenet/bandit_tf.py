@@ -72,7 +72,7 @@ class BanditAttack:
     
     def norm(self, t):
         norm_vec = tf.reshape(tf.sqrt(tf.reduce_sum(tf.pow(t, 2), axis=(1,2,3))), (-1, 1, 1, 1))
-        norm_vec += tf.cast(tf.equal(norm_vec, 0), dtyps=tf.float32) * 1e-8
+        norm_vec += tf.cast(tf.equal(norm_vec, 0), dtype=tf.float32) * 1e-8
         return norm_vec
 
     def eq_step(self, x, g, lr):

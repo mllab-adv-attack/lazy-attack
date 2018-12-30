@@ -33,6 +33,8 @@ def pseudorandom_target_image(orig_index, total_indices):
 # get center crop
 def load_image(path):
     image = PIL.Image.open(path)
+    # original
+    '''
     if image.height > image.width:
         height_off = int((image.height - image.width)/2)
         image = image.crop((0, height_off, image.width, height_off+image.width))
@@ -40,6 +42,19 @@ def load_image(path):
         width_off = int((image.width - image.height)/2)
         image = image.crop((width_off, 0, width_off+image.height, image.height))
     image = image.resize((299, 299))
+    '''
+    # pytorch ver.
+    if image.height > image.width:
+        image = image.resize((299, int(299*image.height/image.width)))
+    else:
+        image = image.resize((int(299*image.width/image.height), 299))
+    left = (image.width - 299)/2
+    top = (image.height - 299)/2
+    right = (image.width + 299)/2
+    bottom = (image.height + 299)/2
+    image = image.crop((left, top, right, bottom))
+    image = image.resize((299, 299))
+
     img = np.asarray(image).astype(np.float32) / 255.0
     if img.ndim == 2:
         img = np.repeat(img[:,:,np.newaxis], repeats=3, axis=2)
