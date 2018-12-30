@@ -19,10 +19,10 @@ parser = argparse.ArgumentParser()
 # Experimental setting
 parser.add_argument('--targeted', action='store_true')
 parser.add_argument('--loss_func', default='xent', type=str)
-parser.add_argument('--max_queries', default=100000, type=int)
+parser.add_argument('--max_queries', default=10000, type=int)
 parser.add_argument('--epsilon', default='0.05', type=float)
 parser.add_argument('--img_index_start', default=0, type=int)
-parser.add_argument('--sample_size', default=100, type=int)
+parser.add_argument('--sample_size', default=1000, type=int)
 parser.add_argument('--save_img', action='store_true')
 
 # NES setting
@@ -32,7 +32,7 @@ parser.add_argument('--max_lr', default=1e-2, type=float)
 parser.add_argument('--min_lr', default=5e-5, type=float)
 parser.add_argument('--plateau_length', default=5, type=int)
 parser.add_argument('--plateau_drop', default=2.0, type=float)
-parser.add_argument('--momentum', default=0.8, type=float)
+parser.add_argument('--momentum', default=0.7, type=float)
 
 args = parser.parse_args()
 
