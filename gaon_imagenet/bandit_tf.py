@@ -71,22 +71,22 @@ class BanditAttack:
         self.loss = y_xent
     
     def norm(self, t):
-        norm_vec = np.reshape(np.sqrt(np.sum(np.power(t, 2), axis=(1,2,3))), (-1, 1, 1, 1))
-        norm_vec += np.ones_like(norm_vec) * 1e-8
+        norm_vec = tf.reshape(tf.sqrt(tf.reduce_sum(tf.pow(t, 2), axis=(1,2,3))), (-1, 1, 1, 1))
+        norm_vec += tf.cast(tf.equal(norm_vec, 0), dtyps=tf.float32) * 1e-8
         return norm_vec
 
-    def eq_step(self, x, q, lr):
+    def eq_step(self, x, g, lr):
         real_x = (x+1)/2
-        pos = real_x*np.exp(lr*q)
-        neg = (1-real_x)*np.exp(-lr*q)
+        pos = real_x*tf.exp(lr*g)
+        neg = (1-real_x)*tf.exp(-lr*g)
         new_x = pos / (pos+neg)
         return new_x*2-1
 
     def linf_step(self, x, q, lr):
-        return x + lr * np.sign(q)
+        return x + lr * tf.sign(q)
 
     def linf_proj(self, image, x_nat, eps=params.eps):
-        proj = np.clip(image, x_nat-eps, x_nat+eps)
+        proj = tf.clip_by_value(image, x_nat-eps, x_nat+eps)
         return proj
 
     # choose attack type
@@ -104,51 +104,64 @@ class BanditAttack:
         image_step = self.linf_step
         proj = self.linf_proj
 
-        # resizer
-        resize_in = tf.placeholder(tf.float32, shape=(batch, prior_size, prior_size, zt))
-        resize_out = tf.image.resize_images(resize_in, [xt, yt])
+        # placeholders
+        image_p = tf.placeholder(tf.float32, (batch, xt, yt, zt))
+        prior_p = tf.placeholder(tf.float32, (batch, prior_size, prior_size, zt))
+        rand_p = tf.placeholder(tf.float32, (batch, prior_size, prior_size, zt))
+        total_queries_p = tf.placeholder(tf.float32, (batch))
+        not_dones_mask_p = tf.placeholder(tf.float32, (batch))
 
         # Loss function
         def L(img):
-            loss, predictions = sess.run([self.loss, self.predictions],
-                                         feed_dict={self.model_x:img,
-                                                    self.model_y:y})
-            return loss, predictions
+            logits, predictions = model(sess, img)
+            y_xent = tf.nn.sparse_softmax_cross_entropy_with_logits(
+                logits = logits, labels = y)
+            return y_xent
 
         #original classifications
-        #orig_images = tf.identity(image)
-        orig_classes = np.copy(y)
+        orig_images = tf.convert_to_tensor(image)
+        orig_classes = tf.convert_to_tensor(y)
         correct_classified_mask = np.ones_like(y, dtype=np.float32)
         #total_ims = tf.reduce_sum(correct_classified_mask)
-        not_dones_mask = np.copy(correct_classified_mask)
+
+        exp_noise = params.exploration*rand_p/(dim**0.5)
+        q1 = tf.image.resize_nearest_neighbor(prior_p+exp_noise, (xt, yt))
+        q2 = tf.image.resize_nearest_neighbor(prior_p-exp_noise, (xt, yt))
+        l1 = L(image_p+params.fd_eta*q1/self.norm(q1))
+        l2 = L(image_p+params.fd_eta*q2/self.norm(q2))
+        est_deriv = (l1-l2)/(params.fd_eta*params.exploration)
+        est_grad = tf.reshape(est_deriv, (-1, 1, 1, 1))*exp_noise
+        prior_n = prior_step(prior_p, est_grad, params.online_lr)
+        prior_new = prior_n*tf.reshape(not_dones_mask_p, (-1, 1, 1, 1))
+
+        image_new = image_step(image_p, tf.image.resize_nearest_neighbor(prior_new, (xt, yt)), params.image_lr)
+        image_new = proj(image_new, orig_images)
+        image_new = tf.clip_by_value(image_new, 0, 1)
+
+        total_queries_new = total_queries_p + 2*params.grad_iters*not_dones_mask_p
+        not_dones_mask_new = not_dones_mask_p*(tf.cast(tf.equal(self.model(sess, image_new)[1], orig_classes), tf.float32))
+
+        # initialize placeholders
+        image = np.copy(x_nat)
+        prior = np.zeros((batch, prior_size, prior_size, zt))
+        total_queries = np.zeros((batch))
+        not_dones_mask = np.ones((batch))
 
         while not (np.amax(total_queries) > params.max_q):
-            if not params.nes:
-                exp_noise = params.exploration*np.random.randn(batch, prior_size, prior_size, zt)/(dim**0.5)
-                q1 = sess.run(resize_out, feed_dict={resize_in:prior+exp_noise})
-                q2 = sess.run(resize_out, feed_dict={resize_in:prior-exp_noise})
-                l1, _ = L(image+params.fd_eta*q1/self.norm(q1))
-                l2, _ = L(image+params.fd_eta*q2/self.norm(q2))
-                est_deriv = (l1-l2)/(params.fd_eta*params.exploration)
-                est_grad = np.reshape(est_deriv, (-1, 1, 1, 1))*exp_noise
-                prior = prior_step(prior, est_grad, params.online_lr)
-            else:
-                prior = np.zeros_like(image)
-                for _ in range(params.grad_iters):
-                    exp_noise = np.random.randn(batch, xt, yt, zt)/(dim*0.5)
-                    est_deriv = (L(image+params.fd_eta*exp_noise)[0] - L(image-params.fd_eta*exp_noise)[0])/params.fd_eta
-                    prior += np.reshape(est_deriv, (-1, 1, 1, 1))*exp_noise
+            
+            rand = np.random.randn(batch, prior_size, prior_size, zt)/(dim**0.5)
 
-            prior = prior*np.reshape(not_dones_mask, (-1, 1, 1, 1))
+            feed_dict = {image_p: image,
+                         prior_p: prior,
+                         rand_p: rand,
+                         total_queries_p: total_queries,
+                         not_dones_mask_p: not_dones_mask}
 
-            upsampler = tf.image.resize_images(prior, [xt, yt])
-            upsampler = sess.run(upsampler)
-            new_im = image_step(image, upsampler, params.image_lr)
-            image = proj(new_im, x_nat)
-            image = np.clip(image, 0, 1)
-
-            total_queries += 2*params.grad_iters*not_dones_mask
-            not_dones_mask = not_dones_mask*(L(image)[1]==orig_classes).astype(np.float32)
+            image, prior, total_queries, not_dones_mask = sess.run([image_new,
+                                                                    prior_new,
+                                                                    total_queries_new,
+                                                                    not_dones_mask_new],
+                                                                   feed_dict = feed_dict)
 
             #new_losses = L(image)[0]
             success_mask = (1-not_dones_mask)*correct_classified_mask
@@ -206,7 +219,6 @@ def run_attack(x_adv, sess, attack, x_full_batch, y_full_batch):
         success.append(np.array(np.nonzero(np.invert(correct_prediction)))+ibatch*eval_batch_size)
 
     success = np.concatenate(success, axis=1)
-    np.save('out/'+params.attack_type+'_success.npy', success)
     accuracy = total_corr / num_eval_examples
     print('adv Accuracy: {:.2f}%'.format(100.0 * accuracy))
 
@@ -226,9 +238,6 @@ def run_attack(x_adv, sess, attack, x_full_batch, y_full_batch):
 
     accuracy = total_corr / num_eval_examples
     print('nat Accuracy: {:.2f}%'.format(100.0 * accuracy))
-    y_pred = np.concatenate(y_pred, axis=0)
-    np.save('pred.npy', y_pred)
-    print('Output saved at pred.npy')
 
 if __name__ == '__main__':
 
@@ -312,7 +321,6 @@ if __name__ == '__main__':
                 times.append(end-start)
             print()
 
-        print('Storing examples')
         x_adv = np.concatenate(x_adv, axis=0)
         print('Average queries: {:.2f}'.format(np.mean(attack.queries)))
         for key, val in vars(params).items():
