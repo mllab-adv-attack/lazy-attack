@@ -129,7 +129,7 @@ def make_adversarial_examples(image, true_label, args):
     plateau_length = args.plateau_length
     min_lr = args.min_lr
     if not args.nes:
-        min_lr  = args.epsilon / 200
+        min_lr  = args.image_lr / 200
         plateau_length = 5*100
     
     # Initial setup
