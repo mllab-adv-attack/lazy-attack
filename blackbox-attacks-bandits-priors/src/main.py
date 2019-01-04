@@ -127,10 +127,7 @@ def make_adversarial_examples(image, true_label, args):
     image_lr_ch = ch.from_numpy(image_lr).view(-1,1,1,1).type(ch.FloatTensor).cuda()
     last_losses = []
     plateau_length = args.plateau_length
-    min_lr = args.min_lr
-    if not args.nes:
-        min_lr  = args.image_lr / 200
-        plateau_length = 5*100
+    min_lr = args.image_lr/args.min_ratio
     
     # Initial setup
     batch_size = list(image.size())[0]
@@ -296,16 +293,17 @@ def main(args):
         x_candid = []
         y_candid = []
         for i in range(100):
-            img_batch, y_batch = get_image(target_indices[args.img_index_start+bstart+i], IMAGENET_PATH)
-            img_batch = ch.Tensor(img_batch)
-            img_batch = ch.transpose(img_batch, 0, 1)
-            img_batch = ch.transpose(img_batch, 0, 2)
-            x_candid.append(img_batch.view(-1, 3, 299, 299))
+            if (args.img_index_start+bstart+i) < len(target_indices):
+                img_batch, y_batch = get_image(target_indices[args.img_index_start+bstart+i], IMAGENET_PATH)
+                img_batch = ch.Tensor(img_batch)
+                img_batch = ch.transpose(img_batch, 0, 1)
+                img_batch = ch.transpose(img_batch, 0, 2)
+                x_candid.append(img_batch.view(-1, 3, 299, 299))
 
-            if args.targeted:
-                target_class = pseudorandom_target(target_indices[args.img_index_start+bstart+i], 1000, y_batch)
-                y_batch = target_class
-            y_candid.append(y_batch)
+                if args.targeted:
+                    target_class = pseudorandom_target(target_indices[args.img_index_start+bstart+i], 1000, y_batch)
+                    y_batch = target_class
+                y_candid.append(y_batch)
             
         x_candid = ch.cat(x_candid)
         y_candid = np.array(y_candid)
@@ -435,8 +433,8 @@ if __name__ == "__main__":
     parser.add_argument('--adam', action='store_true')
     # learning rate decay
     parser.add_argument('--decay', action='store_true')
-    parser.add_argument('--min_lr', default= 5e-5, type=float)
-    parser.add_argument('--plateau_length', default=5, type=int)
+    parser.add_argument('--min_ratio', default= 200, type=float)
+    parser.add_argument('--plateau_length', default=1000, type=int)
     parser.add_argument('--plateau_drop', default=2.0, type=float)
     args = parser.parse_args()
 
