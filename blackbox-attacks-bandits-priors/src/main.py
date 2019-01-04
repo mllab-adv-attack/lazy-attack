@@ -55,7 +55,10 @@ def eg_step(x, g, lr):
     return new_x*2-1
 
 def linf_step(x, g, lr):
-    return x + lr*ch.sign(g)
+    if args.targeted:
+        return x - lr*ch.sign(g)
+    else:
+        return x + lr*ch.sign(g)
 
 def gd_prior_step(x, g, lr):
     return x + lr*g
@@ -103,18 +106,6 @@ def batch_norm(image):
         transforms.Normalize(mean, std)(new_image[i,:,:,:])
     return new_image
 
-def cw_loss(true_label):
-    soft = ch.nn.Softmax(1)
-    one = ch.eye(1000)
-    one_hot = one.index_select(0, true_label).float()
-
-    def cw(image):
-        softmax = soft(model_to_fool(batch_norm(image)))
-        gt_val, _ = ch.max((softmax * one_hot), 1)
-        max_val, _ = ch.max((softmax * (1-one_hot)), 1)
-        return -ch.log(gt_val) + ch.log(max_val)
-
-    return cw
 
 ##
 # Main functions
@@ -124,6 +115,23 @@ def make_adversarial_examples(image, true_label, args):
     '''
     The main process for generating adversarial examples with priors.
     '''
+
+    # added. initialize adam
+    adam_step = 1
+    adam_first = ch.zeros_like(image)
+    adam_second = ch.zeros_like(image)
+    beta1, beta2 = 0.9, 0.999
+
+    # initialize image lr
+    image_lr = args.image_lr * np.ones_like(true_label.cpu().numpy())
+    image_lr_ch = ch.from_numpy(image_lr).view(-1,1,1,1).type(ch.FloatTensor).cuda()
+    last_losses = []
+    plateau_length = args.plateau_length
+    min_lr = args.min_lr
+    if not args.nes:
+        min_lr  = args.image_lr / 200
+        plateau_length = 5*100
+    
     # Initial setup
     batch_size = list(image.size())[0]
     prior_size = IMAGENET_SL if not args.tiling else args.tile_size
@@ -136,14 +144,11 @@ def make_adversarial_examples(image, true_label, args):
     image_step = l2_image_step if args.mode == 'l2' else linf_step
     proj_maker = l2_proj if args.mode == 'l2' else linf_proj
     proj_step = proj_maker(image, args.epsilon)
+    
 
     # Loss function
     criterion = ch.nn.CrossEntropyLoss(reduction='none')
-    if args.cw:
-        cw_func = cw_loss(true_label)
-        L = lambda x: cw_func(x)
-    else:
-        L =  lambda x: criterion(model_to_fool(batch_norm(x)), true_label)
+    L =  lambda x: criterion(model_to_fool(batch_norm(x)), true_label)
     
     losses = L(image)
 
@@ -178,27 +183,36 @@ def make_adversarial_examples(image, true_label, args):
             # 2-query gradient estimate
             est_grad = est_deriv.view(-1, 1, 1, 1)*exp_noise
             # Update the prior with the estimated gradient
-            if args.targeted:
-                prior = prior_step(prior, -est_grad, args.online_lr)
-            else:
-                prior = prior_step(prior, est_grad, args.online_lr)
+            prior = prior_step(prior, est_grad, args.online_lr)
 
         else:
             prior = ch.zeros_like(image)
             for _ in range(args.gradient_iters):
                 exp_noise = ch.randn_like(image)/(dim**0.5) 
                 est_deriv = (L(image + args.fd_eta*exp_noise) - L(image - args.fd_eta*exp_noise))/args.fd_eta
-                if args.targeted:
-                    prior -= est_deriv.view(-1, 1, 1, 1)*exp_noise
-                else:
-                    prior += est_deriv.view(-1, 1, 1, 1)*exp_noise
+                prior += est_deriv.view(-1, 1, 1, 1)*exp_noise
 
         # Preserve images that are already done
         prior = prior*not_dones_mask.view(-1, 1, 1, 1)
 
         ## Update the image:
         # take a pgd step using the prior
-        new_im = image_step(image, upsampler(prior), args.image_lr)
+        
+        # added. adam update
+        if args.adam:
+            g = upsampler(prior)
+            adam_first = beta1 * adam_first + (1-beta1) * g
+            adam_second = beta2 * adam_second + (1-beta2) * g * g
+            first_unbias = adam_first / (1 - beta1**adam_step)
+            second_unbias = adam_second / (1 - beta2**adam_step)
+            adam_step += 1
+            if args.targeted:
+                new_im = image - image_lr_ch * ch.sign(first_unbias / (ch.sqrt(second_unbias) + 1e-7))
+            else:
+                new_im = image + image_lr_ch * ch.sign(first_unbias / (ch.sqrt(second_unbias) + 1e-7))
+        else:
+            new_im = image_step(image, upsampler(prior), image_lr_ch)
+
         image = proj_step(new_im)
         image = ch.clamp(image, 0, 1)
         if args.mode == 'l2':
@@ -228,6 +242,16 @@ def make_adversarial_examples(image, true_label, args):
             print("curr loss:", np.mean(new_losses.cpu().numpy()))
         if current_success_rate == 1.0:
             break
+        
+        # learning rate decay
+        if args.decay:
+            last_losses.append(new_losses.cpu().numpy())
+            last_losses = last_losses[-plateau_length:]
+            if len(last_losses) == plateau_length:
+                if args.targeted:
+                    image_lr = np.where(last_losses[-1] < last_losses[0], np.maximum(image_lr/args.plateau_drop, min_lr), image_lr)
+                else:
+                    image_lr = np.where(last_losses[-1] > last_losses[0], np.maximum(image_lr/args.plateau_drop, min_lr), image_lr)
 
     # Return results
     return {
@@ -354,8 +378,15 @@ def main(args):
             np.save('./out/queries_nes_targeted_{}_{}.npy'.format(args.img_index_start, args.sample_size), total_queries)
             np.save('./out/indices_nes_targeted_{}_{}.npy'.format(args.img_index_start, args.sample_size), success_indices)
         else:
-            np.save('./out/queries_bandit_targeted_{}_{}.npy'.format(args.img_index_start, args.sample_size), total_queries)
-            np.save('./out/indices_bandit_targeted_{}_{}.npy'.format(args.img_index_start, args.sample_size), success_indices)
+            if args.decay:
+                np.save('./out/queries_bandit_targeted_{}_{}_decay.npy'.format(args.img_index_start, args.sample_size), total_queries)
+                np.save('./out/indices_bandit_targeted_{}_{}_decay.npy'.format(args.img_index_start, args.sample_size), success_indices)
+            elif args.adam:
+                np.save('./out/queries_bandit_targeted_{}_{}_adam.npy'.format(args.img_index_start, args.sample_size), total_queries)
+                np.save('./out/indices_bandit_targeted_{}_{}_adam.npy'.format(args.img_index_start, args.sample_size), success_indices)
+            else:
+                np.save('./out/queries_bandit_targeted_{}_{}.npy'.format(args.img_index_start, args.sample_size), total_queries)
+                np.save('./out/indices_bandit_targeted_{}_{}.npy'.format(args.img_index_start, args.sample_size), success_indices)
     else:
         if args.nes:
             np.save('./out/queries_nes_untargeted_{}_{}.npy'.format(args.img_index_start, args.sample_size), total_queries)
@@ -383,25 +414,30 @@ class Parameters():
 if __name__ == "__main__":
     # modified to use bandit(linf) as default
     parser = argparse.ArgumentParser()
-    parser.add_argument('--max-queries', type=int)
-    parser.add_argument('--fd-eta', type=float, help='\eta, used to estimate the derivative via finite differences')
-    parser.add_argument('--image-lr', type=float, help='Learning rate for the image (iterative attack)')
-    parser.add_argument('--online-lr', type=float, help='Learning rate for the prior')
-    parser.add_argument('--mode', type=str, help='Which lp constraint to run bandits [linf|l2]')
-    parser.add_argument('--exploration', type=float, help='\delta, parameterizes the exploration to be done around the prior')
-    parser.add_argument('--tile-size',default=50,  type=int, help='the side length of each tile (for the tiling prior)')
-    parser.add_argument('--json-config', default='configs/linf.json', type=str, help='a config file to be passed in instead of arguments')
-    parser.add_argument('--epsilon', type=float, help='the lp perturbation bound')
-    parser.add_argument('--batch-size', type=int, help='batch size for bandits')
-    parser.add_argument('--sample_size', default=1000, type=int, help='sample size for bandits')
+    parser.add_argument('--max-queries', default= 10000, type=int)
+    parser.add_argument('--fd-eta', default=0.1, type=float, help='\eta, used to estimate the derivative via finite differences')
+    parser.add_argument('--image-lr', default=0.001, type=float, help='Learning rate for the image (iterative attack)')
+    parser.add_argument('--online-lr', default=1, type=float, help='Learning rate for the prior')
+    parser.add_argument('--mode', default = 'linf', type=str, help='Which lp constraint to run bandits [linf|l2]')
+    parser.add_argument('--exploration', default=1.0, type=float, help='\delta, parameterizes the exploration to be done around the prior')
+    parser.add_argument('--tile_size',default=100,  type=int, help='the side length of each tile (for the tiling prior)')
+    parser.add_argument('--json-config', type=str, help='a config file to be passed in instead of arguments')
+    parser.add_argument('--epsilon', default=0.05, type=float, help='the lp perturbation bound')
+    parser.add_argument('--batch-size', default=500, type=int, help='batch size for bandits')
+    parser.add_argument('--sample_size', default=400, type=int, help='sample size for bandits')
     parser.add_argument('--log-progress', action='store_false')
     parser.add_argument('--nes', action='store_true')
     parser.add_argument('--tiling', action='store_false')
-    parser.add_argument('--gradient-iters', type=int)
+    parser.add_argument('--gradient-iters', default=1, type=int)
     parser.add_argument('--shuffle', action='store_true')
     parser.add_argument('--img_index_start', default=0, type=int)
     parser.add_argument('--targeted', action='store_true')
-    parser.add_argument('--cw', action='store_true')
+    parser.add_argument('--adam', action='store_true')
+    # learning rate decay
+    parser.add_argument('--decay', action='store_true')
+    parser.add_argument('--min_lr', default= 5e-5, type=float)
+    parser.add_argument('--plateau_length', default=5, type=int)
+    parser.add_argument('--plateau_drop', default=2.0, type=float)
     args = parser.parse_args()
 
     args_dict = None
@@ -420,5 +456,11 @@ if __name__ == "__main__":
         args = Parameters(defaults)
         args_dict = defaults
 
+    for key, val in vars(args).items():
+        print('{}={}'.format(key, val))
+
     with ch.no_grad():
         print("Queries, Success = ", main(args))
+    
+    for key, val in vars(args).items():
+        print('{}={}'.format(key, val))
