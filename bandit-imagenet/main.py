@@ -13,7 +13,7 @@ ATTACK_CLASSES = [x for x in attacks.__dict__.values() if inspect.isclass(x)]
 for attack in ATTACK_CLASSES:
   setattr(sys.modules[__name__], attack.__name__, attack)
 
-IMAGENET_PATH = '../lazy-attack/data'
+IMAGENET_PATH = '../data'
 IMAGENET_SL = 299
 NUM_LABELS = 1000
 
@@ -44,10 +44,6 @@ if __name__ == '__main__':
   # Create session
   sess = tf.InteractiveSession()
 
-  # Print hyperparameters
-  for key, val in vars(args).items():
-    tf.logging.info('{}={}'.format(key, val))
-
   # Create attack class.
   attack_class = getattr(sys.modules[__name__], args.attack)
   bandit_attack = attack_class(args, sess)
@@ -57,7 +53,7 @@ if __name__ == '__main__':
     tf.logging.info('{}={}'.format(key, val))
 
   # Load indices. 
-  indices = np.load('../lazy-attack/data/indices_untargeted.npy')
+  indices = np.load('../data/indices_untargeted.npy')
 
   # Main loop
   num_batches = int(math.ceil(args.sample_size/args.batch_size))

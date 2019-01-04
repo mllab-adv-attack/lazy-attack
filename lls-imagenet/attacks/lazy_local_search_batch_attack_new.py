@@ -4,23 +4,19 @@ import numpy as np
 import time
 import itertools
 
-from attacks.lazy_local_search_helper import LazyLocalSearchHelper
+from attacks.lazy_local_search_helper_new import LazyLocalSearchHelperNew
 
 
-class LazyLocalSearchBatchAttack(object):
+class LazyLocalSearchBatchAttackNew(object):
   def __init__(self, model, args, **kwargs):
     # Setting
-    self.seed = args.seed
     self.loss_func = args.loss_func
     self.max_queries = args.max_queries
     self.epsilon = args.epsilon
     self.batch_size = args.batch_size
 
-    # Set random seed
-    np.random.seed(self.seed)
-
     # Load lazy local search helper
-    self.lazy_local_search = LazyLocalSearchHelper(model, self.loss_func, self.epsilon)
+    self.lazy_local_search = LazyLocalSearchHelperNew(model, self.loss_func, self.epsilon)
  
   def _perturb_image(self, image, noise):
     adv_image = image + cv2.resize(noise[0, ...], (self.width, self.height), interpolation=cv2.INTER_NEAREST)
@@ -33,16 +29,20 @@ class LazyLocalSearchBatchAttack(object):
     xs = np.arange(upper_left[0], lower_right[0], block_size)
     ys = np.arange(upper_left[1], lower_right[1], block_size)
     for x, y in itertools.product(xs, ys):
-      blocks.append([[x, y], [x+block_size, y+block_size]])
+      for c in range(3):
+        blocks.append([[x, y], [x+block_size, y+block_size], c])
     return blocks
   
-  def _add_noise(self, noise, block, channel, direction):
+  def _add_noise(self, noise, block, direction):
     noise_new = np.copy(noise)
-    upper_left, lower_right = block
+    upper_left, lower_right, channel = block
     noise_new[0, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], channel] = direction*self.epsilon
     return noise_new
 
   def perturb(self, image, label, index, sess):
+    # Set random seed
+    np.random.seed(index)
+
     # Class variable
     self.width = image.shape[1]
     self.height = image.shape[2]

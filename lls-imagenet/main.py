@@ -21,13 +21,15 @@ parser = argparse.ArgumentParser()
 
 # Setting
 parser.add_argument('--loss_func', default='xent', type=str)
-parser.add_argument('--max_queries', default=100000, type=int)
+parser.add_argument('--max_queries', default=10000, type=int)
 parser.add_argument('--epsilon', default='0.05', type=float)
 parser.add_argument('--img_index_start', default=0, type=int)
-parser.add_argument('--sample_size', default=100, type=int)
+parser.add_argument('--sample_size', default=1000, type=int)
 parser.add_argument('--save_img', dest='save_img', action='store_true')
-parser.add_argument('--attack', default='LazyLocalSearchBatchAttack', type=str)
+parser.add_argument('--attack', default='LazyLocalSearchBatchAttackNew', type=str)
 parser.add_argument('--targeted', action='store_true')
+parser.add_argument('--seed', default=0, type=int)
+parser.add_argument('--batch_size', default=64, type=int)
 
 args = parser.parse_args()
 
@@ -58,7 +60,7 @@ if __name__ == '__main__':
 
   # Create attack class.
   attack_class = getattr(sys.modules[__name__], args.attack)
-  lazy_local_search_attack = attack_class(model, args.loss_func, args.epsilon, args.max_queries)
+  lazy_local_search_attack = attack_class(model, args)
 
   # Load indices. 
   if args.targeted:
@@ -127,6 +129,6 @@ if __name__ == '__main__':
     index += 1
   
   targeted = 'targeted' if args.targeted else 'untargeted'
-  filename = '/data_large/unsynced_store/seungyong/output/imagenet/lls_{}_{}_{}.npy'.format(
+  filename = '/data_large/unsynced_store/seungyong/output/imagenet/lls_new_{}_{}_{}.npy'.format(
     targeted, args.loss_func, args.img_index_start+args.sample_size)
   np.save(filename, index_to_num_queries)
