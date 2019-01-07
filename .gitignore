@@ -5,6 +5,11 @@ lls-imagenet/data/**
 lls-imagenet/tools/data/**
 lls-imagenet/out/**
 
+l2-imagenet/logs/**
+l2-imagenet/data/**
+l2-imagenet/tools/data/**
+l2-imagenet/out/**
+
 nes-imagenet/tools/data/**
 bandit-imagenet/tools/data/**
 
