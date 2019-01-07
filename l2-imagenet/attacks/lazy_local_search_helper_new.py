@@ -1,4 +1,3 @@
-import cv2
 import tensorflow as tf
 import numpy as np
 import heapq
@@ -16,6 +15,8 @@ class LazyLocalSearchHelperNew(object):
     # Network setting
     self.x_input = model['x_input']
     self.y_input = model['y_input']
+    self.noise = model['noise']
+    self.x_adv = model['x_adv']
     self.logits = model['logits']
     self.preds = model['preds']
     self.targeted = model['targeted']
@@ -45,18 +46,6 @@ class LazyLocalSearchHelperNew(object):
       else:
         tf.logging.info('Loss function must be xent or cw')
         sys.exit() 
-
-  def l2_norm(self, noise):
-    noise_centered = noise - np.mean(noise)
-    l2_val = np.linalg.norm(noise_centered)
-    if l2_val == 0:
-      return noise_centered
-    return self.epsilon * noise_centered / l2_val
- 
-  def _perturb_image(self, image, noise):
-    adv_image = image + self.l2_norm(cv2.resize(noise[0, ...], (self.width, self.height), interpolation=cv2.INTER_NEAREST))
-    adv_image = np.clip(adv_image, 0, 1)
-    return adv_image 
 
   def _add_noise(self, noise, block):
     noise_new = np.copy(noise)
@@ -95,10 +84,10 @@ class LazyLocalSearchHelperNew(object):
         A[i] = noise[0, x, y, channel]
 
     # Calculate current loss
-    image_batch = self._perturb_image(image, noise)
+
     label_batch = np.copy(label)
     losses, preds = sess.run([self.losses, self.preds],
-      feed_dict={self.x_input: image_batch, self.y_input: label_batch})
+      feed_dict={self.x_input: image, self.y_input: label_batch, self.noise: noise})
     num_queries += 1
     curr_loss = losses[0]
     
@@ -111,8 +100,8 @@ class LazyLocalSearchHelperNew(object):
 
     for _ in range(1):
       # First forward passes
-      indices,  = np.where(A>=0)
-      #indices,  = np.where(A>=np.median(A))
+      #indices,  = np.where(A>=0)
+      indices,  = np.where(A>=np.median(A))
       
       batch_size = 100
       num_batches = int(math.ceil(len(indices)/batch_size))
@@ -127,10 +116,10 @@ class LazyLocalSearchHelperNew(object):
          
         for i, idx in enumerate(indices[bstart:bend]):
           noise_batch[i:i+1, ...] = self._add_noise(noise, blocks[idx])
-          image_batch[i:i+1, ...] = self._perturb_image(image, noise_batch[i:i+1, ...])
+          image_batch[i:i+1, ...] = image
         
         losses, preds = sess.run([self.losses, self.preds], 
-          feed_dict={self.x_input: image_batch, self.y_input: label_batch})
+          feed_dict={self.x_input: image_batch, self.y_input: label_batch, self.noise: noise_batch})
         
         # Early stopping 
         success_indices,  = np.where(preds == label) if self.targeted else np.where(preds != label)
@@ -160,12 +149,10 @@ class LazyLocalSearchHelperNew(object):
         # pick the best element
         cand_margin, cand_idx = heapq.heappop(priority_queue)
         # Re-evalulate the element
-        image_batch = self._perturb_image(
-          image, self._add_noise(noise, blocks[cand_idx]))
         label_batch = np.copy(label)
 
         losses, preds = sess.run([self.losses, self.preds], 
-          feed_dict={self.x_input: image_batch, self.y_input: label_batch})
+                                 feed_dict={self.x_input: image, self.y_input: label_batch, self.noise: self._add_noise(noise, blocks[cand_idx])})
         num_queries += 1
         margin = losses[0]-curr_loss
         
@@ -196,8 +183,8 @@ class LazyLocalSearchHelperNew(object):
       priority_queue = []
 
       # Now delete element
-      indices,  = np.where(A>0)
-      #indices,  = np.where(A<=np.median(A))
+      #indices,  = np.where(A>0)
+      indices,  = np.where(A<=np.median(A))
        
       batch_size = 100
       num_batches = int(math.ceil(len(indices)/batch_size))   
@@ -206,16 +193,16 @@ class LazyLocalSearchHelperNew(object):
         bstart = ibatch * batch_size
         bend = min(bstart + batch_size, len(indices))
         
-        image_batch = np.zeros([bend-bstart, self.width, self.height, 3], np.float32) 
+        image_batch = np.zeros([bend-bstart, self.width, self.height, 3], np.float32)
         label_batch = np.tile(label, bend-bstart)
         noise_batch = np.zeros([bend-bstart, 256, 256, 3], np.float32)
         
         for i, idx in enumerate(indices[bstart:bend]):
           noise_batch[i:i+1, ...] = self._sub_noise(noise, blocks[idx])
-          image_batch[i:i+1, ...] = self._perturb_image(image, noise_batch[i:i+1, ...])
+          image_batch[i:i+1, ...] = image
         
         losses, preds = sess.run([self.losses, self.preds],
-          feed_dict={self.x_input: image_batch, self.y_input: label_batch})
+                                 feed_dict={self.x_input: image_batch, self.y_input: label_batch, self.noise: noise_batch})
         
         # Early stopping 
         success_indices,  = np.where(preds == label) if self.targeted else np.where(preds != label)
@@ -249,12 +236,10 @@ class LazyLocalSearchHelperNew(object):
           continue
 
         # Re-evalulate the element
-        image_batch = self._perturb_image(
-          image, self._sub_noise(noise, blocks[cand_idx]))
         label_batch = np.copy(label)
         
         losses, preds = sess.run([self.losses, self.preds], 
-          feed_dict={self.x_input: image_batch, self.y_input: label_batch})
+                                 feed_dict={self.x_input: image, self.y_input: label_batch, self.noise: self._sub_noise(noise, blocks[cand_idx])})
         num_queries += 1 
         margin = losses[0]-curr_loss
       

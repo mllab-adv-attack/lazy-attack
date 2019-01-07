@@ -1,7 +1,5 @@
-import cv2
 import tensorflow as tf
 import numpy as np
-import time
 import itertools
 
 from attacks.lazy_local_search_helper_new import LazyLocalSearchHelperNew
@@ -17,18 +15,6 @@ class LazyLocalSearchBatchAttackNew(object):
 
     # Load lazy local search helper
     self.lazy_local_search = LazyLocalSearchHelperNew(model, self.loss_func, self.epsilon)
-
-  def l2_norm(self, noise):
-    noise_centered = noise-np.mean(noise)
-    l2_val = np.linalg.norm(noise_centered)
-    if l2_val == 0:
-        return noise_centered
-    return self.epsilon * noise_centered / l2_val
-
-  def _perturb_image(self, image, noise):
-    adv_image = image + self.l2_norm(cv2.resize(noise[0, ...], (self.width, self.height), interpolation=cv2.INTER_NEAREST))
-    adv_image = np.clip(adv_image, 0, 1)
-    return adv_image
 
   def _split_block(self, block, block_size):
     blocks = []
@@ -51,9 +37,8 @@ class LazyLocalSearchBatchAttackNew(object):
     self.height = image.shape[2]
 
     # Local variables
-    priority_queue = []
     num_queries = 0
-    block_size = 16
+    block_size = 32
     upper_left = [0, 0]
     lower_right = [256, 256]
 
@@ -82,7 +67,8 @@ class LazyLocalSearchBatchAttackNew(object):
           block_size, i, loss, num_queries))
         if num_queries > self.max_queries:
           return adv_image, num_queries, False
-        adv_image = self._perturb_image(image, noise)
+        adv_image = sess.run(self.lazy_local_search.x_adv,
+                            feed_dict={self.lazy_local_search.x_input: image, self.lazy_local_search.y_input: label, self.lazy_local_search.noise: noise})
         if success:
           return adv_image, num_queries, True
       

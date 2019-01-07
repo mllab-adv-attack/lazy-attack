@@ -43,11 +43,19 @@ if __name__ == '__main__':
   # Build graph
   x_input = tf.placeholder(dtype=tf.float32, shape=[None, None, None, 3])
   y_input = tf.placeholder(dtype=tf.int32, shape=[None])
+  noise = tf.placeholder(dtype=tf.float32, shape=[None, None, None, 3])
+
+  noise_resized = tf.image.resize_nearest_neighbor(noise, (299, 299))
+  noise_centered = noise_resized - tf.reduce_mean(noise_resized)
+  x_adv = x_input + tf.nn.l2_normalize(noise_centered, axis=(1,2,3)) * args.epsilon
+  x_adv = tf.clip_by_value(x_adv, 0, 1)
   
-  logits, preds = model(sess, x_input)
+  logits, preds = model(sess, x_adv)
   
   model = {
     'x_input': x_input,
+    'noise': noise,
+    'x_adv': x_adv,
     'y_input': y_input,
     'logits': logits,
     'preds': preds,
@@ -132,6 +140,6 @@ if __name__ == '__main__':
   #filename = '/data_large/unsynced_store/seungyong/output/imagenet/lls_new_{}_{}_{}.npy'.format(
   #  targeted, args.loss_func, args.img_index_start+args.sample_size)
   #np.save(filename, index_to_num_queries)
-  filename = '/data/home/gaon/lazy-attack/l2-imagenet/out/l2_{}_{}.npy'.format(
+  filename = '/data/home/gaon/lazy-attack/l2-imagenet/out/l2_{}_{}_32_median.npy'.format(
     args.img_index_start, args.sample_size)
   np.save(filename, index_to_num_queries)
