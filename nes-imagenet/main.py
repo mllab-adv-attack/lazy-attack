@@ -19,10 +19,10 @@ parser = argparse.ArgumentParser()
 # Experimental setting
 parser.add_argument('--targeted', action='store_true')
 parser.add_argument('--loss_func', default='xent', type=str)
-parser.add_argument('--max_queries', default=10000, type=int)
-parser.add_argument('--epsilon', default='0.05', type=float)
+parser.add_argument('--max_queries', default=100000, type=int)
+parser.add_argument('--epsilon', default=0.05, type=float)
 parser.add_argument('--img_index_start', default=0, type=int)
-parser.add_argument('--sample_size', default=1000, type=int)
+parser.add_argument('--sample_size', default=100, type=int)
 parser.add_argument('--save_img', action='store_true')
 
 # NES setting
@@ -32,7 +32,7 @@ parser.add_argument('--max_lr', default=1e-2, type=float)
 parser.add_argument('--min_lr', default=5e-5, type=float)
 parser.add_argument('--plateau_length', default=5, type=int)
 parser.add_argument('--plateau_drop', default=2.0, type=float)
-parser.add_argument('--momentum', default=0.7, type=float)
+parser.add_argument('--momentum', default=0.9, type=float)
 
 args = parser.parse_args()
 
@@ -55,7 +55,7 @@ if __name__ == '__main__':
     indices = np.load('../data/indices_targeted.npy')
   else:
     indices = np.load('../data/indices_untargeted.npy')
-    
+
   # Main loop 
   count = 0
   index = args.img_index_start
@@ -90,7 +90,9 @@ if __name__ == '__main__':
       adv_img, num_queries, success = attack.perturb(initial_img, orig_class, sess)
     
     # Check if the adversarial image satisfies the constraint.
-    assert(np.amax(np.abs(adv_img-initial_img)) <= args.epsilon+1e-3)    
+    assert np.amax(np.abs(adv_img-initial_img)) <= args.epsilon+1e-3
+    assert np.amin(adv_img) >= 0
+    assert np.amax(adv_img) <= 1 
     
     # Save the adversarial image.
     if args.save_img:
@@ -118,7 +120,6 @@ if __name__ == '__main__':
     index += 1
   
   targeted = 'targeted' if args.targeted else 'untargeted' 
-  filename = '/data_large/unsynced_store/seungyong/output/imagenet/nes_{}_{}_{}.npy'.format(
-    targeted, args.loss_func, args.img_index_start+args.sample_size)
+  filename = '/data_large/unsynced_store/seungyong/output/imagenet/nes/targeted/nes_{}_{}_{}_{}.npy'.format(
+    targeted, args.loss_func, args.momentum, args.img_index_start+args.sample_size)
   np.save(filename, index_to_num_queries)
-

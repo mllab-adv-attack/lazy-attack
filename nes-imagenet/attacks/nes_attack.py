@@ -25,8 +25,8 @@ class NESAttack(object):
     self.x_input = tf.placeholder(dtype=tf.float32, shape=[1, 299, 299, 3])
     self.y_input = tf.placeholder(dtype=tf.int32, shape=[1])
     self.logits, self.preds = model(sess, self.x_input)
-    
-    noise_pos = tf.random_normal([self.batch_size//2, 299, 299, 3])
+
+    noise_pos = tf.random_normal([self.batch_size//2, 299, 299, 3], seed=0)
     noise = tf.concat([noise_pos, -noise_pos], axis=0)
     image_batch = self.x_input + self.sigma*noise
     label_batch = tf.tile(self.y_input, [self.batch_size])
@@ -43,15 +43,13 @@ class NESAttack(object):
      
     if args.targeted:
       if args.loss_func == 'xent':
-        losses = tf.nn.sparse_softmax_cross_entropy_with_logits(
-          logits=logits, labels=label_batch)
+        losses = -tf.log(ground_truth_probs)
       else:
         tf.logging.info('Loss function must be xent')
         sys.exit()
     else:
       if args.loss_func == 'xent':
-        losses = tf.nn.sparse_softmax_cross_entropy_with_logits(
-          logits=logits, labels=label_batch)
+        losses = -tf.log(ground_truth_probs)
       elif args.loss_func == 'cw':
         losses = tf.log(max_probs+1e-10) - tf.log(ground_truth_probs+1e-10)
       else:
@@ -91,14 +89,13 @@ class NESAttack(object):
           lr = max(lr/self.plateau_drop, self.min_lr)
         last_losses = []
       
-      if num_queries >= self.max_queries:
+      if num_queries > self.max_queries:
         return adv_image, num_queries, False
 
       adv_image = adv_image - self.targeted*lr*np.sign(grad)
       adv_image = np.clip(adv_image, lower, upper)
 
       preds = sess.run(self.preds, feed_dict={self.x_input: adv_image})
-      num_queries += 1
 
       if self.targeted == 1:
         if preds == label:
