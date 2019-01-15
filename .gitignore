@@ -1,5 +1,7 @@
 data/**
 
+lls-cifar/models/**
+
 lls-imagenet/logs/**
 lls-imagenet/data/**
 lls-imagenet/tools/data/**
