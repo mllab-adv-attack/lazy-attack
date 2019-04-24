@@ -296,7 +296,7 @@ class LazyLocalSearchBlockAttack(object):
       tf.logging.info('Step {}, Loss: {:.4f}, num queries: {}, Time taken: {:.4f}'.format(step, curr_loss, num_queries, end - start))
 
       # Divide lls_block_size if hierarchical is used
-      if self.no_hier and ((step+1)% self.lls_iter == 0) and lls_block_size > 1:
+      if not self.no_hier and ((step+1)% self.lls_iter == 0) and lls_block_size > 1:
         lls_block_size //= 2
 
     # Attack failed
