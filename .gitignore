@@ -19,6 +19,10 @@ gaon_imagenet/imagenet_out/**
 gaon_imagenet/out/**
 gaon_imagenet/tools/data/**
 
+gaon_cifar/out/**
+gaon_cifar/cifar10_data/**
+gaon_cifar/models/**
+
 **/*.pyc
 **/*.pyo
 **/*.npy

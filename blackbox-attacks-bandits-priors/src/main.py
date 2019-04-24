@@ -12,7 +12,7 @@ import math
 import numpy as np
 from tools.utils import get_image, pseudorandom_target
 
-IMAGENET_PATH = '../../lazy-attack/data'
+IMAGENET_PATH = '/data/home/gaon/lazy-attack/data/'
 #IMAGENET_PATH = './../../torch_data/'
 
 ch.set_default_tensor_type('torch.cuda.FloatTensor')
@@ -272,10 +272,9 @@ def main(args):
     eval_batch_size = min(args.batch_size, num_eval_examples)
 
     if args.targeted:
-        target_indices = np.load('../../lazy-attack/data/indices_targeted.npy')
+        target_indices = np.load('/data/home/gaon/lazy-attack/data/indices_targeted.npy')
     else:
-        target_indices = np.load('fail_indices.npy')
-        #target_indices = np.load('../../lazy-attack/data/indices_untargeted.npy')
+        target_indices = np.load('/data/home/gaon/lazy-attack/data/indices_untargeted.npy')
     
     if args.shuffle:
         np.random.shuffle(target_indices)
@@ -375,8 +374,8 @@ def main(args):
     targeted = 'targeted' if args.targeted else 'untargeted'
     method = 'nes' if args.nes else 'bandit'
 
-    np.save('out/reb_queries_{}_{}_{}_{}_100k.npy'.format(method, targeted, args.img_index_start, args.sample_size), total_queries)
-    np.save('out/reb_indices_{}_{}_{}_{}_100k.npy'.format(method, targeted, args.img_index_start, args.sample_size), success_indices)
+    np.save('/data/home/gaon/lazy-attack/blackbox-attacks-bandits-priors/src/out/reb_queries_{}_{}_{}_{}.npy'.format(method, targeted, args.img_index_start, args.sample_size), total_queries)
+    np.save('/data/home/gaon/lazy-attack/blackbox-attacks-bandits-priors/src/out/reb_indices_{}_{}_{}_{}.npy'.format(method, targeted, args.img_index_start, args.sample_size), success_indices)
     #np.save('./out/queries_{}_{}_{}_{}_{}_{}_{}_{}_{}.npy'.format(method, targeted, args.img_index_start, args.sample_size, args.image_lr, args.online_lr, args.exploration, args.tile_size, args.fd_eta), total_queries)
     #np.save('./out/indices_{}_{}_{}_{}_{}_{}_{}_{}_{}.npy'.format(method, targeted, args.img_index_start, args.sample_size, args.image_lr, args.online_lr, args.exploration, args.tile_size, args.fd_eta), success_indices)
 
@@ -399,7 +398,7 @@ class Parameters():
 if __name__ == "__main__":
     # modified to use bandit(linf) as default
     parser = argparse.ArgumentParser()
-    parser.add_argument('--max-queries', default=100000, type=int)
+    parser.add_argument('--max-queries', default= 20000, type=int)
     parser.add_argument('--fd-eta', type=float, help='\eta, used to estimate the derivative via finite differences')
     parser.add_argument('--image-lr', type=float, help='Learning rate for the image (iterative attack)')
     parser.add_argument('--online-lr', type=float, help='Learning rate for the prior')
@@ -409,7 +408,7 @@ if __name__ == "__main__":
     parser.add_argument('--json-config', default='configs/linf.json', type=str, help='a config file to be passed in instead of arguments')
     parser.add_argument('--epsilon', type=float, help='the lp perturbation bound')
     parser.add_argument('--batch-size', type=int, help='batch size for bandits')
-    parser.add_argument('--sample_size', default=500, type=int, help='sample size for bandits')
+    parser.add_argument('--sample_size', default=2500, type=int, help='sample size for bandits')
     parser.add_argument('--log-progress', action='store_false')
     parser.add_argument('--nes', action='store_true')
     parser.add_argument('--tiling', action='store_false')
@@ -434,7 +433,7 @@ if __name__ == "__main__":
         args_dict = vars(args)
     else:
         # If a json file is given, use the JSON file as the base, and then update it with args
-        defaults = json.load(open(args.json_config))
+        defaults = json.load(open('/data/home/gaon/lazy-attack/blackbox-attacks-bandits-priors/src/'+args.json_config))
         arg_vars = vars(args)
         arg_vars = {k: arg_vars[k] for k in arg_vars if arg_vars[k] is not None}
         defaults.update(arg_vars)
