@@ -1,6 +1,6 @@
 data/**
 
-lls-cifar/models/**
+lls-cifar10/models/**
 
 lls-imagenet/logs/**
 lls-imagenet/data/**
