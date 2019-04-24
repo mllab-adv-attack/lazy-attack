@@ -84,6 +84,8 @@ class LazyLocalSearchBlockHelper(object):
     
     upper_left, lower_right, c = admm_block
     blocks = self._split_block(upper_left, lower_right, c, lls_block_size)
+
+    orig_noise = np.copy(noise)
     
     num_queries = 0
 
@@ -97,7 +99,7 @@ class LazyLocalSearchBlockHelper(object):
       bend = min((i+1)*self.batch_size, num_blocks)
       blocks_batch = [blocks[curr_order[idx]] for idx in range(bstart, bend)]
 
-      noise, queries, loss, success = self.perturb_batch(image, noise, label, sess, admm_block, blocks_batch, lls_block_size, success_checker, yk, rho)
+      noise, queries, loss, success = self.perturb_batch(image, noise, orig_noise, label, sess, admm_block, blocks_batch, lls_block_size, success_checker, yk, rho)
       num_queries += queries
     
       if success_checker.check():
@@ -107,7 +109,7 @@ class LazyLocalSearchBlockHelper(object):
     results[index] = [noise, num_queries, loss, admm_block, success]
     return
 
-  def perturb_batch(self, image, noise, label, sess, admm_block, blocks_batch, lls_block_size, success_checker, yk, rho):
+  def perturb_batch(self, image, noise, orig_noise, label, sess, admm_block, blocks_batch, lls_block_size, success_checker, yk, rho):
     # Set random seed by index for the reproducibility
 
     upper_left, lower_right, c = admm_block
@@ -172,7 +174,7 @@ class LazyLocalSearchBlockHelper(object):
                                  feed_dict={self.x_input: image_batch, self.y_input: label_batch})
 
         if self.admm:
-          losses += self.admm_loss(admm_block, noise_batch, noise, yk, rho)
+          losses += self.admm_loss(admm_block, noise_batch, orig_noise, yk, rho)
 
         # Early stopping
         success_indices, = np.where(preds == label) if self.targeted else np.where(preds != label)
@@ -216,7 +218,7 @@ class LazyLocalSearchBlockHelper(object):
                                  feed_dict={self.x_input: image_batch, self.y_input: label_batch})
 
         if self.admm:
-          losses += self.admm_loss(admm_block, self._flip_noise(noise, blocks[cand_idx]), noise, yk, rho)
+          losses += self.admm_loss(admm_block, self._flip_noise(noise, blocks[cand_idx]), orig_noise, yk, rho)
 
         num_queries += 1
         margin = losses[0]-curr_loss
@@ -271,7 +273,7 @@ class LazyLocalSearchBlockHelper(object):
                                  feed_dict={self.x_input: image_batch, self.y_input: label_batch})
 
         if self.admm:
-          losses += self.admm_loss(admm_block, noise_batch, noise, yk, rho)
+          losses += self.admm_loss(admm_block, noise_batch, orig_noise, yk, rho)
 
         # Early stopping
         success_indices, = np.where(preds == label) if self.targeted else np.where(preds != label)
@@ -313,7 +315,7 @@ class LazyLocalSearchBlockHelper(object):
                                  feed_dict={self.x_input: image_batch, self.y_input: label_batch})
 
         if self.admm:
-          losses += self.admm_loss(admm_block, self._flip_noise(noise, blocks[cand_idx]), noise, yk, rho)
+          losses += self.admm_loss(admm_block, self._flip_noise(noise, blocks[cand_idx]), orig_noise, yk, rho)
 
         num_queries += 1
         margin = losses[0]-curr_loss
