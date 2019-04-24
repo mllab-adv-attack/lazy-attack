@@ -212,7 +212,7 @@ class LazyLocalSearchBlockAttack(object):
             end = time.time()
             total_time += (end-start)
             
-            tf.logging.info('Step {}, Loss: {}, num queries: {}, Time taken: {:.4f}'.format(step, curr_loss, num_queries, end - start))
+            tf.logging.info('Step {}, Loss: {:.4f}, num queries: {}, Time taken: {:.4f}'.format(step, curr_loss, num_queries, end - start))
             return adv_image, num_queries, False, total_time
 
           # Early stop checking
@@ -220,7 +220,7 @@ class LazyLocalSearchBlockAttack(object):
             end = time.time()
             total_time += (end-start)
             
-            tf.logging.info('Step {}, Loss: {}, num queries: {}, Time taken: {:.4f}'.format(step, curr_loss, num_queries, end - start))
+            tf.logging.info('Step {}, Loss: {:.4f} num queries: {}, Time taken: {:.4f}'.format(step, curr_loss, num_queries, end - start))
             return adv_image, num_queries, True, total_time
 
           num_running = 0
@@ -272,7 +272,7 @@ class LazyLocalSearchBlockAttack(object):
         end = time.time()
         total_time += (end-start)
         
-        tf.logging.info('Step {}, Loss: {}, num queries: {}, Time taken: {:.4f}'.format(step, curr_loss, num_queries, end - start))
+        tf.logging.info('Step {}, Loss: {:.4f}, num queries: {}, Time taken: {:.4f}'.format(step, curr_loss, num_queries, end - start))
         return adv_image, num_queries, False, total_time
 
       # Check early stop
@@ -280,20 +280,20 @@ class LazyLocalSearchBlockAttack(object):
         if preds == label:
           end = time.time()
           total_time += (end-start)
-          tf.logging.info('Step {}, Loss: {}, num queries: {}, Time taken: {:.4f}'.format(step, curr_loss, num_queries, end - start))
+          tf.logging.info('Step {}, Loss: {:.4f}, num queries: {}, Time taken: {:.4f}'.format(step, curr_loss, num_queries, end - start))
           return adv_image, num_queries, True, total_time
       else:
         if preds != label:
           end = time.time()
           total_time += (end-start)
-          tf.logging.info('Step {}, Loss: {}, num queries: {}, Time taken: {:.4f}'.format(step, curr_loss, num_queries, end - start))
+          tf.logging.info('Step {}, Loss: {:.4f}, num queries: {}, Time taken: {:.4f}'.format(step, curr_loss, num_queries, end - start))
           return adv_image, num_queries, True, total_time
 
       end = time.time()
 
       total_time += (end-start)
 
-      tf.logging.info('Step {}, Loss: {}, num queries: {}, Time taken: {:.4f}'.format(step, curr_loss, num_queries, end - start))
+      tf.logging.info('Step {}, Loss: {:.4f}, num queries: {}, Time taken: {:.4f}'.format(step, curr_loss, num_queries, end - start))
 
       # Divide lls_block_size if hierarchical is used
       if self.no_hier and ((step+1)% self.lls_iter == 0) and lls_block_size > 1:
