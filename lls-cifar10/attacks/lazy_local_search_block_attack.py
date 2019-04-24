@@ -8,6 +8,7 @@ import sys
 from attacks.lazy_local_search_block_helper import LazyLocalSearchBlockHelper
 
 
+# checker for checking if others thread successes
 class SuccessChecker(object):
   def __init__(self, success=False):
     self.flag = success
@@ -22,7 +23,7 @@ class SuccessChecker(object):
     return self.flag
 
 
-
+# lls-admm solver
 class LazyLocalSearchBlockAttack(object):
   def __init__(self, models, args, **kwargs):
     # Setting
@@ -48,6 +49,7 @@ class LazyLocalSearchBlockAttack(object):
     self.batch_size = args.batch_size
     self.no_hier = args.no_hier
 
+    # Set Image size
     self.upper_left = [0, 0]
     self.lower_right = [32, 32]
 
@@ -97,11 +99,13 @@ class LazyLocalSearchBlockAttack(object):
         tf.logging.info('Loss function must be xent or cw')
         sys.exit()
 
+  # perturb image with given noise
   def _perturb_image(self, image, noise):
     adv_image = image + noise
     adv_image = np.clip(adv_image, 0, 255)
     return adv_image
 
+  # block(image) splitting function
   def _split_block(self, upper_left, lower_right, block_size, overlap):
     blocks = []
     xs = np.arange(upper_left[0], lower_right[0], block_size)
@@ -115,6 +119,7 @@ class LazyLocalSearchBlockAttack(object):
         blocks.append([[x0, y0], [x1, y1], c])
     return blocks
 
+  # Construct blocks for admm
   def construct_blocks(self):
     block_size = self.admm_block_size
     overlap = self.overlap
@@ -134,7 +139,7 @@ class LazyLocalSearchBlockAttack(object):
 
     return blocks
 
-  # perturb an image
+  # perturb an image (full process)
   def perturb(self, image, label, index, sesses):
 
     total_time = 0
@@ -142,7 +147,7 @@ class LazyLocalSearchBlockAttack(object):
     # Set random seed
     np.random.seed(index)
 
-    # Local variables
+    # Initialize query count, lls_block_size, main session
     num_queries = 0
     lls_block_size = self.lls_block_size
     sess = sesses[0]
@@ -163,38 +168,46 @@ class LazyLocalSearchBlockAttack(object):
     # Initialize success flag
     self.success_checker.reset()
 
-    # Run admm iteration
+    # Run admm iterations
     for step in range(self.admm_iter):
+
+      # Check wall clock time
       start = time.time()
+
+      # Initialize threads
       threads = []
       results = [None] * len(self.blocks)
 
-      # Run blocks
       for i in range(len(self.blocks)):
         # Solve lazy greedy on the block
         threads.append(threading.Thread(target=self.lazy_local_search[i].perturb, args=(
         image, noise, label, sesses[i%self.gpus], self.blocks[i], lls_block_size, self.success_checker, yk[i], rho, i, results)))
 
+      # Run threads
       num_running = 0
       for i in range(len(self.blocks)):
         threads[i].start()
         num_running += 1
 
+        # If all gpus are used, wait for results
         if num_running == self.gpus:
 
           for j in range(i-self.gpus+1, i+1):
             threads[j].join()
 
+          # Gather results
           for j in range(i-self.gpus+1, i+1):
             block_noise, block_queries, block_loss, block, block_success = results[j]
 
             num_queries += block_queries
 
-            # early stop checking
+            # Early stop checking
             if block_success:
               noise = block_noise
               curr_loss = block_loss
               adv_image = self._perturb_image(image, noise)
+
+          # Max query checking
           if num_queries > self.max_queries:
             end = time.time()
             total_time += (end-start)
@@ -202,6 +215,7 @@ class LazyLocalSearchBlockAttack(object):
             tf.logging.info('Step {}, Loss: {}, num queries: {}, Time taken: {:.4f}'.format(step, curr_loss, num_queries, end - start))
             return adv_image, num_queries, False, total_time
 
+          # Early stop checking
           if self.success_checker.check():
             end = time.time()
             total_time += (end-start)
@@ -211,7 +225,7 @@ class LazyLocalSearchBlockAttack(object):
 
           num_running = 0
 
-      # update global variable by averaging
+      # Update global variable by averaging
       overlap_count = np.zeros_like(noise)
       new_noise = np.zeros_like(noise)
 
@@ -228,6 +242,7 @@ class LazyLocalSearchBlockAttack(object):
       new_noise = new_noise / overlap_count
       noise = new_noise
 
+      # Update admm variables
       if self.admm:
 
         for i in range(len(self.blocks)):
@@ -240,7 +255,7 @@ class LazyLocalSearchBlockAttack(object):
 
         rho *= tau
 
-      # check early stop
+      # Check early stop
       adv_image = self._perturb_image(image, noise)
       feed = {
         self.model.x_input: adv_image,
@@ -251,7 +266,8 @@ class LazyLocalSearchBlockAttack(object):
       num_queries += 1
 
       curr_loss = losses[0]
-      
+
+      # Max queries checking
       if num_queries > self.max_queries:
         end = time.time()
         total_time += (end-start)
@@ -259,6 +275,7 @@ class LazyLocalSearchBlockAttack(object):
         tf.logging.info('Step {}, Loss: {}, num queries: {}, Time taken: {:.4f}'.format(step, curr_loss, num_queries, end - start))
         return adv_image, num_queries, False, total_time
 
+      # Check early stop
       if self.targeted:
         if preds == label:
           end = time.time()
@@ -278,8 +295,10 @@ class LazyLocalSearchBlockAttack(object):
 
       tf.logging.info('Step {}, Loss: {}, num queries: {}, Time taken: {:.4f}'.format(step, curr_loss, num_queries, end - start))
 
-      if ((step+1)% self.lls_iter == 0) and lls_block_size > 1:
+      # Divide lls_block_size if hierarchical is used
+      if self.no_hier and ((step+1)% self.lls_iter == 0) and lls_block_size > 1:
         lls_block_size //= 2
 
+    # Attack failed
     return adv_image, num_queries, False, total_time
 
