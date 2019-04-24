@@ -5,6 +5,8 @@ import math
 import sys
 import itertools
 
+
+# lls solver for an admm block
 class LazyLocalSearchBlockHelper(object):
 
   def __init__(self, model, args, **kwargs):
@@ -54,11 +56,13 @@ class LazyLocalSearchBlockHelper(object):
         tf.logging.info('Loss function must be xent or cw')
         sys.exit()
 
+  # Perturb image with given noise
   def _perturb_image(self, image, noise):
     adv_image = image + noise
     adv_image = np.clip(adv_image, 0, 255)
     return adv_image
 
+  # block(image) splitting function
   def _split_block(self, upper_left, lower_right, c, block_size):
     blocks = []
     xs = np.arange(upper_left[0], lower_right[0], block_size)
@@ -67,6 +71,7 @@ class LazyLocalSearchBlockHelper(object):
       blocks.append([[x, y], [x + block_size, y + block_size], c])
     return blocks
 
+  # flip part of the noise (-eps <--> eps)
   def _flip_noise(self, noise, block):
     noise_new = np.copy(noise)
     upper_left, lower_right, channel = block
@@ -80,6 +85,7 @@ class LazyLocalSearchBlockHelper(object):
 
     return np.sum(np.multiply(yk, dist), axis=(1, 2)) + (rho/2) * np.sum(np.multiply(dist, dist), axis=(1, 2))
 
+  # perturb an image within an admm block (iterate all batches)
   def perturb(self, image, noise, label, sess, admm_block, lls_block_size, success_checker, yk, rho, index, results):
     
     upper_left, lower_right, c = admm_block
@@ -99,7 +105,7 @@ class LazyLocalSearchBlockHelper(object):
       bend = min((i+1)*self.batch_size, num_blocks)
       blocks_batch = [blocks[curr_order[idx]] for idx in range(bstart, bend)]
 
-      noise, queries, loss, success = self.perturb_batch(image, noise, orig_noise, label, sess, admm_block, blocks_batch, lls_block_size, success_checker, yk, rho)
+      noise, queries, loss, success = self.perturb_one_batch(image, noise, orig_noise, label, sess, admm_block, blocks_batch, lls_block_size, success_checker, yk, rho)
       num_queries += queries
     
       if success_checker.check():
@@ -109,7 +115,9 @@ class LazyLocalSearchBlockHelper(object):
     results[index] = [noise, num_queries, loss, admm_block, success]
     return
 
-  def perturb_batch(self, image, noise, orig_noise, label, sess, admm_block, blocks_batch, lls_block_size, success_checker, yk, rho):
+  # perturb an image within an admm block (one batch)
+  # from lazy_local_search_helper.perturb
+  def perturb_one_batch(self, image, noise, orig_noise, label, sess, admm_block, blocks_batch, lls_block_size, success_checker, yk, rho):
     # Set random seed by index for the reproducibility
 
     upper_left, lower_right, c = admm_block

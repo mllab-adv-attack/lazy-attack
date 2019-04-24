@@ -39,7 +39,7 @@ parser.add_argument('--targeted', action='store_true')
 # Block attack
 parser.add_argument('--admm', action='store_true', help='use admm')
 parser.add_argument('--admm_block_size', default=16, help='block size for admm', type=int)
-parser.add_argument('--partition', default='basic', help='block partitioning', type=str)
+parser.add_argument('--partition', default='basic', help='block partitioning scheme', type=str)
 parser.add_argument('--admm_iter', default=100, help='admm max iteration', type=int)
 parser.add_argument('--overlap', default=1, help='overlap size', type=int)
 parser.add_argument('--admm_rho', default=1e-7, help='admm rho', type=float)
