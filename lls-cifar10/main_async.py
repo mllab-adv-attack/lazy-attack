@@ -158,6 +158,8 @@ if __name__ == '__main__':
 
     index += 1
 
+  '''
   filename = args.save_dir + '/lls_new_new_untargeted_{}_{}_{}_{}.npy'.format(
     args.loss_func, args.batch_size, args.max_iters, args.img_index_start + args.sample_size)
   np.save(filename, index_to_num_queries)
+  '''

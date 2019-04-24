@@ -28,7 +28,7 @@ parser.add_argument('--data_dir', default='../cifar10_data', type=str)
 
 # Experiment Setting
 parser.add_argument('--img_index_start', default=0, type=int)
-parser.add_argument('--sample_size', default=100, type=int)
+parser.add_argument('--sample_size', default=500, type=int)
 parser.add_argument('--save_img', dest='save_img', action='store_true')
 parser.add_argument('--save_dir', default='/data_large/unsynced_store/seungyong/output/cifar10/lls/untargeted')
 
@@ -127,7 +127,8 @@ if __name__ == '__main__':
         average_queries, median_queries, total_num_corrects/count))   
     
     index += 1
-  
+  ''' 
   filename = args.save_dir+'/lls_new_new_untargeted_{}_{}_{}_{}.npy'.format(
     args.loss_func, args.batch_size, args.max_iters, args.img_index_start+args.sample_size)
   np.save(filename, index_to_num_queries) 
+  '''
