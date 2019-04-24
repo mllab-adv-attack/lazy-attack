@@ -5,6 +5,7 @@ import numpy as np
 import sys
 import time
 import tensorflow as tf
+from PIL import Image
 
 import attacks
 import cifar10_input

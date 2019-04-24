@@ -6,11 +6,11 @@ import os
 import sys
 import time
 import tensorflow as tf
+from PIL import Image
 
 import attacks
 import cifar10_input
 from model import Model
-from utils.format_utils import params2id
 
 """ The collection of all attack classes """
 ATTACK_CLASSES = [
@@ -26,32 +26,40 @@ parser = argparse.ArgumentParser()
 # Directory
 parser.add_argument('--model_dir', default='models/adv_trained', help='Model directory', type=str)
 parser.add_argument('--data_dir', default='cifar10_data', help='Data directory', type=str)
-parser.add_argument('--save_dir', default='results', help='Save directory', type=str)
-parser.add_argument('--save_img', dest='save_img', action='store_true', help='Save adversarial images')
 
 # Experiment Setting
+parser.add_argument('--img_index_start', default=0, type=int)
 parser.add_argument('--sample_size', default=500, help='Sample size', type=int)
-parser.add_argument('--batch_size', default=100, help='Batch size(PGD)', type=int)
+parser.add_argument('--save_img', dest='save_img', action='store_true', help='Save adversarial images')
+parser.add_argument('--save_dir', default='/data_large/unsynced_store/seungyong/output/cifar10/lls/untargeted')
 
 # Attack
 parser.add_argument('--attack', default='LazyLocalSearchBlockAttack', help='Attack type', type=str)
 parser.add_argument('--loss_func', default='xent', help='Loss function', type=str)
 parser.add_argument('--epsilon', default=8, help="Epsilon", type=int)
+parser.add_argument('--targeted', action='store_true')
 
 # Block attack
-parser.add_argument('--num_steps_outer', default=5, help='The number of steps(outer loop)', type=int)
-parser.add_argument('--num_steps_inner', default=2, help='The number of steps(inner loop)', type=int)
-args = parser.parse_args()
+parser.add_argument('--admm_block_size', default=16, help='block size for admm', type=int)
+parser.add_argument('--partition', default='basic', help='block partitioning', type=str)
+parser.add_argument('--admm_iter', default=10, help='admm max iteration', type=int)
+parser.add_argument('--block_scheme', default='admm', help='convergence scheme', type=str)
+parser.add_argument('--overlap', default=1, help='overlap size', type=int)
+parser.add_argument('--admm_rho', default=1e-7, help='admm rho', type=float)
+parser.add_argument('--admm_tau', default=4, help='admm tau', type=float)
+parser.add_argument('--gpus', default=1, help='number of gpus to use', type=int)
 
-def get_save_file_path(args):
-  file_path = params2id(args.attack, args.epsilon, args.loss_func, args.num_steps_outer, args.num_steps_inner)
-  return file_path
+# Lazy Local Search Batch
+parser.add_argument('--lls_block_size', default=4, help='initial block size for lls', type=int)
+parser.add_argument('--max_iters', default=1, type=int)
+parser.add_argument('--batch_size', default=64, type=int)
+parser.add_argument('--no_hier', action='store_true')
+args = parser.parse_args()
 
 """ Main script """
 if __name__ == '__main__':
+  # Set verbosity
   tf.logging.set_verbosity(tf.logging.INFO)
-  #  tf.set_random_seed(0)
-  #  np.random.seed(0)
   tf.logging.info('Adversarial attack on CIFAR10')
   
   # Print arguemnts
@@ -94,99 +102,61 @@ if __name__ == '__main__':
    
   # Create attack
   attack_class = getattr(sys.modules[__name__], args.attack)
-  attack = attack_class(models, epsilon=args.epsilon, loss_func=args.loss_func, 
-    num_steps_outer=args.num_steps_outer, num_steps_inner=args.num_steps_inner)
+  attack = attack_class(models, args)
   
   # Load dataset
   cifar = cifar10_input.CIFAR10Data(args.data_dir)
 
-  # Create save file path
-  save_file_path = os.path.join(args.save_dir, get_save_file_path(args))
+  # Load indices
+  indices = np.load('../cifar10_data/indices_untargeted.npy')
 
-  # Iterate over the samples batch-by-batch
-  batch_size = 1
-  num_batches = int(math.ceil(args.sample_size / batch_size))
+  count = 0
+  index = args.img_index_start
+  total_num_corrects = 0
+  total_num_queries = []
+  index_to_num_queries = {}
 
-  bstart = 0
-  x_full_batch = []
-  y_full_batch = []
-  total_queries = 0
-  total_success_queries = 0
-  total_corr = 0
-  total_runtime = 0
-    
-  while(True):
-    x_candid = cifar.eval_data.xs[bstart:bstart+100]
-    x_candid = np.ndarray.astype(x_candid, np.int32)
-    y_candid = cifar.eval_data.ys[bstart:bstart+100]
-    feed = {
-      model.x_input: x_candid,
-      model.y_input: y_candid
-    }
-    mask = sess.run(model.correct_prediction, feed)
-    x_masked = x_candid[mask]
-    y_masked = y_candid[mask]
-
-    if bstart == 0:
-      x_full_batch = x_masked[:min(args.sample_size, len(x_masked))]
-      y_full_batch = y_masked[:min(args.sample_size, len(y_masked))]
-    else:
-      idx = min(args.sample_size-len(x_full_batch), len(x_masked))
-      x_full_batch = np.concatenate([x_full_batch, x_masked[:idx]], axis=0)
-      y_full_batch = np.concatenate([y_full_batch, y_masked[:idx]], axis=0)
-
-    bstart += 100
-    if len(x_full_batch)>= args.sample_size:
-      break
-  
-  # Run batch
-  tf.logging.info('Iterating over {} batches'.format(num_batches))
-
-  adv_images = []
-
-  for ibatch in range(num_batches):
+  while count < args.sample_size:
     tf.logging.info("")
-    bstart = ibatch * batch_size
-    bend = min(bstart + batch_size, args.sample_size)
-    tf.logging.info('Batch {0}, Batch size: {1}'.format(ibatch, bend - bstart))
-    
-    x_batch = x_full_batch[bstart:bend, ...]
-    y_batch = y_full_batch[bstart:bend]
-    
-    tf.logging.info('Attack starts')
-    start = time.time()
-    x_batch_adv, num_queries = attack.perturb(x_batch, y_batch, sesses)
-    assert np.amax(np.abs(x_batch_adv-x_batch)) <= args.epsilon
-    adv_images.append(x_batch_adv)
-    end = time.time()
-    tf.logging.info('Attack finishes, Time taken: {0}'.format(end-start))   
-  
-    feed = {
-      model.x_input: x_batch_adv,
-      model.y_input: y_batch
-    }
-    correct_prediction, num_correct = sess.run([model.correct_prediction, model.num_correct], feed)
-    total_corr += num_correct
-    total_queries += np.sum(num_queries)
-    total_success_queries += np.sum((1-correct_prediction)*num_queries)
-    total_runtime += np.sum((1-correct_prediction)*(end-start))
-     
-    tf.logging.info('Num of queries: {0}, Num of correct: {1}/{2}, Net accuracy: {3:2f}%'.format(
-      np.sum(num_queries), num_correct, bend-bstart, 100.0*total_corr/(ibatch+1)))
-  
-  tf.logging.info("")
-  average_queries = total_queries / args.sample_size
-  average_success_queries = total_success_queries / (args.sample_size - total_corr)
-  accuracy = total_corr / args.sample_size
-  average_success_runtime = total_runtime / (args.sample_size - total_corr)
 
-  tf.logging.info('Average number of queries: {0:2f}'.format(average_queries))
-  tf.logging.info('Average number of queries(only successful attack): {0:2f}'.format(average_success_queries))
-  tf.logging.info('Average runtime(only successful attack): {0:2f}s'.format(average_success_runtime))
-  tf.logging.info('Net adv accruracy: {0:2f}%'.format(100.0 * accuracy))
+    # Get image and label
+    initial_img = cifar.eval_data.xs[indices[index]]
+    initial_img = np.int32(initial_img)
+    initial_img = np.expand_dims(initial_img, axis=0)
+    orig_class = cifar.eval_data.ys[indices[index]]
+    orig_class = np.expand_dims(orig_class, axis=0)
 
-  # Save adversarial images
-  if args.save_img:
-    tf.logging.info('Saving adversarial images')
-    adv_images = np.concatenate(adv_images, axis=0)
-    np.save(save_file_path, adv_images)
+    count += 1
+
+    tf.logging.info('Untargeted attack on {}th image starts, img index: {}, orig class: {}'.format(
+      count, indices[index], orig_class[0]))
+
+    adv_img, num_queries, success = attack.perturb(initial_img, orig_class, indices[index], sess)
+    assert (np.amax(np.abs(adv_img - initial_img)) <= args.epsilon)
+
+    if args.save_img:
+      nat_image = Image.fromarray(np.ndarray.astype(initial_img[0, ...] * 255, np.uint8))
+      nat_image.save(args.save_dir + '/nat/{}_nat.jpg'.format(indices[index]))
+      adv_image = Image.fromarray(np.ndarray.astype(adv_img[0, ...] * 255, np.uint8))
+      adv_image.save(args.save_dir + '/adv/{}_adv.jpg'.format(indices[index]))
+
+    if success:
+      total_num_corrects += 1
+      total_num_queries.append(num_queries)
+      index_to_num_queries[indices[index]] = num_queries
+      average_queries = 0 if len(total_num_queries) == 0 else np.mean(total_num_queries)
+      median_queries = 0 if len(total_num_queries) == 0 else np.median(total_num_queries)
+      tf.logging.info('Attack success, avg queries: {:.4f}, med queries: {}, success rate: {:.4f}'.format(
+        average_queries, median_queries, total_num_corrects / count))
+    else:
+      index_to_num_queries[indices[index]] = -1
+      average_queries = 0 if len(total_num_queries) == 0 else np.mean(total_num_queries)
+      median_queries = 0 if len(total_num_queries) == 0 else np.median(total_num_queries)
+      tf.logging.info('Attack fail, avg queries: {:.4f}, med queries: {}, success rate: {:.4f}'.format(
+        average_queries, median_queries, total_num_corrects / count))
+
+    index += 1
+
+  filename = args.save_dir + '/lls_new_new_untargeted_{}_{}_{}_{}.npy'.format(
+    args.loss_func, args.batch_size, args.max_iters, args.img_index_start + args.sample_size)
+  np.save(filename, index_to_num_queries)
