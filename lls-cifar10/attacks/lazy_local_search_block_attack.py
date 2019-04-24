@@ -1,25 +1,26 @@
-import heapq
 import itertools
-import math
 import numpy as np
-import queue
 import tensorflow as tf
 import threading
 import time
 import sys
 
-from lazy_local_search_block_helper import LazyLocalSearchBlockHelper
+from attacks.lazy_local_search_block_helper import LazyLocalSearchBlockHelper
 
 
 class SuccessChecker(object):
   def __init__(self, success=False):
-    self.success = success
+    self.flag = success
 
-  def success(self):
-    self.success = True
+  def set(self):
+    self.flag = True
+
+  def reset(self):
+    self.flag = False
 
   def check(self):
-    return self.success
+    return self.flag
+
 
 
 class LazyLocalSearchBlockAttack(object):
@@ -28,22 +29,22 @@ class LazyLocalSearchBlockAttack(object):
     self.models = models
     self.model = models[0]
     self.epsilon = args.epsilon
-    self.num_steps_outer = args.num_steps_outer
-    self.num_steps_inner = args.num_steps_inner
+    self.admm_iter = args.admm_iter
     self.loss_func = args.loss_func
     self.targeted = args.targeted
+    self.max_queries = args.max_queries
 
     self.admm_block_size = args.admm_block_size
     self.partition = args.partition
     self.admm_iter = args.admm_iter
-    self.block_scheme = args.block_scheme
+    self.admm = args.admm
     self.overlap = args.overlap
     self.admm_rho = args.admm_rho
     self.admm_tau = args.admm_tau
     self.gpus = args.gpus
 
+    self.lls_iter = args.lls_iter
     self.lls_block_size = args.lls_block_size
-    self.max_iters = args.max_iters
     self.batch_size = args.batch_size
     self.no_hier = args.no_hier
 
@@ -133,15 +134,10 @@ class LazyLocalSearchBlockAttack(object):
 
     return blocks
 
-  # compute loss term involving (xi - Si z)
-  def admm_loss(self, block, x, z, yk, rho):
-    upper_left, lower_right, c = block
-    dist = (x-z)[upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], c]
-
-    return np.dot(yk, dist) + (rho/2) * np.dot(dist, dist)
-
   # perturb an image
   def perturb(self, image, label, index, sesses):
+
+    total_time = 0
 
     # Set random seed
     np.random.seed(index)
@@ -158,14 +154,17 @@ class LazyLocalSearchBlockAttack(object):
     yk = []
     for block in self.blocks:
       upper_left, lower_right, c = block
-      yk_i = np.zeros((lower_right[0]-upper_left[0], lower_right[1]-upper_left[1], c))
+      yk_i = np.zeros((lower_right[0]-upper_left[0], lower_right[1]-upper_left[1]))
       yk.append(yk_i)
 
     rho = self.admm_rho
     tau = self.admm_tau
 
+    # Initialize success flag
+    self.success_checker.reset()
+
     # Run admm iteration
-    for step in range(self.num_steps_outer):
+    for step in range(self.admm_iter):
       start = time.time()
       threads = []
       results = [None] * len(self.blocks)
@@ -187,16 +186,28 @@ class LazyLocalSearchBlockAttack(object):
             threads[j].join()
 
           for j in range(i-self.gpus+1, i+1):
-            block_noise, block_queries, block_loss, block_success, block = results[j]
+            block_noise, block_queries, block_loss, block, block_success = results[j]
 
             num_queries += block_queries
 
             # early stop checking
             if block_success:
               noise = block_noise
+              curr_loss = block_loss
               adv_image = self._perturb_image(image, noise)
+          if num_queries > self.max_queries:
+            end = time.time()
+            total_time += (end-start)
+            
+            tf.logging.info('Step {}, Loss: {}, num queries: {}, Time taken: {:.4f}'.format(step, curr_loss, num_queries, end - start))
+            return adv_image, num_queries, False, total_time
 
-          return adv_image, num_queries, True
+          if self.success_checker.check():
+            end = time.time()
+            total_time += (end-start)
+            
+            tf.logging.info('Step {}, Loss: {}, num queries: {}, Time taken: {:.4f}'.format(step, curr_loss, num_queries, end - start))
+            return adv_image, num_queries, True, total_time
 
           num_running = 0
 
@@ -204,26 +215,26 @@ class LazyLocalSearchBlockAttack(object):
       overlap_count = np.zeros_like(noise)
       new_noise = np.zeros_like(noise)
 
-      for block_noise, _, _, _, block in results:
+      for block_noise, _, _, block, _ in results:
 
         upper_left, lower_right, c = block
 
-        new_noise[upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], c] += \
-          block_noise[upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], c]
+        new_noise[0, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], c] += \
+          block_noise[0, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], c]
 
-        overlap_count[upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], c] += \
-          np.ones_like(block_noise[upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], c])
+        overlap_count[0, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], c] += \
+          np.ones_like(block_noise[0, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], c])
 
       new_noise = new_noise / overlap_count
       noise = new_noise
 
-      if self.block_scheme == 'admm':
+      if self.admm:
 
         for i in range(len(self.blocks)):
-          block_noise, _, _, _, block = results[i]
+          block_noise, _, _, block, _ = results[i]
 
           upper_left, lower_right, c = block
-          dist = (block_noise - noise)[upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], c]
+          dist = (block_noise - noise)[0, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], c]
 
           yk[i] += rho * dist
 
@@ -240,17 +251,35 @@ class LazyLocalSearchBlockAttack(object):
       num_queries += 1
 
       curr_loss = losses[0]
+      
+      if num_queries > self.max_queries:
+        end = time.time()
+        total_time += (end-start)
+        
+        tf.logging.info('Step {}, Loss: {}, num queries: {}, Time taken: {:.4f}'.format(step, curr_loss, num_queries, end - start))
+        return adv_image, num_queries, False, total_time
 
       if self.targeted:
-        if preds != label:
-          return adv_image, num_queries, True
-      else:
         if preds == label:
-          return adv_image, num_queries, True
+          end = time.time()
+          total_time += (end-start)
+          tf.logging.info('Step {}, Loss: {}, num queries: {}, Time taken: {:.4f}'.format(step, curr_loss, num_queries, end - start))
+          return adv_image, num_queries, True, total_time
+      else:
+        if preds != label:
+          end = time.time()
+          total_time += (end-start)
+          tf.logging.info('Step {}, Loss: {}, num queries: {}, Time taken: {:.4f}'.format(step, curr_loss, num_queries, end - start))
+          return adv_image, num_queries, True, total_time
 
       end = time.time()
 
-      tf.logging.info('Step {}, Loss: {}, num queries: {} Time taken: {}'.format(step, curr_loss, num_queries, end - start))
+      total_time += (end-start)
 
-    return adv_image, num_queries
+      tf.logging.info('Step {}, Loss: {}, num queries: {}, Time taken: {:.4f}'.format(step, curr_loss, num_queries, end - start))
+
+      if ((step+1)% self.lls_iter == 0) and lls_block_size > 1:
+        lls_block_size //= 2
+
+    return adv_image, num_queries, False, total_time
 

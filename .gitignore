@@ -28,3 +28,5 @@ gaon_cifar/models/**
 **/*.npy
 
 .idea/**
+
+*.out

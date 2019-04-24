@@ -33,10 +33,11 @@ parser.add_argument('--save_img', dest='save_img', action='store_true')
 parser.add_argument('--save_dir', default='/data_large/unsynced_store/seungyong/output/cifar10/lls/untargeted')
 
 # Attack
-parser.add_argument('--attack', default='LazyLocalSearchBatchAttack', type=str)
+parser.add_argument('--attack', default='LazyLocalSearchAttack', type=str)
 parser.add_argument('--loss_func', default='xent', type=str)
 parser.add_argument('--epsilon', default=8, type=int)
 parser.add_argument('--max_queries', default=20000, type=int)
+parser.add_argument('--targeted', action='store_true')
 
 # Lazy Local Search Batch
 parser.add_argument('--block_size', default=4, type=int)
