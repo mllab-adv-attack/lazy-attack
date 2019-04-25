@@ -111,12 +111,11 @@ class LazyLocalSearchBlockAttack(object):
     xs = np.arange(upper_left[0], lower_right[0], block_size)
     ys = np.arange(upper_left[1], lower_right[1], block_size)
     for x, y in itertools.product(xs, ys):
-      for c in range(3):
-        x0 = max(x-overlap, upper_left[0])
-        y0 = max(y-overlap, upper_left[1])
-        x1 = min(x+block_size+overlap, lower_right[0])
-        y1 = min(y+block_size+overlap, lower_right[1])
-        blocks.append([[x0, y0], [x1, y1], c])
+      x0 = max(x-overlap, upper_left[0])
+      y0 = max(y-overlap, upper_left[1])
+      x1 = min(x+block_size+overlap, lower_right[0])
+      y1 = min(y+block_size+overlap, lower_right[1])
+      blocks.append([[x0, y0], [x1, y1]])
     return blocks
 
   # Construct blocks for admm
@@ -158,8 +157,8 @@ class LazyLocalSearchBlockAttack(object):
     # Initialize admm variables
     yk = []
     for block in self.blocks:
-      upper_left, lower_right, c = block
-      yk_i = np.zeros((lower_right[0]-upper_left[0], lower_right[1]-upper_left[1]))
+      upper_left, lower_right = block
+      yk_i = np.zeros((lower_right[0]-upper_left[0], lower_right[1]-upper_left[1], 3))
       yk.append(yk_i)
 
     rho = self.admm_rho
@@ -231,13 +230,13 @@ class LazyLocalSearchBlockAttack(object):
 
       for block_noise, _, _, block, _ in results:
 
-        upper_left, lower_right, c = block
+        upper_left, lower_right = block
 
-        new_noise[0, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], c] += \
-          block_noise[0, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], c]
+        new_noise[0, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], :] += \
+            block_noise[0, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], :]
 
-        overlap_count[0, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], c] += \
-          np.ones_like(block_noise[0, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], c])
+        overlap_count[0, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], :] += \
+            np.ones_like(block_noise[0, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], :])
 
       new_noise = new_noise / overlap_count
       noise = new_noise
@@ -248,8 +247,8 @@ class LazyLocalSearchBlockAttack(object):
         for i in range(len(self.blocks)):
           block_noise, _, _, block, _ = results[i]
 
-          upper_left, lower_right, c = block
-          dist = (block_noise - noise)[0, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], c]
+          upper_left, lower_right = block
+          dist = (block_noise - noise)[0, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], :]
 
           yk[i] += rho * dist
 

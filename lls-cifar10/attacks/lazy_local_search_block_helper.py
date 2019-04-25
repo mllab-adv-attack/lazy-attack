@@ -63,12 +63,13 @@ class LazyLocalSearchBlockHelper(object):
     return adv_image
 
   # block(image) splitting function
-  def _split_block(self, upper_left, lower_right, c, block_size):
+  def _split_block(self, upper_left, lower_right, block_size):
     blocks = []
     xs = np.arange(upper_left[0], lower_right[0], block_size)
     ys = np.arange(upper_left[1], lower_right[1], block_size)
     for x, y in itertools.product(xs, ys):
-      blocks.append([[x, y], [x + block_size, y + block_size], c])
+      for c in range(3):
+        blocks.append([[x, y], [x + block_size, y + block_size], c])
     return blocks
 
   # flip part of the noise (-eps <--> eps)
@@ -80,16 +81,16 @@ class LazyLocalSearchBlockHelper(object):
 
   # compute loss term involving (xi - Si z)
   def admm_loss(self, block, x, z, yk, rho):
-    upper_left, lower_right, c = block
-    dist = (x-z)[:, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], c]
+    upper_left, lower_right = block
+    dist = (x-z)[:, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], :]
 
-    return np.sum(np.multiply(yk, dist), axis=(1, 2)) + (rho/2) * np.sum(np.multiply(dist, dist), axis=(1, 2))
+    return np.sum(np.multiply(yk, dist), axis=(1, 2, 3)) + (rho/2) * np.sum(np.multiply(dist, dist), axis=(1, 2, 3))
 
   # perturb an image within an admm block (iterate all batches)
   def perturb(self, image, noise, label, sess, admm_block, lls_block_size, success_checker, yk, rho, index, results):
     
-    upper_left, lower_right, c = admm_block
-    blocks = self._split_block(upper_left, lower_right, c, lls_block_size)
+    upper_left, lower_right = admm_block
+    blocks = self._split_block(upper_left, lower_right, lls_block_size)
 
     orig_noise = np.copy(noise)
     
@@ -120,7 +121,6 @@ class LazyLocalSearchBlockHelper(object):
   def perturb_one_batch(self, image, noise, orig_noise, label, sess, admm_block, blocks_batch, lls_block_size, success_checker, yk, rho):
     # Set random seed by index for the reproducibility
 
-    upper_left, lower_right, c = admm_block
     blocks = blocks_batch
 
     # Local variables
