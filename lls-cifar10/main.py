@@ -21,26 +21,31 @@ for attack in ATTACK_CLASSES:
 """ Arguments """
 parser = argparse.ArgumentParser()
 
+MODEL_DIR = './models/adv_trained'
+DATA_DIR = '../../cifar10_data'
+SAVE_DIR = './save'
+
 # Directory
-parser.add_argument('--model_dir', default='./models/adv_trained', type=str)
-parser.add_argument('--data_dir', default='../cifar10_data', type=str)
+parser.add_argument('--model_dir', default=MODEL_DIR, type=str)
+parser.add_argument('--data_dir', default=DATA_DIR, type=str)
 
 # Experiment Setting
 parser.add_argument('--img_index_start', default=0, type=int)
 parser.add_argument('--sample_size', default=100, type=int)
 parser.add_argument('--save_img', dest='save_img', action='store_true')
-parser.add_argument('--save_dir', default='/data_large/unsynced_store/seungyong/output/cifar10/lls/untargeted')
+parser.add_argument('--save_dir', default=SAVE_DIR)
 
 # Attack
-parser.add_argument('--attack', default='LazyLocalSearchBatchAttack', type=str)
+parser.add_argument('--attack', default='LazyLocalSearchAttack', type=str)
 parser.add_argument('--loss_func', default='xent', type=str)
 parser.add_argument('--epsilon', default=8, type=int)
 parser.add_argument('--max_queries', default=20000, type=int)
+parser.add_argument('--targeted', action='store_true')
 
-# Lazy Local Search Batch
+# Lazy Local Search
+parser.add_argument('--max_iters', default=1, type=int)
 parser.add_argument('--block_size', default=4, type=int)
-parser.add_argument('--max_iters', default=2, type=int)
-parser.add_argument('--batch_size', default=256, type=int)
+parser.add_argument('--batch_size', default=64, type=int)
 parser.add_argument('--no_hier', action='store_true')
 
 args = parser.parse_args()
@@ -69,6 +74,10 @@ if __name__ == '__main__':
   attack_class = getattr(sys.modules[__name__], args.attack)
   attack = attack_class(model, args)
   
+  # Create directory
+  if args.save_img:
+    tf.gfile.MakeDirs(args.save_dir)
+
   # Print hyperparameters
   for key, val in vars(args).items():
     tf.logging.info('{}={}'.format(key, val))
@@ -77,13 +86,13 @@ if __name__ == '__main__':
   cifar = cifar10_input.CIFAR10Data(args.data_dir)
   
   # Load indices
-  indices = np.load('../cifar10_data/indices_untargeted.npy') 
+  indices = np.load('./data/indices_untargeted.npy') 
   
   count = 0
   index = args.img_index_start
   total_num_corrects = 0
-  total_num_queries = []
-  index_to_num_queries = {}
+  total_queries = []
+  index_to_query = {}
 
   while count < args.sample_size:
     tf.logging.info("")
@@ -93,39 +102,54 @@ if __name__ == '__main__':
     initial_img = np.int32(initial_img)
     initial_img = np.expand_dims(initial_img, axis=0)
     orig_class = cifar.eval_data.ys[indices[index]]
+   
+    # Generate target class (same method as in Boundary attack)
+    if args.targeted:
+      target_class = (orig_class+1) % 10
+      target_class = np.expand_dims(target_class, axis=0)
+
     orig_class = np.expand_dims(orig_class, axis=0)
-    
+
     count += 1
+   
+    # Run attack
+    if args.targeted:
+      tf.logging.info('Targeted attack on {}th image starts, index: {}, orig class: {}, target class: {}'.format(
+        count, indices[index], orig_class[0], target_class[0]))
+      adv_img, num_queries, success = attack.perturb(initial_img, target_class, indices[index], sess)
+    else:
+      tf.logging.info('Untargeted attack on {}th image starts, index: {}, orig class: {}'.format(
+        count, indices[index], orig_class[0]))
+      adv_img, num_queries, success = attack.perturb(initial_img, orig_class, indices[index], sess)
     
-    tf.logging.info('Untargeted attack on {}th image starts, img index: {}, orig class: {}'.format(
-      count, indices[index], orig_class[0]))
-    
-    adv_img, num_queries, success = attack.perturb(initial_img, orig_class, indices[index], sess)
-    assert(np.amax(np.abs(adv_img-initial_img))<=args.epsilon)
-    
+    # Check if the adversarial image satisfies the constraint 
+    assert np.amax(np.abs(adv_img-initial_img)) <= args.epsilon
+    assert np.amax(adv_img) <= 255
+    assert np.amin(adv_img) >= 0
+    p = sess.run(model.predictions, feed_dict={model.x_input: adv_img})
+
+    # Save the adversarial image
     if args.save_img:
-      nat_image = Image.fromarray(np.ndarray.astype(initial_img[0, ...]*255, np.uint8))
-      nat_image.save(args.save_dir+'/nat/{}_nat.jpg'.format(indices[index]))
       adv_image = Image.fromarray(np.ndarray.astype(adv_img[0, ...]*255, np.uint8))
-      adv_image.save(args.save_dir+'/adv/{}_adv.jpg'.format(indices[index]))
-     
+      adv_image.save(os.path.join(args.save_dir, '{}_adv.jpg'.format(indices[index])))
+    
+    # Logging
     if success:
       total_num_corrects += 1
-      total_num_queries.append(num_queries)
-      index_to_num_queries[indices[index]] = num_queries
-      average_queries = 0 if len(total_num_queries) == 0 else np.mean(total_num_queries)
-      median_queries = 0 if len(total_num_queries) == 0 else np.median(total_num_queries)
-      tf.logging.info('Attack success, avg queries: {:.4f}, med queries: {}, success rate: {:.4f}'.format(
-        average_queries, median_queries, total_num_corrects/count))   
+      total_queries.append(num_queries)
+      index_to_query[indices[index]] = num_queries
+      average_queries = 0 if len(total_queries) == 0 else np.mean(total_queries)
+      median_queries = 0 if len(total_queries) == 0 else np.median(total_queries)
+      success_rate = total_num_corrects/count
+      tf.logging.info('Attack success, final class: {}, avg queries: {:.4f}, med queries: {}, success rate: {:.4f}'.format(
+        p[0], average_queries, median_queries, success_rate))   
     else:
-      index_to_num_queries[indices[index]] = -1
-      average_queries = 0 if len(total_num_queries) == 0 else np.mean(total_num_queries)
-      median_queries = 0 if len(total_num_queries) == 0 else np.median(total_num_queries)
-      tf.logging.info('Attack fail, avg queries: {:.4f}, med queries: {}, success rate: {:.4f}'.format(
-        average_queries, median_queries, total_num_corrects/count))   
+      index_to_query[indices[index]] = -1
+      average_queries = 0 if len(total_queries) == 0 else np.mean(total_queries)
+      median_queries = 0 if len(total_queries) == 0 else np.median(total_queries)
+      success_rate = total_num_corrects/count
+      tf.logging.info('Attack fail, final class: {}, avg queries: {:.4f}, med queries: {}, success rate: {:.4f}'.format(
+        p[0], average_queries, median_queries, success_rate))   
     
     index += 1
   
-  filename = args.save_dir+'/lls_new_new_untargeted_{}_{}_{}_{}.npy'.format(
-    args.loss_func, args.batch_size, args.max_iters, args.img_index_start+args.sample_size)
-  np.save(filename, index_to_num_queries) 
