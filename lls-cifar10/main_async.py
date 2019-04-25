@@ -42,14 +42,14 @@ parser.add_argument('--admm_block_size', default=16, help='block size for admm',
 parser.add_argument('--partition', default='basic', help='block partitioning scheme', type=str)
 parser.add_argument('--admm_iter', default=100, help='admm max iteration', type=int)
 parser.add_argument('--overlap', default=1, help='overlap size', type=int)
-parser.add_argument('--admm_rho', default=1e-7, help='admm rho', type=float)
+parser.add_argument('--admm_rho', default=1e-9, help='admm rho', type=float)
 parser.add_argument('--admm_tau', default=4, help='admm tau', type=float)
 parser.add_argument('--gpus', default=4, help='number of gpus to use', type=int)
 
 # Lazy Local Search Batch
 parser.add_argument('--lls_block_size', default=4, help='initial block size for lls', type=int)
 parser.add_argument('--lls_iter', default=1, type=int)
-parser.add_argument('--batch_size', default=256, type=int)
+parser.add_argument('--batch_size', default=64, type=int)
 parser.add_argument('--no_hier', action='store_true')
 args = parser.parse_args()
 
