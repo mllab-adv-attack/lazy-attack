@@ -26,3 +26,8 @@ gaon_cifar/models/**
 **/*.pyc
 **/*.pyo
 **/*.npy
+
+.idea/**
+
+*.out
+*.sh

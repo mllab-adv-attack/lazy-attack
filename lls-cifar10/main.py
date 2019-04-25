@@ -5,6 +5,7 @@ import numpy as np
 import sys
 import time
 import tensorflow as tf
+from PIL import Image
 
 import attacks
 import cifar10_input
@@ -31,7 +32,7 @@ parser.add_argument('--data_dir', default=DATA_DIR, type=str)
 
 # Experiment Setting
 parser.add_argument('--img_index_start', default=0, type=int)
-parser.add_argument('--sample_size', default=100, type=int)
+parser.add_argument('--sample_size', default=500, type=int)
 parser.add_argument('--save_img', dest='save_img', action='store_true')
 parser.add_argument('--save_dir', default=SAVE_DIR)
 
@@ -152,4 +153,4 @@ if __name__ == '__main__':
         p[0], average_queries, median_queries, success_rate))   
     
     index += 1
-  
+
