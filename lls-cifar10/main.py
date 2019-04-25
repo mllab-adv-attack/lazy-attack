@@ -41,7 +41,7 @@ parser.add_argument('--targeted', action='store_true')
 
 # Lazy Local Search Batch
 parser.add_argument('--block_size', default=4, type=int)
-parser.add_argument('--max_iters', default=2, type=int)
+parser.add_argument('--max_iters', default=1, type=int)
 parser.add_argument('--batch_size', default=256, type=int)
 parser.add_argument('--no_hier', action='store_true')
 

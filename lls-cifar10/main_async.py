@@ -48,7 +48,7 @@ parser.add_argument('--gpus', default=4, help='number of gpus to use', type=int)
 
 # Lazy Local Search Batch
 parser.add_argument('--lls_block_size', default=4, help='initial block size for lls', type=int)
-parser.add_argument('--lls_iter', default=2, type=int)
+parser.add_argument('--lls_iter', default=1, type=int)
 parser.add_argument('--batch_size', default=256, type=int)
 parser.add_argument('--no_hier', action='store_true')
 args = parser.parse_args()
