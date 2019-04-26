@@ -61,6 +61,8 @@ Includes Cifar10 PGD attack implementation from https://github.com/MadryLab/cifa
 Use this for PGD on Cifar-10.
 
 
-## Prerequisites
+## Downloading data
 
+Cifar-10: cp from ~/../gaon/lazy-attack/cifar10_data to this folder.
 
+ImageNet: cp from ~/../gaon/lazy-attack/imagenet_data to this folder.
