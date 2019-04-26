@@ -29,7 +29,7 @@ Adopted from https://github.com/MadryLab/blackbox-bandits
 
 ### bandit-imagenet
 
-Code of 1. changed to match format of 'ours'.
+Code of blackbox-attacks-bandits-priors changed to match format of 'ours'.
 
 ### nes-imagenet
 
