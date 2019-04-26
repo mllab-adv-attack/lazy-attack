@@ -24,17 +24,17 @@ L2 version of ours. Not used right now.
 
 ### blackbox-attacks-bandits-priors
 
-Code for baseline black-box attack 'Bandits' attack (ICLR 2019, https://arxiv.org/abs/1807.07978).
-Adopted from https://github.com/MadryLab/blackbox-bandits
+Code for baseline black-box attack 'Bandits' (ICLR 2019, https://arxiv.org/abs/1807.07978).
+Adopted from https://github.com/MadryLab/blackbox-bandits.
 
 ### bandit-imagenet
 
-Code of blackbox-attacks-bandits-priors changed to match format of 'ours'.
+Code of blackbox-attacks-bandits-priors changed to match format of 'ours' code.
 
 ### nes-imagenet
 
-Code for baseline block-box attack 'NES' attack (ICML 2018, https://arxiv.org/abs/1804.08598).
-Adopted from https://github.com/labsix/limited-blackbox-attacks
+Code for baseline block-box attack 'NES' (ICML 2018, https://arxiv.org/abs/1804.08598).
+Adopted from https://github.com/labsix/limited-blackbox-attacks.
 
 
 
