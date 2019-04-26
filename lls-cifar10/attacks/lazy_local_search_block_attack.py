@@ -148,6 +148,7 @@ class LazyLocalSearchBlockAttack(object):
 
     # Initialize query count, lls_block_size, main session
     num_queries = 0
+    non_parallel_queries = 0 # for counting non parallel queries
     lls_block_size = self.lls_block_size
     sess = sesses[0]
 
@@ -289,9 +290,7 @@ class LazyLocalSearchBlockAttack(object):
           return adv_image, num_queries, True, total_time
 
       end = time.time()
-
       total_time += (end-start)
-
       tf.logging.info('Step {}, Loss: {:.4f}, num queries: {}, Time taken: {:.4f}'.format(step, curr_loss, num_queries, end - start))
 
       # Divide lls_block_size if hierarchical is used

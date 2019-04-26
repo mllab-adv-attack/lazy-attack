@@ -27,6 +27,7 @@ parser.add_argument('--data_dir', default='../cifar10_data', help='Data director
 parser.add_argument('--img_index_start', default=0, type=int)
 parser.add_argument('--sample_size', default=500, help='Sample size', type=int)
 parser.add_argument('--save_img', dest='save_img', action='store_true', help='Save adversarial images')
+parser.add_argument('--save_npy', dest='save_npy', action='store_true', help='Save images in numpy')
 parser.add_argument('--save_dir', default='/data_large/unsynced_store/seungyong/output/cifar10/lls/untargeted')
 
 # Attack
@@ -132,6 +133,9 @@ if __name__ == '__main__':
     adv_img, num_queries, success, time = attack.perturb(initial_img, orig_class, indices[index], sesses)
     assert (np.amax(np.abs(adv_img - initial_img)) <= args.epsilon)
 
+    if args.save_npy and count%10==0:
+      np.save('./save/adv_imgs/adv_img_{}'.format(count), (adv_img-initial_img)[0, ...])
+    
     if args.save_img:
       nat_image = Image.fromarray(np.ndarray.astype(initial_img[0, ...] * 255, np.uint8))
       nat_image.save(args.save_dir + '/nat/{}_nat.jpg'.format(indices[index]))
