@@ -112,6 +112,7 @@ if __name__ == '__main__':
   index = args.img_index_start
   total_num_corrects = 0
   total_num_queries = []
+  total_parallel_queries = []
   index_to_num_queries = {}
   total_times = []
 
@@ -130,7 +131,7 @@ if __name__ == '__main__':
     tf.logging.info('Untargeted attack on {}th image starts, img index: {}, orig class: {}'.format(
       count, indices[index], orig_class[0]))
 
-    adv_img, num_queries, success, time = attack.perturb(initial_img, orig_class, indices[index], sesses)
+    adv_img, num_queries, parallel_queries, success, time = attack.perturb(initial_img, orig_class, indices[index], sesses)
     assert (np.amax(np.abs(adv_img - initial_img)) <= args.epsilon)
 
     if args.save_npy and count%10==0:
@@ -145,20 +146,23 @@ if __name__ == '__main__':
     if success:
       total_num_corrects += 1
       total_num_queries.append(num_queries)
+      total_parallel_queries.append(parallel_queries)
       total_times.append(time)
       index_to_num_queries[indices[index]] = num_queries
       average_queries = 0 if len(total_num_queries) == 0 else np.mean(total_num_queries)
       median_queries = 0 if len(total_num_queries) == 0 else np.median(total_num_queries)
+      average_parallel_queries = 0 if len(total_parallel_queries) == 0 else np.mean(total_parallel_queries)
       average_time = 0 if len(total_times) == 0 else np.mean(total_times)
-      tf.logging.info('Attack success, avg queries: {:.4f}, med queries: {}, success rate: {:.4f}, avg time: {:.4f}'.format(
-        average_queries, median_queries, total_num_corrects / count, average_time))
+      tf.logging.info('Attack success, avg queries: {:.4f}, med queries: {}, avg per-gpu queries: {}, success rate: {:.4f}, avg time: {:.4f}'.format(
+        average_queries, median_queries, average_parallel_queries, total_num_corrects / count, average_time))
     else:
       index_to_num_queries[indices[index]] = -1
       average_queries = 0 if len(total_num_queries) == 0 else np.mean(total_num_queries)
       median_queries = 0 if len(total_num_queries) == 0 else np.median(total_num_queries)
+      average_parallel_queries = 0 if len(total_parallel_queries) == 0 else np.mean(total_parallel_queries)
       average_time = 0 if len(total_times) == 0 else np.mean(total_times)
-      tf.logging.info('Attack fail, avg queries: {:.4f}, med queries: {}, success rate: {:.4f}, avg time: {:.4f}'.format(
-        average_queries, median_queries, total_num_corrects / count, average_time))
+      tf.logging.info('Attack fail, avg queries: {:.4f}, med queries: {}, avg per-gpu queries: {}, success rate: {:.4f}, avg time: {:.4f}'.format(
+        average_queries, median_queries, average_parallel_queries, total_num_corrects / count, average_time))
 
     index += 1
 
