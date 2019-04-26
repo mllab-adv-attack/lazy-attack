@@ -2,6 +2,24 @@
 
 
 
+## Ours implementations
+
+### lls-imagenet
+
+ImageNet version code of 'ours' method, paper version.
+(admm versions to be implemented here)
+
+### lls-cifar10
+
+Cifar-10 version code of 'ours' method, paper version.
+(admm versions to be implemented here)
+
+### l2-imagenet
+
+L2 version of ours. Not used right now.
+
+
+
 ## Baseline implementations
 
 ### blackbox-attacks-bandits-priors
@@ -20,21 +38,7 @@ Adopted from https://github.com/labsix/limited-blackbox-attacks
 
 
 
-## Ours implementations
-
-### lls-imagenet
-
-ImageNet version code of 'ours' method, paper version.
-(admm versions to be implemented here)
-
-### lls-cifar10
-
-Cifar-10 version code of 'ours' method, paper version.
-(admm versions to be implemented here)
-
-### l2-imagenet
-
-L2 version of ours. Not used right now.
+## Others
 
 ### gaon_imagenet
 
