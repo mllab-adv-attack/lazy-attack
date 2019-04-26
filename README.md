@@ -66,3 +66,13 @@ Use this for PGD on Cifar-10.
 Cifar-10: cp from ~/../gaon/lazy-attack/cifar10_data to this folder.
 
 ImageNet: cp from ~/../gaon/lazy-attack/imagenet_data to this folder.
+
+## Downloading models
+
+Cifar-10: cp from ~/../gaon/lazy-attack/lls_cifar10/models to your corresponding Cifar folders.
+
+Or follow https://github.com/MadryLab/cifar10_challenge.
+
+ImageNet: cp from ~/../gaon/lazy-attack/lls-imagenet/tools/data to your corresponding ImageNet folders.
+
+Or download from Tensorflow (https://github.com/tensorflow/models/tree/master/research/slim).
