@@ -215,7 +215,7 @@ if __name__ == '__main__':
       eval_batch_size = 1
     num_batches = int(math.ceil(num_eval_examples / eval_batch_size))
 
-    indices = np.load('./../lazy-attack/cifar10_data/indices_untargeted.npy')
+    indices = np.load('./../cifar10_data/indices_untargeted.npy')
 
     x_adv = [] # adv accumulator
 
