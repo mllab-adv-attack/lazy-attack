@@ -92,7 +92,15 @@ class LazyLocalSearchBlockHelper(object):
     upper_left, lower_right = admm_block
     blocks = self._split_block(upper_left, lower_right, lls_block_size)
 
-    new_noise = np.copy(noise)
+    # initialize local noise
+    if np.amax(noise) < 1 and np.amin(noise) > -1:
+      # initialize for first round of admm
+      block_noise = -self.epsilon * np.ones_like(noise, dtype=np.int32)
+    else:
+      # threshold values to -eps, eps
+      block_noise = np.copy(noise)
+      block_noise = np.where(block_noise == 0, -1, block_noise)
+      block_noise = self.epsilon * np.sign(block_noise)
     
     num_queries = 0
 
@@ -106,19 +114,19 @@ class LazyLocalSearchBlockHelper(object):
       bend = min((i+1)*self.batch_size, num_blocks)
       blocks_batch = [blocks[curr_order[idx]] for idx in range(bstart, bend)]
 
-      new_noise, queries, loss, success = self.perturb_one_batch(image, new_noise, noise, label, sess, admm_block, blocks_batch, lls_block_size, success_checker, yk, rho)
+      block_noise, queries, loss, success = self.perturb_one_batch(image, block_noise, noise, label, sess, admm_block, blocks_batch, lls_block_size, success_checker, yk, rho)
       num_queries += queries
     
       if success_checker.check():
-        results[index] = [new_noise, num_queries, loss, admm_block, success]
+        results[index] = [block_noise, num_queries, loss, admm_block, success]
         return
 
-    results[index] = [new_noise, num_queries, loss, admm_block, success]
+    results[index] = [block_noise, num_queries, loss, admm_block, success]
     return
 
   # perturb an image within an admm block (one batch)
   # from lazy_local_search_helper.perturb
-  def perturb_one_batch(self, image, noise, orig_noise, label, sess, admm_block, blocks_batch, lls_block_size, success_checker, yk, rho):
+  def perturb_one_batch(self, image, block_noise, noise, label, sess, admm_block, blocks_batch, lls_block_size, success_checker, yk, rho):
     # Set random seed by index for the reproducibility
 
     blocks = blocks_batch
@@ -134,11 +142,11 @@ class LazyLocalSearchBlockHelper(object):
       x = upper_left[0]
       y = upper_left[1]
       # If flipped, set A to be 1
-      if noise[0, x, y, channel] > 0:
+      if block_noise[0, x, y, channel] > 0:
         A[i] = 1
 
     # Calculate current loss
-    image_batch = self._perturb_image(image, noise)
+    image_batch = self._perturb_image(image, block_noise)
     label_batch = np.copy(label)
     losses, preds = sess.run([self.losses, self.preds],
                              feed_dict={self.x_input: image_batch, self.y_input: label_batch})
@@ -149,14 +157,14 @@ class LazyLocalSearchBlockHelper(object):
     if self.targeted:
       if preds == label:
         success_checker.set()
-        return noise, num_queries, curr_loss, True
+        return block_noise, num_queries, curr_loss, True
     else:
       if preds != label:
         success_checker.set()
-        return noise, num_queries, curr_loss, True
+        return block_noise, num_queries, curr_loss, True
 
     if success_checker.check():
-      return noise, num_queries, curr_loss, False
+      return block_noise, num_queries, curr_loss, False
 
     # Main loop
     for _ in range(1):
@@ -175,27 +183,27 @@ class LazyLocalSearchBlockHelper(object):
         label_batch = np.tile(label, bend-bstart)
 
         for i, idx in enumerate(indices[bstart:bend]):
-          noise_batch[i:i+1, ...] = self._flip_noise(noise, blocks[idx])
+          noise_batch[i:i+1, ...] = self._flip_noise(block_noise, blocks[idx])
           image_batch[i:i+1, ...] = self._perturb_image(image, noise_batch[i:i+1, ...])
 
         losses, preds = sess.run([self.losses, self.preds],
                                  feed_dict={self.x_input: image_batch, self.y_input: label_batch})
 
         if self.admm:
-          losses += self.admm_loss(admm_block, noise_batch, orig_noise, yk, rho)
+          losses += self.admm_loss(admm_block, noise_batch, noise, yk, rho)
 
         # Early stopping
         success_indices, = np.where(preds == label) if self.targeted else np.where(preds != label)
         if len(success_indices) > 0:
-          noise[0, ...] = noise_batch[success_indices[0], ...]
+          block_noise[0, ...] = noise_batch[success_indices[0], ...]
           curr_loss = losses[success_indices[0]]
           num_queries += success_indices[0] + 1
 
           success_checker.set()
-          return noise, num_queries, curr_loss, True
+          return block_noise, num_queries, curr_loss, True
 
         if success_checker.check():
-          return noise, num_queries, curr_loss, False
+          return block_noise, num_queries, curr_loss, False
 
         num_queries += bend-bstart
 
@@ -209,7 +217,7 @@ class LazyLocalSearchBlockHelper(object):
       if len(priority_queue) > 0:
         best_margin, best_idx = heapq.heappop(priority_queue)
         curr_loss += best_margin
-        noise = self._flip_noise(noise, blocks[best_idx])
+        block_noise = self._flip_noise(block_noise, blocks[best_idx])
         A[best_idx] = 1
 
       # Add elements into working set
@@ -219,14 +227,14 @@ class LazyLocalSearchBlockHelper(object):
 
         # Re-evalulate the element
         image_batch = self._perturb_image(
-          image, self._flip_noise(noise, blocks[cand_idx]))
+          image, self._flip_noise(block_noise, blocks[cand_idx]))
         label_batch = np.copy(label)
 
         losses, preds = sess.run([self.losses, self.preds],
                                  feed_dict={self.x_input: image_batch, self.y_input: label_batch})
 
         if self.admm:
-          losses += self.admm_loss(admm_block, self._flip_noise(noise, blocks[cand_idx]), orig_noise, yk, rho)
+          losses += self.admm_loss(admm_block, self._flip_noise(block_noise, blocks[cand_idx]), noise, yk, rho)
 
         num_queries += 1
         margin = losses[0]-curr_loss
@@ -238,20 +246,20 @@ class LazyLocalSearchBlockHelper(object):
             break
           # Perturb image
           curr_loss = losses[0]
-          noise = self._flip_noise(noise, blocks[cand_idx])
+          block_noise = self._flip_noise(block_noise, blocks[cand_idx])
           A[cand_idx] = 1
           # Early stopping
           if self.targeted:
             if preds == label:
               success_checker.set()
-              return noise, num_queries, curr_loss, True
+              return block_noise, num_queries, curr_loss, True
           else:
             if preds != label:
               success_checker.set()
-              return noise, num_queries, curr_loss, True
+              return block_noise, num_queries, curr_loss, True
             
           if success_checker.check():
-            return noise, num_queries, curr_loss, False
+            return block_noise, num_queries, curr_loss, False
             
         # If the cardinality has changed, push the element into the priority queue
         else:
@@ -274,26 +282,26 @@ class LazyLocalSearchBlockHelper(object):
         label_batch = np.tile(label, bend-bstart)
 
         for i, idx in enumerate(indices[bstart:bend]):
-          noise_batch[i:i+1, ...] = self._flip_noise(noise, blocks[idx])
+          noise_batch[i:i+1, ...] = self._flip_noise(block_noise, blocks[idx])
           image_batch[i:i+1, ...] = self._perturb_image(image, noise_batch[i:i+1, ...])
 
         losses, preds = sess.run([self.losses, self.preds],
                                  feed_dict={self.x_input: image_batch, self.y_input: label_batch})
 
         if self.admm:
-          losses += self.admm_loss(admm_block, noise_batch, orig_noise, yk, rho)
+          losses += self.admm_loss(admm_block, noise_batch, noise, yk, rho)
 
         # Early stopping
         success_indices, = np.where(preds == label) if self.targeted else np.where(preds != label)
         if len(success_indices) > 0:
-          noise[0, ...] = noise_batch[success_indices[0], ...]
+          block_noise[0, ...] = noise_batch[success_indices[0], ...]
           curr_loss = losses[success_indices[0]]
           num_queries += success_indices[0] + 1
           success_checker.set()
-          return noise, num_queries, curr_loss, True
+          return block_noise, num_queries, curr_loss, True
           
         if success_checker.check():
-          return noise, num_queries, curr_loss, False
+          return block_noise, num_queries, curr_loss, False
           
         num_queries += bend-bstart
 
@@ -307,7 +315,7 @@ class LazyLocalSearchBlockHelper(object):
       if len(priority_queue) > 0:
         best_margin, best_idx = heapq.heappop(priority_queue)
         curr_loss += best_margin
-        noise = self._flip_noise(noise, blocks[best_idx])
+        block_noise = self._flip_noise(block_noise, blocks[best_idx])
         A[best_idx] = 0
 
       # Delete elements from working set
@@ -316,14 +324,14 @@ class LazyLocalSearchBlockHelper(object):
         cand_margin, cand_idx = heapq.heappop(priority_queue)
         # Re-evalulate the element
         image_batch = self._perturb_image(
-          image, self._flip_noise(noise, blocks[cand_idx]))
+          image, self._flip_noise(block_noise, blocks[cand_idx]))
         label_batch = np.copy(label)
 
         losses, preds = sess.run([self.losses, self.preds],
                                  feed_dict={self.x_input: image_batch, self.y_input: label_batch})
 
         if self.admm:
-          losses += self.admm_loss(admm_block, self._flip_noise(noise, blocks[cand_idx]), orig_noise, yk, rho)
+          losses += self.admm_loss(admm_block, self._flip_noise(block_noise, blocks[cand_idx]), noise, yk, rho)
 
         num_queries += 1
         margin = losses[0]-curr_loss
@@ -335,24 +343,24 @@ class LazyLocalSearchBlockHelper(object):
             break
           # Update noise
           curr_loss = losses[0]
-          noise = self._flip_noise(noise, blocks[cand_idx])
+          block_noise = self._flip_noise(block_noise, blocks[cand_idx])
           A[cand_idx] = 0
           # Early stopping
           if self.targeted:
             if preds == label:
               success_checker.set()
-              return noise, num_queries, curr_loss, True
+              return block_noise, num_queries, curr_loss, True
           else:
             if preds != label:
               success_checker.set()
-              return noise, num_queries, curr_loss, True
+              return block_noise, num_queries, curr_loss, True
           if success_checker.check():
-            return noise, num_queries, curr_loss, False
+            return block_noise, num_queries, curr_loss, False
         # If the cardinality has changed, push the element into the priority queue
         else:
           heapq.heappush(priority_queue, (margin, cand_idx))
 
       priority_queue = []
 
-    return noise, num_queries, curr_loss, False
+    return block_noise, num_queries, curr_loss, False
 

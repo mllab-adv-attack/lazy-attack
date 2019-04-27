@@ -159,8 +159,8 @@ class LazyLocalSearchBlockAttack(object):
     lls_block_size = self.lls_block_size
     sess = sesses[0]
 
-    # Initialize noise
-    noise = -self.epsilon * np.ones_like(image, dtype=np.int32)
+    # Initialize global noise
+    noise = np.zeros_like(image, dtype=np.int32)
 
     # Initialize admm variables
     yk = []
