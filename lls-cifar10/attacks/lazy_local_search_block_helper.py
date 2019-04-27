@@ -167,7 +167,7 @@ class LazyLocalSearchBlockHelper(object):
       return block_noise, num_queries, curr_loss, False
 
     # Main loop
-    for _ in range(1):
+    for _ in range(self.lls_iter):
       # Lazy Greedy Insert
       indices,  = np.where(A==0)
 

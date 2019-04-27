@@ -214,11 +214,12 @@ class LazyLocalSearchBlockAttack(object):
               curr_loss = block_loss
               adv_image = self._perturb_image(image, noise)
 
-          # Max query checking
-          if num_queries > self.max_queries:
+          # Max query checking (use per-gpu queries)
+          parallel_queries = self._parallel_queries(num_queries, non_parallel_queries)
+    
+          if parallel_queries > self.max_queries:
             end = time.time()
             total_time += (end-start)
-            parallel_queries = self._parallel_queries(num_queries, non_parallel_queries)
             tf.logging.info('Step {}, Loss: {:.4f}, total queries: {}, per-gpu queries: {:.2f}, Time taken: {:.4f}'.format(step, curr_loss, num_queries, parallel_queries, end - start))
             return adv_image, num_queries, parallel_queries, False, total_time
 
@@ -226,7 +227,6 @@ class LazyLocalSearchBlockAttack(object):
           if self.success_checker.check():
             end = time.time()
             total_time += (end-start)
-            parallel_queries = self._parallel_queries(num_queries, non_parallel_queries)
             tf.logging.info('Step {}, Loss: {:.4f}, total queries: {}, per-gpu queries: {:.2f}, Time taken: {:.4f}'.format(step, curr_loss, num_queries, parallel_queries, end - start))
             return adv_image, num_queries, parallel_queries, True, total_time
 
@@ -275,11 +275,12 @@ class LazyLocalSearchBlockAttack(object):
 
       curr_loss = losses[0]
 
-      # Max queries checking
-      if num_queries > self.max_queries:
+      # Max queries checking (use per-gpu queries)
+      parallel_queries = self._parallel_queries(num_queries, non_parallel_queries)
+
+      if parallel_queries > self.max_queries:
         end = time.time()
         total_time += (end-start)
-        parallel_queries = self._parallel_queries(num_queries, non_parallel_queries)
         tf.logging.info('Step {}, Loss: {:.4f}, total queries: {}, per-gpu queries: {:.2f}, Time taken: {:.4f}'.format(step, curr_loss, num_queries, parallel_queries, end - start))
         return adv_image, num_queries, parallel_queries, False, total_time
 
@@ -288,20 +289,17 @@ class LazyLocalSearchBlockAttack(object):
         if preds == label:
           end = time.time()
           total_time += (end-start)
-          parallel_queries = self._parallel_queries(num_queries, non_parallel_queries)
           tf.logging.info('Step {}, Loss: {:.4f}, total queries: {}, per-gpu queries: {:.2f}, Time taken: {:.4f}'.format(step, curr_loss, num_queries, parallel_queries, end - start))
           return adv_image, num_queries, parallel_queries, True, total_time
       else:
         if preds != label:
           end = time.time()
           total_time += (end-start)
-          parallel_queries = self._parallel_queries(num_queries, non_parallel_queries)
           tf.logging.info('Step {}, Loss: {:.4f}, total queries: {}, per-gpu queries: {:.2f}, Time taken: {:.4f}'.format(step, curr_loss, num_queries, parallel_queries, end - start))
           return adv_image, num_queries, parallel_queries, True, total_time
 
       end = time.time()
       total_time += (end-start)
-      parallel_queries = self._parallel_queries(num_queries, non_parallel_queries)
       tf.logging.info('Step {}, Loss: {:.4f}, total queries: {}, per-gpu queries: {:.2f}, Time taken: {:.4f}'.format(step, curr_loss, num_queries, parallel_queries, end - start))
 
       # Divide lls_block_size if hierarchical is used

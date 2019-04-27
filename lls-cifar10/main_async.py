@@ -16,6 +16,10 @@ ATTACK_CLASSES = [
 for attack in ATTACK_CLASSES:
   setattr(sys.modules[__name__], attack.__name__, attack)
 
+# for passing boolean values to *_slurm.py in hyperparameter searching
+def str2bool(key):
+  return key.lower() in ('yes', 'true', 'y', 't')
+
 """ Arguemnts """
 parser = argparse.ArgumentParser()
 
@@ -26,8 +30,8 @@ parser.add_argument('--data_dir', default='../cifar10_data', help='Data director
 # Experiment Setting
 parser.add_argument('--img_index_start', default=0, type=int)
 parser.add_argument('--sample_size', default=500, help='Sample size', type=int)
-parser.add_argument('--save_img', dest='save_img', action='store_true', help='Save adversarial images')
-parser.add_argument('--save_npy', dest='save_npy', action='store_true', help='Save images in numpy')
+parser.add_argument('--save_img', default='False', help='Save adversarial images', type=str2bool)
+parser.add_argument('--save_npy', default='False', help='Save images in numpy', type=str2bool)
 parser.add_argument('--save_dir', default='/data_large/unsynced_store/seungyong/output/cifar10/lls/untargeted')
 
 # Attack
@@ -35,23 +39,23 @@ parser.add_argument('--attack', default='LazyLocalSearchBlockAttack', help='Atta
 parser.add_argument('--loss_func', default='xent', help='Loss function', type=str)
 parser.add_argument('--epsilon', default=8, help="Epsilon", type=int)
 parser.add_argument('--max_queries', default=20000, type=int)
-parser.add_argument('--targeted', action='store_true')
+parser.add_argument('--targeted', default='False', type=str2bool)
 
 # Block attack
-parser.add_argument('--admm', action='store_true', help='use admm')
+parser.add_argument('--admm', default='False', help='use admm', type=str2bool)
 parser.add_argument('--admm_block_size', default=16, help='block size for admm', type=int)
 parser.add_argument('--partition', default='basic', help='block partitioning scheme', type=str)
 parser.add_argument('--admm_iter', default=100, help='admm max iteration', type=int)
-parser.add_argument('--overlap', default=1, help='overlap size', type=int)
-parser.add_argument('--admm_rho', default=1e-9, help='admm rho', type=float)
-parser.add_argument('--admm_tau', default=4, help='admm tau', type=float)
+parser.add_argument('--overlap', default=2, help='overlap size', type=int)
+parser.add_argument('--admm_rho', default=1e-8, help='admm rho', type=float)
+parser.add_argument('--admm_tau', default=1.05, help='admm tau', type=float)
 parser.add_argument('--gpus', default=4, help='number of gpus to use', type=int)
 
 # Lazy Local Search Batch
 parser.add_argument('--lls_block_size', default=4, help='initial block size for lls', type=int)
 parser.add_argument('--lls_iter', default=1, type=int)
 parser.add_argument('--batch_size', default=64, type=int)
-parser.add_argument('--no_hier', action='store_true')
+parser.add_argument('--no_hier', default='False', type=str2bool)
 args = parser.parse_args()
 
 """ Main script """
