@@ -92,7 +92,7 @@ class LazyLocalSearchBlockHelper(object):
     upper_left, lower_right = admm_block
     blocks = self._split_block(upper_left, lower_right, lls_block_size)
 
-    orig_noise = np.copy(noise)
+    new_noise = np.copy(noise)
     
     num_queries = 0
 
@@ -106,14 +106,14 @@ class LazyLocalSearchBlockHelper(object):
       bend = min((i+1)*self.batch_size, num_blocks)
       blocks_batch = [blocks[curr_order[idx]] for idx in range(bstart, bend)]
 
-      noise, queries, loss, success = self.perturb_one_batch(image, noise, orig_noise, label, sess, admm_block, blocks_batch, lls_block_size, success_checker, yk, rho)
+      new_noise, queries, loss, success = self.perturb_one_batch(image, new_noise, noise, label, sess, admm_block, blocks_batch, lls_block_size, success_checker, yk, rho)
       num_queries += queries
     
       if success_checker.check():
-        results[index] = [noise, num_queries, loss, admm_block, success]
+        results[index] = [new_noise, num_queries, loss, admm_block, success]
         return
 
-    results[index] = [noise, num_queries, loss, admm_block, success]
+    results[index] = [new_noise, num_queries, loss, admm_block, success]
     return
 
   # perturb an image within an admm block (one batch)
