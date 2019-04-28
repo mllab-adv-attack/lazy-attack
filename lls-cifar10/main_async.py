@@ -47,8 +47,8 @@ parser.add_argument('--admm_block_size', default=16, help='block size for admm',
 parser.add_argument('--partition', default='basic', help='block partitioning scheme', type=str)
 parser.add_argument('--admm_iter', default=100, help='admm max iteration', type=int)
 parser.add_argument('--overlap', default=2, help='overlap size', type=int)
-parser.add_argument('--admm_rho', default=1e-8, help='admm rho', type=float)
-parser.add_argument('--admm_tau', default=1.05, help='admm tau', type=float)
+parser.add_argument('--admm_rho', default=1e-12, help='admm rho', type=float)
+parser.add_argument('--admm_tau', default=1.5, help='admm tau', type=float)
 parser.add_argument('--gpus', default=4, help='number of gpus to use', type=int)
 
 # Lazy Local Search Batch
