@@ -27,15 +27,15 @@ class SuccessChecker(object):
 # lls-admm solver
 class LazyLocalSearchBlockAttack(object):
   def __init__(self, models, args, **kwargs):
-    # Setting
+    # basic settings
     self.models = models
     self.model = models[0]
     self.epsilon = args.epsilon
-    self.admm_iter = args.admm_iter
     self.loss_func = args.loss_func
     self.targeted = args.targeted
     self.max_queries = args.max_queries
 
+    # admm settings
     self.admm_block_size = args.admm_block_size
     self.partition = args.partition
     self.admm_iter = args.admm_iter
@@ -45,6 +45,7 @@ class LazyLocalSearchBlockAttack(object):
     self.admm_tau = args.admm_tau
     self.gpus = args.gpus
 
+    # lazy local search settings
     self.lls_iter = args.lls_iter
     self.lls_block_size = args.lls_block_size
     self.batch_size = args.batch_size
