@@ -43,3 +43,4 @@ gaon_cifar/models/**
 *run_general*
 *.test_exp
 *__par_main_wrapper__.py
+*.swp

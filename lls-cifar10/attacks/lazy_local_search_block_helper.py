@@ -107,6 +107,10 @@ class LazyLocalSearchBlockHelper(object):
 
     # initialize local noise
     block_noise = np.copy(prev_block_noise)
+    #block_noise = np.where(noise==0, -1, noise)
+    #block_noise = self.epsilon * np.sign(block_noise)
+    #print(np.unique(block_noise, return_counts=True)
+
 
     # initialize query count
     num_queries = 0

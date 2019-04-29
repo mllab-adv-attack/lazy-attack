@@ -163,7 +163,7 @@ class LazyLocalSearchBlockAttack(object):
     non_parallel_queries = 0 # for counting non parallel queries
     lls_block_size = self.lls_block_size
     sess = sesses[0]
-    results, prev_results = None, None
+    results, prev_results, = None, None
 
     # Initialize global noise
     noise = np.zeros_like(image, dtype=np.int32)
@@ -189,17 +189,20 @@ class LazyLocalSearchBlockAttack(object):
 
       # Initialize threads
       threads = []
+      prev_block_noises = [None] * len(self.blocks)
       results = [None] * len(self.blocks)
 
       for i in range(len(self.blocks)):
         # Solve lazy greedy on the block
         if step == 0:
-          prev_block_noise = -self.epsilon * np.ones_like(noise, dtype=np.int32)
+          prev_block_noises[i] = -self.epsilon * np.ones_like(noise, dtype=np.int32)
         else:
           prev_block_noise, _, _, _, _ = prev_results[i]
+          prev_block_noises[i] = np.copy(prev_block_noise)
+          print(np.unique(prev_block_noise, return_counts=True))
 
         threads.append(threading.Thread(target=self.lazy_local_search[i].perturb, args=(image,
-                                                                                        prev_block_noise,
+                                                                                        prev_block_noises[i],
                                                                                         noise,
                                                                                         label,
                                                                                         sesses[i%self.gpus],
