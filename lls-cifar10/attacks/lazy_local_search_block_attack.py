@@ -206,8 +206,6 @@ class LazyLocalSearchBlockAttack(object):
           prev_block_noises[i][:, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], :] = \
             prev_block_noise[:, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], :]
 
-          print(np.unique(prev_block_noise, return_counts=True))
-
         threads.append(threading.Thread(target=self.lazy_local_search[i].perturb, args=(image,
                                                                                         prev_block_noises[i],
                                                                                         noise,
