@@ -101,7 +101,7 @@ if __name__ == '__main__':
   sess = sesses[0]
  
   # Restore parameters
-  for i in range(args.gpus):
+  for i in range(args.parallel):
     with graphes[i].as_default():
       saver = tf.train.Saver(tf.global_variables())
       saver.restore(sesses[i], model_file)
