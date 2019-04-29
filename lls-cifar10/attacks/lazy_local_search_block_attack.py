@@ -241,8 +241,8 @@ class LazyLocalSearchBlockAttack(object):
           if parallel_queries > self.max_queries:
             end = time.time()
             total_time = end - total_start
-            tf.logging.info('Step {}, Loss: {:.5f}, total queries: {}, \
-                            per-gpu queries: {:.0f}, Time taken: {:.2f}'.format(
+            tf.logging.info('Step {}, Loss: {:.5f}, total queries: {}, '
+                            'per-gpu queries: {:.0f}, Time taken: {:.2f}'.format(
               step, curr_loss, num_queries, parallel_queries, end - start))
             return adv_image, num_queries, parallel_queries, False, total_time
 
@@ -250,8 +250,8 @@ class LazyLocalSearchBlockAttack(object):
           if self.success_checker.check():
             end = time.time()
             total_time = end - total_start
-            tf.logging.info('Step {}, Loss: {:.5f}, total queries: {}, \
-                            per-gpu queries: {:.0f}, Time taken: {:.2f}'.format(
+            tf.logging.info('Step {}, Loss: {:.5f}, total queries: {}, '
+                            'per-gpu queries: {:.0f}, Time taken: {:.2f}'.format(
               step, curr_loss, num_queries, parallel_queries, end - start))
             return adv_image, num_queries, parallel_queries, True, total_time
 
@@ -331,8 +331,8 @@ class LazyLocalSearchBlockAttack(object):
       if parallel_queries > self.max_queries:
         end = time.time()
         total_time = end - total_start
-        tf.logging.info('Step {}, Loss: {:.5f}, total queries: {}, \
-                        per-gpu queries: {:.0f}, change ratio: {:.4f}, Time taken: {:.2f}'.format(
+        tf.logging.info('Step {}, Loss: {:.5f}, total queries: {}, '
+                        'per-gpu queries: {:.0f}, change ratio: {:.4f}, Time taken: {:.2f}'.format(
           step, curr_loss, num_queries, parallel_queries, change_ratio, end - start))
         return adv_image, num_queries, parallel_queries, False, total_time
 
@@ -341,22 +341,22 @@ class LazyLocalSearchBlockAttack(object):
         if preds == label:
           end = time.time()
           total_time = end - total_start
-          tf.logging.info('Step {}, Loss: {:.5f}, total queries: {}, \
-                          per-gpu queries: {:.0f}, change ratio: {:.4f}, Time taken: {:.2f}'.format(
+          tf.logging.info('Step {}, Loss: {:.5f}, total queries: {}, '
+                          'per-gpu queries: {:.0f}, change ratio: {:.4f}, Time taken: {:.2f}'.format(
             step, curr_loss, num_queries, parallel_queries, change_ratio, end - start))
           return adv_image, num_queries, parallel_queries, True, total_time
       else:
         if preds != label:
           end = time.time()
           total_time = end - total_start
-          tf.logging.info('Step {}, Loss: {:.5f}, total queries: {}, \
-                          per-gpu queries: {:.0f}, change ratio: {:.4f}, Time taken: {:.2f}'.format(
+          tf.logging.info('Step {}, Loss: {:.5f}, total queries: {}, '
+                          'per-gpu queries: {:.0f}, change ratio: {:.4f}, Time taken: {:.2f}'.format(
             step, curr_loss, num_queries, parallel_queries, change_ratio, end - start))
           return adv_image, num_queries, parallel_queries, True, total_time
 
       end = time.time()
-      tf.logging.info('Step {}, Loss: {:.5f}, total queries: {}, \
-                      per-gpu queries: {:.0f}, change ratio: {:.4f}, Time taken: {:.2f}'.format(
+      tf.logging.info('Step {}, Loss: {:.5f}, total queries: {}, '
+                      'per-gpu queries: {:.0f}, change ratio: {:.4f}, Time taken: {:.2f}'.format(
         step, curr_loss, num_queries, parallel_queries, change_ratio, end - start))
 
       # Divide lls_block_size if hierarchical is used
