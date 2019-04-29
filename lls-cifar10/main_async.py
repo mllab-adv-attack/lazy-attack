@@ -49,7 +49,7 @@ parser.add_argument('--admm_iter', default=100, help='admm max iteration', type=
 parser.add_argument('--overlap', default=0, help='overlap size', type=int)
 parser.add_argument('--admm_rho', default=1e-12, help='admm rho', type=float)
 parser.add_argument('--admm_tau', default=1.5, help='admm tau', type=float)
-parser.add_argument('--gpus', default=2, help='number of gpus to use', type=int)
+parser.add_argument('--gpus', default=1, help='number of gpus to use', type=int)
 parser.add_argument('--parallel', default=4, help='number of parallel threads to use', type=int)
 
 # Lazy Local Search Batch
@@ -82,8 +82,8 @@ if __name__ == '__main__':
   config = tf.ConfigProto()
   config.gpu_options.allow_growth = True
 
-  # Assign 1~2 threads per gpu
-  assert (args.parallel >= args.gpus) and (args.parallel % args.gpus == 0) and (args.parallel // args.gpus <= 2)
+  # Assign 1~4 threads per gpu
+  assert (args.parallel >= args.gpus) and (args.parallel % args.gpus == 0) and (args.parallel // args.gpus <= 4)
     
   with tf.variable_scope(tf.get_variable_scope(), reuse=tf.AUTO_REUSE):
     for i in range(args.parallel):
