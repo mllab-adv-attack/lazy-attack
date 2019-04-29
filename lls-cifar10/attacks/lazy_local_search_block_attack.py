@@ -197,8 +197,15 @@ class LazyLocalSearchBlockAttack(object):
         if step == 0:
           prev_block_noises[i] = -self.epsilon * np.ones_like(noise, dtype=np.int32)
         else:
-          prev_block_noise, _, _, _, _ = prev_results[i]
-          prev_block_noises[i] = np.copy(prev_block_noise)
+          prev_block_noise, _, _, block, _ = prev_results[i]
+
+          upper_left, lower_right = block
+
+          # initialize to (x ; z \ x)
+          prev_block_noises[i] = np.copy(noise)
+          prev_block_noises[i][:, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], :] = \
+            prev_block_noise[:, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], :]
+
           print(np.unique(prev_block_noise, return_counts=True))
 
         threads.append(threading.Thread(target=self.lazy_local_search[i].perturb, args=(image,
@@ -268,11 +275,11 @@ class LazyLocalSearchBlockAttack(object):
 
         upper_left, lower_right = block
 
-        new_noise[0, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], :] += \
-            block_noise[0, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], :]
+        new_noise[:, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], :] += \
+            block_noise[:, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], :]
 
-        overlap_count[0, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], :] += \
-            np.ones_like(block_noise[0, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], :])
+        overlap_count[:, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], :] += \
+            np.ones_like(block_noise[:, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], :])
 
       new_noise = new_noise / overlap_count
 
