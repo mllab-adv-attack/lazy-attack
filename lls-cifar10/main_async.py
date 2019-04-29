@@ -49,7 +49,8 @@ parser.add_argument('--admm_iter', default=100, help='admm max iteration', type=
 parser.add_argument('--overlap', default=0, help='overlap size', type=int)
 parser.add_argument('--admm_rho', default=1e-12, help='admm rho', type=float)
 parser.add_argument('--admm_tau', default=1.5, help='admm tau', type=float)
-parser.add_argument('--gpus', default=4, help='number of gpus to use', type=int)
+parser.add_argument('--gpus', default=2, help='number of gpus to use', type=int)
+parser.add_argument('--parallel', default=4, help='number of parallel threads to use', type=int)
 
 # Lazy Local Search Batch
 parser.add_argument('--lls_block_size', default=4, help='initial block size for lls', type=int)
@@ -80,12 +81,15 @@ if __name__ == '__main__':
   sesses = []
   config = tf.ConfigProto()
   config.gpu_options.allow_growth = True
+
+  # Assign 1~2 threads per gpu
+  assert (args.parallel >= args.gpus) and (args.parallel % args.gpus == 0) and (args.parallel // args.gpus <= 2)
     
   with tf.variable_scope(tf.get_variable_scope(), reuse=tf.AUTO_REUSE):
-    for i in range(args.gpus):
+    for i in range(args.parallel):
       graph = tf.Graph()
       with graph.as_default(): 
-        with tf.device('/gpu:'+str(i)):
+        with tf.device('/gpu:'+str(i%args.gpus)):
           model = Model(mode='eval')
           models.append(model)
         sess = tf.Session(config=config)

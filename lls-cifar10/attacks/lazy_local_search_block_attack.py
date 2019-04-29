@@ -43,7 +43,7 @@ class LazyLocalSearchBlockAttack(object):
     self.overlap = args.overlap
     self.admm_rho = args.admm_rho
     self.admm_tau = args.admm_tau
-    self.gpus = args.gpus
+    self.parallel = args.parallel
 
     # lazy local search settings
     self.lls_iter = args.lls_iter
@@ -62,7 +62,7 @@ class LazyLocalSearchBlockAttack(object):
     self.blocks = self.construct_blocks()
 
     # build lls helpers
-    self.lazy_local_search = [LazyLocalSearchBlockHelper(models[i%self.gpus], args)
+    self.lazy_local_search = [LazyLocalSearchBlockHelper(models[i%self.parallel], args)
                               for i in range(len(self.blocks))]
 
     # Network Setting
@@ -105,7 +105,7 @@ class LazyLocalSearchBlockAttack(object):
   # calculate per-gpu queries
   def _parallel_queries(self, queries, non_parallel_queries):
 
-    parallel_queries = (queries-non_parallel_queries)/self.gpus + non_parallel_queries
+    parallel_queries = (queries-non_parallel_queries)/self.parallel + non_parallel_queries
 
     return parallel_queries
 
@@ -210,7 +210,7 @@ class LazyLocalSearchBlockAttack(object):
                                                                                         prev_block_noises[i],
                                                                                         noise,
                                                                                         label,
-                                                                                        sesses[i%self.gpus],
+                                                                                        sesses[i%self.parallel],
                                                                                         self.blocks[i],
                                                                                         lls_block_size,
                                                                                         self.success_checker,
@@ -226,13 +226,13 @@ class LazyLocalSearchBlockAttack(object):
         num_running += 1
 
         # If all gpus are used, wait for results
-        if num_running == self.gpus:
+        if num_running == self.parallel:
 
-          for j in range(i-self.gpus+1, i+1):
+          for j in range(i-self.parallel+1, i+1):
             threads[j].join()
 
           # Gather results
-          for j in range(i-self.gpus+1, i+1):
+          for j in range(i-self.parallel+1, i+1):
             block_noise, block_queries, block_loss, block, block_success = results[j]
 
             num_queries += block_queries
