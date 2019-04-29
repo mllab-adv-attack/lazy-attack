@@ -252,6 +252,10 @@ class LazyLocalSearchBlockAttack(object):
             np.ones_like(block_noise[0, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], :])
 
       new_noise = new_noise / overlap_count
+
+      # check convergence (global)
+      change_ratio = np.mean(new_noise != noise)
+    
       noise = new_noise
 
       # Update admm variables
@@ -268,7 +272,10 @@ class LazyLocalSearchBlockAttack(object):
         rho *= tau
 
       # Check early stop
-      adv_image = self._perturb_image(image, noise)
+      noise_threshold = np.where(noise==0, -1, noise)
+      noise_threshold = self.epsilon * np.sign(noise_threshold)
+
+      adv_image = self._perturb_image(image, noise_threshold)
       feed = {
         self.model.x_input: adv_image,
         self.model.y_input: label
@@ -283,7 +290,8 @@ class LazyLocalSearchBlockAttack(object):
       # Max queries checking (use per-gpu queries)
       parallel_queries = self._parallel_queries(num_queries, non_parallel_queries)
 
-      # check convergence
+      '''
+      # check convergence (local)
       change_ratio = 0
 
       if prev_results:
@@ -296,6 +304,7 @@ class LazyLocalSearchBlockAttack(object):
         change_ratio = change_ratio/len(self.blocks)
 
       prev_results = copy.deepcopy(results)
+      '''
 
 
       if parallel_queries > self.max_queries:

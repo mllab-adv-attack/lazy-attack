@@ -32,7 +32,7 @@ parser.add_argument('--img_index_start', default=0, type=int)
 parser.add_argument('--sample_size', default=500, help='Sample size', type=int)
 parser.add_argument('--save_img', default='False', help='Save adversarial images', type=str2bool)
 parser.add_argument('--save_npy', default='False', help='Save images in numpy', type=str2bool)
-parser.add_argument('--save_dir', default='/data_large/unsynced_store/seungyong/output/cifar10/lls/untargeted')
+parser.add_argument('--save_dir', default='./out/')
 
 # Attack
 parser.add_argument('--attack', default='LazyLocalSearchBlockAttack', help='Attack type', type=str)
@@ -136,7 +136,10 @@ if __name__ == '__main__':
       count, indices[index], orig_class[0]))
 
     adv_img, num_queries, parallel_queries, success, time = attack.perturb(initial_img, orig_class, indices[index], sesses)
-    assert (np.amax(np.abs(adv_img - initial_img)) <= args.epsilon)
+    assert np.amax(np.abs(adv_img - initial_img)) <= args.epsilon
+    assert np.amax(adv_img) <= 255
+    assert np.amax(adv_img) >= 0
+    p = sess.run(model.predictions, feed_dict={model.x_input: adv_img})
 
     if args.save_npy and count%10==0:
       np.save('./save/adv_imgs/adv_img_{}'.format(count), (adv_img-initial_img)[0, ...])
@@ -157,21 +160,21 @@ if __name__ == '__main__':
       median_queries = 0 if len(total_num_queries) == 0 else np.median(total_num_queries)
       average_parallel_queries = 0 if len(total_parallel_queries) == 0 else np.mean(total_parallel_queries)
       average_time = 0 if len(total_times) == 0 else np.mean(total_times)
-      tf.logging.info('Attack success, avg queries: {:.5f}, med queries: {}, avg per-gpu queries: {:.0f}, success rate: {:.4f}, avg time: {:.2f}'.format(
-        average_queries, median_queries, average_parallel_queries, total_num_corrects / count, average_time))
+      tf.logging.info('Attack success, final class: {}, avg queries: {:.5f}, med queries: {}, avg per-gpu queries: {:.0f}, success rate: {:.4f}, avg time: {:.2f}'.format(
+        p[0], average_queries, median_queries, average_parallel_queries, total_num_corrects / count, average_time))
     else:
       index_to_num_queries[indices[index]] = -1
       average_queries = 0 if len(total_num_queries) == 0 else np.mean(total_num_queries)
       median_queries = 0 if len(total_num_queries) == 0 else np.median(total_num_queries)
       average_parallel_queries = 0 if len(total_parallel_queries) == 0 else np.mean(total_parallel_queries)
       average_time = 0 if len(total_times) == 0 else np.mean(total_times)
-      tf.logging.info('Attack fail, avg queries: {:.5f}, med queries: {}, avg per-gpu queries: {:.0f}, success rate: {:.4f}, avg time: {:.2f}'.format(
-        average_queries, median_queries, average_parallel_queries, total_num_corrects / count, average_time))
+      tf.logging.info('Attack fail, final class: {}, avg queries: {:.5f}, med queries: {}, avg per-gpu queries: {:.0f}, success rate: {:.4f}, avg time: {:.2f}'.format(
+        p[0], average_queries, median_queries, average_parallel_queries, total_num_corrects / count, average_time))
 
     index += 1
 
-  '''
-  filename = args.save_dir + '/lls_new_new_untargeted_{}_{}_{}_{}.npy'.format(
-    args.loss_func, args.batch_size, args.max_iters, args.img_index_start + args.sample_size)
+  admm = 'admm' if args.admm else 'basic'
+
+  filename = args.save_dir + '/lls_untargeted_{}_b{}_o{}_r{}_t{}_i{}.npy'.format(
+    admm, args.admm_block_size, args.overlap, args.admm_rho, args.admm_tau, args.img_index_start + args.sample_size)
   np.save(filename, index_to_num_queries)
-  '''
