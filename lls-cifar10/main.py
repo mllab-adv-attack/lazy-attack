@@ -5,6 +5,7 @@ import numpy as np
 import sys
 import time
 import tensorflow as tf
+import os
 from PIL import Image
 
 import attacks
@@ -23,7 +24,7 @@ for attack in ATTACK_CLASSES:
 parser = argparse.ArgumentParser()
 
 MODEL_DIR = './models/adv_trained'
-DATA_DIR = '../../cifar10_data'
+DATA_DIR = './../cifar10_data'
 SAVE_DIR = './save'
 
 # Directory
@@ -87,7 +88,7 @@ if __name__ == '__main__':
   cifar = cifar10_input.CIFAR10Data(args.data_dir)
   
   # Load indices
-  indices = np.load('./data/indices_untargeted.npy') 
+  indices = np.load('../cifar10_data/indices_untargeted.npy') 
   
   count = 0
   index = args.img_index_start

@@ -12,7 +12,7 @@ import math
 import numpy as np
 from tools.utils import get_image, pseudorandom_target
 
-IMAGENET_PATH = '/data/home/gaon/lazy-attack/data/'
+IMAGENET_PATH = './../../imagenet_data/'
 #IMAGENET_PATH = './../../torch_data/'
 
 ch.set_default_tensor_type('torch.cuda.FloatTensor')

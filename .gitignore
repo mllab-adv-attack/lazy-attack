@@ -1,4 +1,5 @@
-data/**
+imagenet_data/**
+cifar10_data/**
 
 lls-cifar10/models/**
 
@@ -20,7 +21,6 @@ gaon_imagenet/out/**
 gaon_imagenet/tools/data/**
 
 gaon_cifar/out/**
-gaon_cifar/cifar10_data/**
 gaon_cifar/models/**
 
 **/*.pyc
@@ -31,3 +31,16 @@ gaon_cifar/models/**
 
 *.out
 *.sh
+
+
+*BUILD
+*WORKSPACE
+*autopar.py
+*bazel*
+*sbatch*
+*slurm*
+*tensorboard.py
+*run_general*
+*.test_exp
+*__par_main_wrapper__.py
+*.swp

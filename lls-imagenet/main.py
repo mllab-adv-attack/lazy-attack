@@ -16,8 +16,7 @@ ATTACK_CLASSES = [x for x in attacks.__dict__.values() if inspect.isclass(x)]
 for attack in ATTACK_CLASSES:
   setattr(sys.modules[__name__], attack.__name__, attack)
 
-IMAGENET_PATH = '../data'
-SAVE_DIR = ''
+IMAGENET_PATH = '../imagenet_data'
 NUM_LABELS = 1000
 
 parser = argparse.ArgumentParser()

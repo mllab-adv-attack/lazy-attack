@@ -1,40 +1,79 @@
-# Parsimonious Black-Box Adversarial Attacks via Efficient Combinatorial Optimization
+# Lazy-attack
 
-## Environment
-- Ubuntu 16.04
-- python 3.5
-- tensorflow 1.4.0 gpu
-- CUDA 8.0
-- cuDNN 6.0
 
-## Prerequisites
 
-### Cifar-10
-1. Download an adversarially pretrained model from Madry's CIFAR10 Adversarial Examples Challenge, and set `MODEL_DIR` in main.py to the location of the downloaded model.
-2. Download Cifar-10 dataset, decompress it, and set `DATA_DIR` in main.py to the location of the dataset.
+## Ours implementations
 
-### ImageNet
-1. Download a pretrained Inception v3 model from https://github.com/tensorflow/models/tree/master/research/slim, decompress it, and place it to `tools/data` folder.
-2. Download ImageNet validation set (should contain a folder named `val` and a file named `val.txt`), and set `IMAGENET_PATH` in main.py to the location of the dataset.
+### lls-imagenet
 
-## How to Run
+ImageNet version code of 'ours' method, paper version.
+(admm versions to be implemented here)
 
-### Cifar-10
-1. For untargeted attack, 
-`python main.py --epsilon 8 --max_queries 20000`
+Use this for ours on ImageNet.
 
-### ImageNet
-1. For untargeted attack,
-`python main.py --epsilon 0.05 --max_queries 10000`
-2. For targeted attack,
- `python main.py --targeted --epsilon 0.05 --max_queries 100000`
+### lls-cifar10
 
-## Arguments
-- `img_index_start`: Given a list of image numbers for evaluation, it defines the starting index of the list.
-- `sample_size`: The number of images to be attacked.
-- `epsilon`: The maximum distortion of a pixel value.
-- `loss_func`: A type of loss function, xent (Cross entropy loss) or cw (Carlini-Wagner loss). 
+Cifar-10 version code of 'ours' method, paper version.
+(admm versions to be implemented here)
 
-## Baseline methods
-- We reproduce NES and Bandits for experiments on Cifar-10.
-- To run NES and Bandits, download model and dataset (same as above), and go to each directory and run `python main.py`.
+Use this for ours on Cifar-10.
+
+### l2-imagenet
+
+L2 version of ours. Not used right now.
+
+
+
+## Baseline implementations
+
+### blackbox-attacks-bandits-priors
+
+Code for baseline black-box attack 'Bandit' (ICLR 2019, https://arxiv.org/abs/1807.07978).
+Adopted from https://github.com/MadryLab/blackbox-bandits.
+
+Use this for Bandit results in ImageNet.
+
+### bandit-imagenet
+
+Code of blackbox-attacks-bandits-priors changed to use Tensorflow and match format of 'ours' code.
+
+### nes-imagenet
+
+Code for baseline block-box attack 'NES' (ICML 2018, https://arxiv.org/abs/1804.08598).
+Adopted from https://github.com/labsix/limited-blackbox-attacks.
+
+Use this for NES results in ImageNet.
+
+## Others
+
+### gaon_imagenet
+
+Contains works before merging to a git repo.
+Includes ImageNet PGD attack implementation adopted from https://github.com/MadryLab/cifar10_challenge.
+
+Use this for PGD on ImageNet.
+
+### gaon_cifar
+
+Contains works before merging to a git repo.
+Includes Cifar10 PGD attack implementation from https://github.com/MadryLab/cifar10_challenge.
+
+Use this for PGD on Cifar-10.
+
+
+## Downloading data
+
+Cifar-10: cp from ~/../gaon/lazy-attack/cifar10_data to this folder.
+
+ImageNet: cp from ~/../gaon/lazy-attack/imagenet_data to this folder.
+
+## Downloading models
+
+Cifar-10: cp from ~/../gaon/lazy-attack/lls_cifar10/models to your corresponding Cifar folders.
+
+Or follow https://github.com/MadryLab/cifar10_challenge.
+
+ImageNet: cp from ~/../gaon/lazy-attack/lls-imagenet/tools/data to your corresponding ImageNet folders.
+
+Or download from Tensorflow (https://github.com/tensorflow/models/tree/master/research/slim).
+>>>>>>> 8b9e1c7e3560e0ebdcc483ea4bbb384c261b1e13

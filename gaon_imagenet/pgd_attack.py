@@ -22,7 +22,7 @@ from tools.inception_v3_imagenet import model
 #from tools.imagenet_labels import label_to_name
 from tools.utils import get_image
 
-IMAGENET_PATH = './../data/'
+IMAGENET_PATH = './../imagenet_data/'
 
 if __name__ == '__main__':
     import argparse

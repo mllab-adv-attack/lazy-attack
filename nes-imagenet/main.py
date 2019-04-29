@@ -11,7 +11,7 @@ from attacks.nes_attack import NESAttack
 from tools.inception_v3_imagenet import model
 from tools.utils import *
 
-IMAGENET_PATH = '../data'
+IMAGENET_PATH = '../imagenet_data'
 NUM_LABELS = 1000
 
 parser = argparse.ArgumentParser()
