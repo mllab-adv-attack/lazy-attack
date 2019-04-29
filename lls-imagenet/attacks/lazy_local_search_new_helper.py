@@ -8,10 +8,12 @@ import time
 
 SIZE = 299
 
-class LazyLocalSearchHelperNew(object):
-  def __init__(self, model, loss_func, epsilon, **kwargs):
+class LazyLocalSearchNewHelper(object):
+
+  def __init__(self, model, loss_func, epsilon, max_iters, **kwargs):
     # Hyperparameter setting 
     self.epsilon = epsilon
+    self.max_iters = max_iters
 
     # Network setting
     self.x_input = model['x_input']
@@ -48,12 +50,12 @@ class LazyLocalSearchHelperNew(object):
  
   def _perturb_image(self, image, noise):
     adv_image = image + cv2.resize(noise[0, ...], (self.width, self.height), interpolation=cv2.INTER_NEAREST)
-    adv_image = np.clip(adv_image, 0, 1)
+    adv_image = np.clip(adv_image, 0., 1.)
     return adv_image 
 
   def _flip_noise(self, noise, block):
     noise_new = np.copy(noise)
-    upper_left, lower_right, channel = block 
+    upper_left, lower_right, channel, _ = block 
     noise_new[0, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], channel] *= -1
     return noise_new
 
@@ -69,13 +71,10 @@ class LazyLocalSearchHelperNew(object):
     # Setting
     A = np.zeros([len(blocks)], np.int32)
     for i, block in enumerate(blocks):
-      for channel in range(3):
-        upper_left, _, channel = block
-        x = upper_left[0]
-        y = upper_left[1]
-        # If flipped, set A to be 1.
-        if noise[0, x, y, channel] > 0:
-          A[i] = 1
+      _, _, _, flipped = block
+      # If flipped, set A to be 1.
+      if flipped:
+        A[i] = 1
 
     # Calculate current loss
     image_batch = self._perturb_image(image, noise)
@@ -92,7 +91,7 @@ class LazyLocalSearchHelperNew(object):
       if preds != label:
         return noise, num_queries, curr_loss, True
 
-    for _ in range(1):
+    for _ in range(self.max_iters):
       # First forward passes
       indices,  = np.where(A==0)
       
@@ -104,8 +103,8 @@ class LazyLocalSearchHelperNew(object):
         bend = min(bstart + batch_size, len(indices))
         
         image_batch = np.zeros([bend-bstart, self.width, self.height, 3], np.float32) 
-        label_batch = np.tile(label, bend-bstart)
         noise_batch = np.zeros([bend-bstart, 256, 256, 3], np.float32)
+        label_batch = np.tile(label, bend-bstart)
          
         for i, idx in enumerate(indices[bstart:bend]):
           noise_batch[i:i+1, ...] = self._flip_noise(noise, blocks[idx])
@@ -134,6 +133,7 @@ class LazyLocalSearchHelperNew(object):
       curr_loss += best_margin
       noise = self._flip_noise(noise, blocks[best_idx])
       A[best_idx] = 1
+      blocks[best_idx][3] = True
       
       # Add element into the set
       while len(priority_queue) > 0:
@@ -158,6 +158,7 @@ class LazyLocalSearchHelperNew(object):
           curr_loss = losses[0]
           noise = self._flip_noise(noise, blocks[cand_idx])
           A[cand_idx] = 1
+          blocks[cand_idx][3] = True
           # Early stopping
           if self.targeted:
             if preds == label:
@@ -165,7 +166,6 @@ class LazyLocalSearchHelperNew(object):
           else:
             if preds != label:
               return noise, num_queries, curr_loss, True
-
         # If the cardinality has changed, push the element into the priority queue
         else:
           heapq.heappush(priority_queue, (margin, cand_idx))
@@ -183,8 +183,8 @@ class LazyLocalSearchHelperNew(object):
         bend = min(bstart + batch_size, len(indices))
         
         image_batch = np.zeros([bend-bstart, self.width, self.height, 3], np.float32) 
-        label_batch = np.tile(label, bend-bstart)
         noise_batch = np.zeros([bend-bstart, 256, 256, 3], np.float32)
+        label_batch = np.tile(label, bend-bstart)
         
         for i, idx in enumerate(indices[bstart:bend]):
           noise_batch[i:i+1, ...] = self._flip_noise(noise, blocks[idx])
@@ -213,6 +213,7 @@ class LazyLocalSearchHelperNew(object):
       curr_loss += best_margin
       noise = self._flip_noise(noise, blocks[best_idx])
       A[best_idx] = 0
+      blocks[best_idx][3] = False
       
       # Add element into the set
       while len(priority_queue) > 0:
@@ -237,6 +238,7 @@ class LazyLocalSearchHelperNew(object):
           curr_loss = losses[0]
           noise = self._flip_noise(noise, blocks[cand_idx])
           A[cand_idx] = 0
+          blocks[cand_idx] = False
           # Early stopping
           if self.targeted:
             if preds == label:
@@ -251,3 +253,4 @@ class LazyLocalSearchHelperNew(object):
       priority_queue = []
     
     return noise, num_queries, curr_loss, False
+

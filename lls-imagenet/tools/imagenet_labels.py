@@ -1,3 +1,5 @@
+"""This script is borrowed from https://github.com/labsix/limited-blackbox-attacks"""
+
 _lut = [
     'tench, Tinca tinca',
     'goldfish, Carassius auratus',

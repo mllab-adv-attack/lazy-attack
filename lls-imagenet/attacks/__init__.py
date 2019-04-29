@@ -1,2 +1,2 @@
-from attacks.lazy_local_search_batch_attack import LazyLocalSearchBatchAttack
-from attacks.lazy_local_search_batch_attack_new import LazyLocalSearchBatchAttackNew
+from attacks.lazy_local_search_attack import LazyLocalSearchAttack
+from attacks.lazy_local_search_new_attack import LazyLocalSearchNewAttack

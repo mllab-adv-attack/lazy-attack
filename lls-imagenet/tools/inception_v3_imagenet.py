@@ -1,3 +1,5 @@
+"""This script is borrowed from https://github.com/labsix/limited-blackbox-attacks"""
+
 from tools.utils import optimistic_restore
 import tensorflow as tf
 import tensorflow.contrib.slim as slim

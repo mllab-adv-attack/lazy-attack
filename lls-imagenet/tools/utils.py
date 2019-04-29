@@ -1,3 +1,5 @@
+"""This script is borrowed from https://github.com/labsix/limited-blackbox-attacks"""
+
 import tensorflow as tf
 import PIL
 from tensorflow.python.framework import ops
