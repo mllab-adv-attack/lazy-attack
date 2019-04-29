@@ -76,4 +76,3 @@ Or follow https://github.com/MadryLab/cifar10_challenge.
 ImageNet: cp from ~/../gaon/lazy-attack/lls-imagenet/tools/data to your corresponding ImageNet folders.
 
 Or download from Tensorflow (https://github.com/tensorflow/models/tree/master/research/slim).
->>>>>>> 8b9e1c7e3560e0ebdcc483ea4bbb384c261b1e13
