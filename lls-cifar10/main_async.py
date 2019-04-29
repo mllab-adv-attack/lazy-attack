@@ -135,7 +135,10 @@ if __name__ == '__main__':
     tf.logging.info('Untargeted attack on {}th image starts, img index: {}, orig class: {}'.format(
       count, indices[index], orig_class[0]))
 
-    adv_img, num_queries, parallel_queries, success, time = attack.perturb(initial_img, orig_class, indices[index], sesses)
+    adv_img, num_queries, parallel_queries, success, time = attack.perturb(initial_img,
+                                                                           orig_class,
+                                                                           indices[index],
+                                                                           sesses)
     assert np.amax(np.abs(adv_img - initial_img)) <= args.epsilon
     assert np.amax(adv_img) <= 255
     assert np.amax(adv_img) >= 0
@@ -160,7 +163,8 @@ if __name__ == '__main__':
       median_queries = 0 if len(total_num_queries) == 0 else np.median(total_num_queries)
       average_parallel_queries = 0 if len(total_parallel_queries) == 0 else np.mean(total_parallel_queries)
       average_time = 0 if len(total_times) == 0 else np.mean(total_times)
-      tf.logging.info('Attack success, final class: {}, avg queries: {:.5f}, med queries: {}, avg per-gpu queries: {:.0f}, success rate: {:.4f}, avg time: {:.2f}'.format(
+      tf.logging.info('Attack success, final class: {}, avg queries: {:.5f}, med queries: {}, \
+                      avg per-gpu queries: {:.0f}, success rate: {:.4f}, avg time: {:.2f}'.format(
         p[0], average_queries, median_queries, average_parallel_queries, total_num_corrects / count, average_time))
     else:
       index_to_num_queries[indices[index]] = -1
@@ -168,7 +172,8 @@ if __name__ == '__main__':
       median_queries = 0 if len(total_num_queries) == 0 else np.median(total_num_queries)
       average_parallel_queries = 0 if len(total_parallel_queries) == 0 else np.mean(total_parallel_queries)
       average_time = 0 if len(total_times) == 0 else np.mean(total_times)
-      tf.logging.info('Attack fail, final class: {}, avg queries: {:.5f}, med queries: {}, avg per-gpu queries: {:.0f}, success rate: {:.4f}, avg time: {:.2f}'.format(
+      tf.logging.info('Attack fail, final class: {}, avg queries: {:.5f}, med queries: {}, \
+                      avg per-gpu queries: {:.0f}, success rate: {:.4f}, avg time: {:.2f}'.format(
         p[0], average_queries, median_queries, average_parallel_queries, total_num_corrects / count, average_time))
 
     index += 1
