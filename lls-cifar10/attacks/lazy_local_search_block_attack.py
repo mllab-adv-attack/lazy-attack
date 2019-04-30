@@ -200,27 +200,29 @@ class LazyLocalSearchBlockAttack(object):
       # wall clock time (round)
       start = time.time()
 
-      # Initialize threads
+      # Initialize threads and new block noises
       threads = []
-      prev_block_noises = [None] * len(self.blocks)
+      new_block_noises = [None] * len(self.blocks)
+
+      # make results object to receive results from threads
       results = [None] * len(self.blocks)
 
       for i in range(len(self.blocks)):
         # Solve lazy greedy on the block
         if step == 0:
-          prev_block_noises[i] = -self.epsilon * np.ones_like(noise, dtype=np.int32)
+          new_block_noises[i] = -self.epsilon * np.ones_like(noise, dtype=np.int32)
         else:
           prev_block_noise, _, _, block, _ = prev_results[i]
 
           upper_left, lower_right = block
 
           # initialize to (x ; z \ x)
-          prev_block_noises[i] = np.copy(noise)
-          prev_block_noises[i][:, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], :] = \
+          new_block_noises[i] = np.copy(noise)
+          new_block_noises[i][:, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], :] = \
             prev_block_noise[:, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], :]
 
         threads.append(threading.Thread(target=self.lazy_local_search[i].perturb, args=(image,
-                                                                                        prev_block_noises[i],
+                                                                                        new_block_noises[i],
                                                                                         noise,
                                                                                         label,
                                                                                         sesses[i%self.parallel],
@@ -310,7 +312,7 @@ class LazyLocalSearchBlockAttack(object):
 
           # update by adam optimizer
           if self.adam:
-            lr = rho * np.sqrt(1-beta2**step)/(1-beta1**step)
+            lr = rho * np.sqrt(1-beta2**(step+1))/(1-beta1**(step+1))
             mk[i] = beta1 * mk[i] + (1-beta1) * dist
             vk[i] = beta2 * vk[i] + (1-beta2) * (dist**2)
             yk[i] += lr * mk[i] / (np.sqrt(vk[i]) + 1e-8)
