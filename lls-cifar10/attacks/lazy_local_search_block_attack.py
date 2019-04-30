@@ -43,6 +43,8 @@ class LazyLocalSearchBlockAttack(object):
     self.overlap = args.overlap
     self.admm_rho = args.admm_rho
     self.admm_tau = args.admm_tau
+    self.adam = args.adam
+    self.adam_adapt = args.adam_adapt
     self.parallel = args.parallel
 
     # lazy local search settings
@@ -168,12 +170,23 @@ class LazyLocalSearchBlockAttack(object):
     # Initialize global noise
     noise = np.zeros_like(image, dtype=np.int32)
 
-    # Initialize admm variables
+    # Initialize admm & adam variables
     yk = []
+    mk = []
+    vk = []
+    beta1 = 0.9
+    beta2 = 0.999
     for block in self.blocks:
       upper_left, lower_right = block
+
       yk_i = np.zeros((lower_right[0]-upper_left[0], lower_right[1]-upper_left[1], 3))
       yk.append(yk_i)
+
+      if self.adam:
+        mk_i = np.zeros_like(yk_i)
+        vk_i = np.zeros_like(yk_i)
+        mk.append(mk_i)
+        vk.append(vk_i)
 
     rho = self.admm_rho
     tau = self.admm_tau
@@ -295,9 +308,19 @@ class LazyLocalSearchBlockAttack(object):
           upper_left, lower_right = block
           dist = (block_noise - noise)[0, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], :]
 
-          yk[i] += rho * dist
+          # update by adam optimizer
+          if self.adam:
+            lr = rho * np.sqrt(1-beta2**step)/(1-beta1**step)
+            mk[i] = beta1 * mk[i] + (1-beta1) * dist
+            vk[i] = beta2 * vk[i] + (1-beta2) * (dist**2)
+            yk[i] += lr * mk[i] / (np.sqrt(vk[i]) + 1e-8)
+          # else, update by rho tuned with tau (or not)
+          else:
+            yk[i] += rho * dist
 
-        rho *= tau
+        # tune rho with tau
+        if not self.adam or self.adam_adapt:
+          rho *= tau
 
       # Check early stop
       noise_threshold = np.where(noise==0, -1, noise)
@@ -317,20 +340,6 @@ class LazyLocalSearchBlockAttack(object):
 
       # Max queries checking (use per-gpu queries)
       parallel_queries = self._parallel_queries(num_queries, non_parallel_queries)
-
-      '''
-      # check convergence (local)
-      change_ratio = 0
-
-      if prev_results:
-        for i in range(len(self.blocks)):
-          curr_block_noise, _, _, block, _ = results[i]
-          prev_block_noise, _, _, _, _ = prev_results[i]
-
-          change_ratio += np.mean(curr_block_noise != prev_block_noise)
-
-        change_ratio = change_ratio/len(self.blocks)
-      '''
 
       # save previous results for next round
       prev_results = copy.deepcopy(results)

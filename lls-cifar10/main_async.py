@@ -49,6 +49,8 @@ parser.add_argument('--admm_iter', default=100, help='admm max iteration', type=
 parser.add_argument('--overlap', default=0, help='overlap size', type=int)
 parser.add_argument('--admm_rho', default=1e-12, help='admm rho', type=float)
 parser.add_argument('--admm_tau', default=1.5, help='admm tau', type=float)
+parser.add_argument('--adam', default='False', help='use adam optimizer, use rho as lr', type=str2bool)
+parser.add_argument('--adam_adapt', default='False', help='in adam, update rho with tau', type=str2bool)
 parser.add_argument('--gpus', default=1, help='number of gpus to use', type=int)
 parser.add_argument('--parallel', default=4, help='number of parallel threads to use', type=int)
 
