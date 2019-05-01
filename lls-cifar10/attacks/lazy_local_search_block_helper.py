@@ -178,6 +178,10 @@ class LazyLocalSearchBlockHelper(object):
     label_batch = np.copy(label)
     losses, preds = sess.run([self.losses, self.preds],
                              feed_dict={self.x_input: image_batch, self.y_input: label_batch})
+
+    if self.admm:
+      losses += self.admm_loss(admm_block, block_noise, noise, yk, rho)
+
     num_queries += 1
     curr_loss = losses[0]
 
