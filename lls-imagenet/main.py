@@ -18,14 +18,15 @@ for attack in ATTACK_CLASSES:
 
 IMAGENET_PATH = '../imagenet_data'
 NUM_LABELS = 1000
+SAVE_DIR = './out'
 
 parser = argparse.ArgumentParser()
 
 # Basic Setting
 parser.add_argument('--max_queries', default=100000, type=int)
-parser.add_argument('--epsilon', default=0.03, type=float)
+parser.add_argument('--epsilon', default=0.05, type=float)
 parser.add_argument('--img_index_start', default=0, type=int)
-parser.add_argument('--sample_size', default=1000, type=int)
+parser.add_argument('--sample_size', default=1, type=int)
 parser.add_argument('--save_img', dest='save_img', action='store_true')
 parser.add_argument('--attack', default='LazyLocalSearchAttack', type=str)
 parser.add_argument('--targeted', action='store_true')
@@ -33,8 +34,8 @@ parser.add_argument('--save_dir', default=SAVE_DIR, type=str)
 
 # Local Search Setting
 parser.add_argument('--loss_func', default='xent', type=str, help='The type of loss function')
-parser.add_argument('--block_size', default=32, type=int, help='Initial block size')
-parser.add_argument('--batch_size', default=64, type=int, help='negative -> no batch')
+parser.add_argument('--block_size', default=128, type=int, help='Initial block size')
+parser.add_argument('--batch_size', default=-1, type=int, help='negative -> no batch')
 parser.add_argument('--no_hier', action='store_true', help='true => no hierarchical evaltuation')
 parser.add_argument('--max_iters', default=1, type=int, help='The number of iterations in Local Search')
 
@@ -73,10 +74,13 @@ if __name__ == '__main__':
   attack = attack_class(model, args)
 
   # Load indices
+  '''
   if args.targeted:
     indices = np.load('./data/indices_targeted.npy')
   else:
     indices = np.load('./data/indices_untargeted.npy')
+  '''
+  indices = np.array([47613])
 
   # Main loop
   count = 0

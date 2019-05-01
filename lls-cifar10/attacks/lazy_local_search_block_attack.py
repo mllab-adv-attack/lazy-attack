@@ -50,7 +50,6 @@ class LazyLocalSearchBlockAttack(object):
     # lazy local search settings
     self.lls_iter = args.lls_iter
     self.lls_block_size = args.lls_block_size
-    self.batch_size = args.batch_size
     self.no_hier = args.no_hier
 
     # Set Image size

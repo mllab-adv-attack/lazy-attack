@@ -57,7 +57,7 @@ parser.add_argument('--parallel', default=4, help='number of parallel threads to
 # Lazy Local Search Batch
 parser.add_argument('--lls_block_size', default=4, help='initial block size for lls', type=int)
 parser.add_argument('--lls_iter', default=1, type=int)
-parser.add_argument('--batch_size', default=64, type=int)
+parser.add_argument('--batch_size', default=64, help='mini-batch size for lls, no mini-batch if set to 0', type=int)
 parser.add_argument('--no_hier', default='False', type=str2bool)
 args = parser.parse_args()
 
