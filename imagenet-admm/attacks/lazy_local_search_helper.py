@@ -67,10 +67,7 @@ class LazyLocalSearchHelper(object):
               yk,
               rho,
               index,
-              result_queue):		
-   
-    # Local variable
-    num_queries = 0
+              results):		
 
     # Get the size of image
     self.width = np.shape(image)[1]
@@ -82,9 +79,14 @@ class LazyLocalSearchHelper(object):
    
     # Initialize local noise
     block_noise = prev_block_noise
-   
+ 
+    # Initialize query count
+    num_queries = 0
+
     # Random permute mini-batches
     num_blocks = len(blocks)
+    if self.batch_size == 0:
+      self.batch_size = num_blocks
     curr_order = np.random.permutation(num_blocks)
     num_batches = int(math.ceil(num_blocks/self.batch_size)) 
     
@@ -100,10 +102,10 @@ class LazyLocalSearchHelper(object):
       num_queries += queries 
    
       if success_checker.check():
-        result_queue.put((block_noise, num_queries, loss, admm_block, success, index))
+        results[index] = [block_noise, num_queries, loss, admm_block, success]
         return
 
-    result_queue.put((block_noise, num_queries, loss, admm_block, success, index))
+    results[index] = [block_noise, num_queries, loss, admm_block, success]
     return
     
   def _perturb_one_batch(self,
