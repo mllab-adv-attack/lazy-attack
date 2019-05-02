@@ -18,12 +18,13 @@ for attack in ATTACK_CLASSES:
 
 IMAGENET_PATH = '../imagenet_data'
 NUM_LABELS = 1000
+SAVE_DIR = './out'
 
 parser = argparse.ArgumentParser()
 
 # Basic Setting
 parser.add_argument('--max_queries', default=100000, type=int)
-parser.add_argument('--epsilon', default=0.03, type=float)
+parser.add_argument('--epsilon', default=0.05, type=float)
 parser.add_argument('--img_index_start', default=0, type=int)
 parser.add_argument('--sample_size', default=1000, type=int)
 parser.add_argument('--save_img', dest='save_img', action='store_true')
