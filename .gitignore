@@ -23,6 +23,8 @@ gaon_imagenet/tools/data/**
 gaon_cifar/out/**
 gaon_cifar/models/**
 
+imagenet-admm/tools/data/**
+
 **/*.pyc
 **/*.pyo
 **/*.npy
