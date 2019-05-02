@@ -26,15 +26,7 @@ class SuccessChecker(object):
 
 
 class LazyLocalSearchAttack(object):
-  """Lazy Local Search Attack with ADMM"""
-
   def __init__(self, models, sesses, args, **kwargs):
-    """Initialize attack method.
-    
-    Args:
-      model: TensorFlow model
-      args: arguments
-    """
     # Basic setting
     self.targeted = args.targeted
     self.max_queries = args.max_queries
@@ -57,7 +49,6 @@ class LazyLocalSearchAttack(object):
     # Local search setting
     self.lls_iter = args.lls_iter
     self.lls_block_size= args.lls_block_size
-    self.batch_size = args.batch_size
     self.no_hier = args.no_hier
 
     # Set image size
@@ -71,20 +62,21 @@ class LazyLocalSearchAttack(object):
     self.blocks = self._construct_blocks()
 
     # Build local search helper
-    self.lazy_local_search = [LazyLocalSearchHelper(models[i%self.parallel], sesses[i%self.parallel], args) for i in range(len(self.blocks))]
-    
+    self.lazy_local_search = [LazyLocalSearchHelper(models[i%self.parallel], sesses[i%self.parallel], args) 
+                              for i in range(len(self.blocks))]
+  
+  # Calculate per-gpu queries
+  def _parallel_queries(self, queries, non_parallel_queries):
+    parallel_queries = (queries-non_parallel_queries)/self.parallel+non_parallel_queries
+
+    return parallel_queries
+ 
   # Perturb image with given noise 
   def _perturb_image(self, image, noise):
     adv_image = image + cv2.resize(noise[0, ...], (self.width, self.height), interpolation=cv2.INTER_NEAREST)
     adv_image = np.clip(adv_image, 0., 1.)
   
     return adv_image
-
-  # Calculate per-gpu queries
-  def _parallel_queries(self, queries, non_parallel_queries):
-    parallel_queries = (queries-non_parallel_queries)/self.parallel+non_parallel_queries
-
-    return parallel_queries
 
   # Block(image) splitting function
   def _split_block(self, upper_left, lower_right, block_size, overlap):
@@ -163,41 +155,54 @@ class LazyLocalSearchAttack(object):
       
       # Initialize threads
       threads = []
-      prev_block_noises = [None]*len(self.blocks)
+      new_block_noises = [None]*len(self.blocks)
+     
+      # Make results object to receive results from threads 
       results = [None]*len(self.blocks)
-      result_queue = queue.Queue()
       
       for i in range(len(self.blocks)):    
         # Solve local search on a block
         if step == 0:
-          prev_block_noises[i] = -self.epsilon*np.ones_like(noise, dtype=np.int32) 
+          new_block_noises[i] = -self.epsilon*np.ones_like(noise, dtype=np.float32) 
         else:
           prev_block_noise, _, _, block, _ = prev_results[i]
           upper_left, lower_right = block
           
           # Initialize to (x; z\x)
-          prev_block_noises[i] = np.copy(noise)
-          prev_block_noises[i][:, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], :] = \
+          new_block_noises[i] = np.copy(noise)
+          new_block_noises[i][:, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], :] = \
             prev_block_noise[:, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], :]
       
         threads.append(threading.Thread(
           target=self.lazy_local_search[i].perturb,
-          args=(image, prev_block_noises[i], noise, label, self.blocks[i], lls_block_size, self.success_checker, yk[i], rho, i, result_queue)
+          args=(image, 
+                new_block_noises[i], 
+                noise, 
+                label, 
+                self.blocks[i], 
+                lls_block_size, 
+                self.success_checker, 
+                yk[i], 
+                rho, 
+                i, 
+                results)
         ))
  
       # Run threads
       num_running = 0     
       for i in range(len(self.blocks)):
-        threads[i].daemon = True
         threads[i].start()
         num_running += 1 
       
         # If all gpus are used, wait for results
         if num_running == self.parallel:
           
-          for _ in range(self.parallel):
-            block_noise, block_queries, block_loss, block, block_success, i = result_queue.get()
-            results[i] = (block_noise, block_queries, block_loss, block, block_success)
+          for j in range(i-self.parallel+1, i+1):
+            threads[j].join()
+          
+          # Gather results
+          for j in range(i-self.parallel+1, i+1):
+            block_noise, block_queries, block_loss, block, block_success = results[j]
             num_queries += block_queries
             
             # Early stop checking
@@ -302,7 +307,7 @@ class LazyLocalSearchAttack(object):
         step, curr_loss, num_queries, parallel_queries, change_ratio, end-start))
 
       # Divide lls_block_size if hierarchical is used
-      if not self.no_hier and ((step+1)%self.lls_iter == 0) and lls_block_size > 1:
+      if not self.no_hier and ((step+1)%self.lls_iter == 0) and lls_block_size > 4:
         lls_block_size //= 2
 
     # Attack failed
