@@ -24,7 +24,7 @@ def str2bool(key):
 parser = argparse.ArgumentParser()
 
 # Directory
-parser.add_argument('--model_dir', default='models/adv_trained', help='Model directory', type=str)
+parser.add_argument('--model_dir', default='models/naturally_trained', help='Model directory', type=str)
 parser.add_argument('--data_dir', default='../cifar10_data', help='Data directory', type=str)
 
 # Experiment Setting
@@ -136,15 +136,29 @@ if __name__ == '__main__':
     orig_class = cifar.eval_data.ys[indices[index]]
     orig_class = np.expand_dims(orig_class, axis=0)
 
+    # Generate target class (same method as in Boundary attack)
+    if args.targeted:
+      target_class = (orig_class+1) % 10
+      target_class = np.expand_dims(target_class, axis=0)
+
     count += 1
 
-    tf.logging.info('Untargeted attack on {}th image starts, img index: {}, orig class: {}'.format(
-      count, indices[index], orig_class[0]))
+    if args.targeted:
+        tf.logging.info('Untargeted attack on {}th image starts, img index: {}, orig class: {}, target class: {}'.format(
+        count, indices[index], orig_class[0], target_class[0, 0]))
 
-    adv_img, num_queries, parallel_queries, success, time = attack.perturb(initial_img,
-                                                                           orig_class,
-                                                                           indices[index],
-                                                                           sesses)
+        adv_img, num_queries, parallel_queries, success, time = attack.perturb(initial_img,
+                                                                               target_class[0],
+                                                                               indices[index],
+                                                                               sesses)
+    else:
+      tf.logging.info('Untargeted attack on {}th image starts, img index: {}, orig class: {}'.format(
+        count, indices[index], orig_class[0]))
+
+      adv_img, num_queries, parallel_queries, success, time = attack.perturb(initial_img,
+                                                                             orig_class,
+                                                                             indices[index],
+                                                                             sesses)
     assert np.amax(np.abs(adv_img - initial_img)) <= args.epsilon
     assert np.amax(adv_img) <= 255
     assert np.amax(adv_img) >= 0
