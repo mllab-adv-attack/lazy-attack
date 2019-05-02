@@ -51,10 +51,12 @@ def model(sess, image):
     logits, _ = network_fn(preprocessed)
     logits = logits[:,1:] # ignore background class
     predictions = tf.argmax(logits, 1)
+    probs = tf.nn.softmax(logits)
+    top_k = tf.nn.top_k(probs, 5)
 
     if not _inception_initialized:
         optimistic_restore(sess, INCEPTION_CHECKPOINT_PATH)
         _inception_initialized = True
 
-    return logits, predictions
+    return logits, predictions, top_k
 

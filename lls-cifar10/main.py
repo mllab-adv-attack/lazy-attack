@@ -23,7 +23,8 @@ for attack in ATTACK_CLASSES:
 """ Arguments """
 parser = argparse.ArgumentParser()
 
-MODEL_DIR = './models/adv_trained'
+#MODEL_DIR = './models/adv_trained'
+MODEL_DIR = './models/naturally_trained'
 DATA_DIR = './../cifar10_data'
 SAVE_DIR = './save'
 
@@ -104,13 +105,12 @@ if __name__ == '__main__':
     initial_img = np.int32(initial_img)
     initial_img = np.expand_dims(initial_img, axis=0)
     orig_class = cifar.eval_data.ys[indices[index]]
+    orig_class = np.expand_dims(orig_class, axis=0)
    
     # Generate target class (same method as in Boundary attack)
     if args.targeted:
       target_class = (orig_class+1) % 10
       target_class = np.expand_dims(target_class, axis=0)
-
-    orig_class = np.expand_dims(orig_class, axis=0)
 
     count += 1
    

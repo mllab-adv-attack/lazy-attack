@@ -2,11 +2,12 @@ import cv2
 import tensorflow as tf
 import math
 import numpy as np
-import time
 import itertools
 
 from attacks.lazy_local_search_helper import LazyLocalSearchHelper
 
+from tools.imagenet_labels import label_to_name
+from PIL import Image
 
 class LazyLocalSearchAttack(object):
   """Lazy Local Search Attack with Hierarchical Method and Mini-batch Technique"""
@@ -105,6 +106,43 @@ class LazyLocalSearchAttack(object):
     batch_size = self.batch_size if self.batch_size > 0 else num_blocks
     curr_order = np.random.permutation(num_blocks)
 
+    np.save('./out/orig_image.npy', image)
+
+    values, indices = self.lazy_local_search.initial_top_k(image, label, sess)
+
+    tf.logging.info("orig top 5 classes: {} / {} / {} / {} / {}".format(
+        label_to_name(indices[0,0]),
+        label_to_name(indices[0,1]),
+        label_to_name(indices[0,2]),
+        label_to_name(indices[0,3]),
+        label_to_name(indices[0,4])))
+        
+    tf.logging.info("orig top 5 probs: {:.4f}, {:.4f}, {:.4f}, {:.4f}, {:.4f}".format(
+        values[0,0], values[0,1], values[0,2], values[0,3], values[0,4]))
+
+    orig_image = Image.fromarray(np.ndarray.astype(image[0, :, :, :]*255, np.uint8))
+    orig_image.save('./out/orig_image.jpg')
+
+    adv_image = self._perturb_image(image, noise)
+    
+    values, indices = self.lazy_local_search.initial_top_k(adv_image, label, sess)
+    
+    tf.logging.info("initial top 5 classes: {} / {} / {} / {} / {}".format(
+        label_to_name(indices[0,0]),
+        label_to_name(indices[0,1]),
+        label_to_name(indices[0,2]),
+        label_to_name(indices[0,3]),
+        label_to_name(indices[0,4])))
+        
+    tf.logging.info("initial top 5 probs: {:.4f}, {:.4f}, {:.4f}, {:.4f}, {:.4f}".format(
+        values[0,0], values[0,1], values[0,2], values[0,3], values[0,4]))
+    
+    np.save('./out/noise_init.npy', noise)
+    adv_image = Image.fromarray(np.ndarray.astype(adv_image[0, :, :, :]*255, np.uint8))
+    adv_image.save('./out/adv_image_init.jpg')
+    adv_noise = Image.fromarray(np.ndarray.astype(noise[0, :, :, :]*255, np.uint8))
+    adv_noise.save('./out/adv_noise_init.jpg')
+
     # Main loop
     while True:
       # Run batch
@@ -115,11 +153,21 @@ class LazyLocalSearchAttack(object):
         bend = min(bstart + batch_size, num_blocks)
         blocks_batch = [blocks[curr_order[idx]] for idx in range(bstart, bend)]
         # Run lazy local search
-        noise, queries, loss, success = self.lazy_local_search.perturb(
+        noise, queries, loss, success, top_k = self.lazy_local_search.perturb(
           image, noise, label, sess, blocks_batch)
         num_queries += queries
+        values, indices = top_k
         tf.logging.info("Block size: {}, batch: {}, loss: {:.4f}, num queries: {}".format(
           block_size, i, loss, num_queries))
+        tf.logging.info("top 5 classes: {} / {} / {} / {} / {}".format(
+            label_to_name(indices[0,0]),
+            label_to_name(indices[0,1]),
+            label_to_name(indices[0,2]),
+            label_to_name(indices[0,3]),
+            label_to_name(indices[0,4])))
+            
+        tf.logging.info("top 5 probs: {:.4f}, {:.4f}, {:.4f}, {:.4f}, {:.4f}".format(
+            values[0,0], values[0,1], values[0,2], values[0,3], values[0,4]))
         # If query count exceeds max queries, then return False
         if num_queries > self.max_queries:
           return adv_image, num_queries, False
@@ -127,8 +175,20 @@ class LazyLocalSearchAttack(object):
         adv_image = self._perturb_image(image, noise)
         # If success, return True
         if success:
+          np.save('./out/noise_{}.npy'.format(block_size), noise)
+          adv_img = Image.fromarray(np.ndarray.astype(adv_image[0, :, :, :]*255, np.uint8))
+          adv_img.save('./out/adv_image_{}.jpg'.format(block_size))
+          adv_noise = Image.fromarray(np.ndarray.astype(noise[0, :, :, :]*255, np.uint8))
+          adv_noise.save('./out/adv_noise_{}.jpg'.format(block_size))
           return adv_image, num_queries, True
-      
+
+      np.save('./out/noise_{}.npy'.format(block_size), noise)
+    
+      adv_image = Image.fromarray(np.ndarray.astype(adv_image[0, :, :, :]*255, np.uint8))
+      adv_image.save('./out/adv_image_{}.jpg'.format(block_size))
+      adv_noise = Image.fromarray(np.ndarray.astype(noise[0, :, :, :]*255, np.uint8))
+      adv_noise.save('./out/adv_noise_{}.jpg'.format(block_size))
+    
       # If block size >= 2, then split blocks
       if not self.no_hier and block_size >= 2:
         block_size //= 2

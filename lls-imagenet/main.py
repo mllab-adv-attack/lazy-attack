@@ -18,7 +18,7 @@ for attack in ATTACK_CLASSES:
 
 IMAGENET_PATH = '../imagenet_data'
 NUM_LABELS = 1000
-SAVE_DIR = './out'
+SAVE_DIR = './out/'
 
 parser = argparse.ArgumentParser()
 
@@ -52,13 +52,14 @@ if __name__ == '__main__':
   x_input = tf.placeholder(dtype=tf.float32, shape=[None, None, None, 3])
   y_input = tf.placeholder(dtype=tf.int32, shape=[None])
   
-  logits, preds = model(sess, x_input)
+  logits, preds, top_k = model(sess, x_input)
   
   model = {
     'x_input': x_input,
     'y_input': y_input,
     'logits': logits,
     'preds': preds,
+    'top_k': top_k,
   }
   
   # Create directory
@@ -146,6 +147,6 @@ if __name__ == '__main__':
 
     index += 1
     
-  np.save('outputs/loss_func_{}_epsilon_{}_img_index_start_{}.npy'.format(args.loss_func, args.epsilon, args.img_index_start), index_to_query)
+  np.save(args.save_dir + 'loss_func_{}_epsilon_{}_img_index_start_{}.npy'.format(args.loss_func, args.epsilon, args.img_index_start), index_to_query)
 
 

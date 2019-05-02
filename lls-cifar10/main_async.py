@@ -24,7 +24,7 @@ def str2bool(key):
 parser = argparse.ArgumentParser()
 
 # Directory
-parser.add_argument('--model_dir', default='models/adv_trained', help='Model directory', type=str)
+parser.add_argument('--model_dir', default='models/naturally_trained', help='Model directory', type=str)
 parser.add_argument('--data_dir', default='../cifar10_data', help='Data directory', type=str)
 
 # Experiment Setting
@@ -46,8 +46,8 @@ parser.add_argument('--admm', default='False', help='use admm', type=str2bool)
 parser.add_argument('--admm_block_size', default=16, help='block size for admm', type=int)
 parser.add_argument('--partition', default='basic', help='block partitioning scheme', type=str)
 parser.add_argument('--admm_iter', default=100, help='admm max iteration', type=int)
-parser.add_argument('--overlap', default=0, help='overlap size', type=int)
-parser.add_argument('--admm_rho', default=1e-12, help='admm rho', type=float)
+parser.add_argument('--overlap', default=4, help='overlap size', type=int)
+parser.add_argument('--admm_rho', default=1e-13, help='admm rho', type=float)
 parser.add_argument('--admm_tau', default=1.5, help='admm tau', type=float)
 parser.add_argument('--adam', default='False', help='use adam optimizer, use rho as lr', type=str2bool)
 parser.add_argument('--adam_adapt', default='False', help='in adam, update rho with tau', type=str2bool)
@@ -56,7 +56,7 @@ parser.add_argument('--parallel', default=4, help='number of parallel threads to
 
 # Lazy Local Search Batch
 parser.add_argument('--lls_block_size', default=4, help='initial block size for lls', type=int)
-parser.add_argument('--lls_iter', default=1, type=int)
+parser.add_argument('--lls_iter', default=2, type=int)
 parser.add_argument('--batch_size', default=64, help='mini-batch size for lls, no mini-batch if set to 0', type=int)
 parser.add_argument('--no_hier', default='False', type=str2bool)
 args = parser.parse_args()
@@ -136,10 +136,27 @@ if __name__ == '__main__':
     orig_class = cifar.eval_data.ys[indices[index]]
     orig_class = np.expand_dims(orig_class, axis=0)
 
+    # Generate target class (same method as in Boundary attack)
+    if args.targeted:
+        target_class = (orig_class+1) % 10
+        target_class = np.expand_dims(target_class, axis=0)
+
     count += 1
 
-    tf.logging.info('Untargeted attack on {}th image starts, img index: {}, orig class: {}'.format(
-      count, indices[index], orig_class[0]))
+    if args.targeted:
+      tf.logging.info('Targeted attack on {}th image starts, img index: {}, orig class: {}, target class: {}'.format(
+        count, indices[index], orig_class[0], target_class[0, 0]))
+      adv_img, num_queries, parallel_queries, success, time = attack.perturb(initial_img,
+                                                                             target_class[0],
+                                                                             indices[index],
+                                                                             sesses)
+    else:
+      tf.logging.info('Untargeted attack on {}th image starts, img index: {}, orig class: {}'.format(
+        count, indices[index], orig_class[0]))
+      adv_img, num_queries, parallel_queries, success, time = attack.perturb(initial_img,
+                                                                             orig_class,
+                                                                             indices[index],
+                                                                             sesses)
 
     adv_img, num_queries, parallel_queries, success, time = attack.perturb(initial_img,
                                                                            orig_class,

@@ -29,7 +29,7 @@ if __name__ == '__main__':
 
     #basic
     parser.add_argument('--eps', default='8', help='Attack eps', type=int)
-    parser.add_argument('--sample_size', default=500, help='sample size', type=int)
+    parser.add_argument('--sample_size', default=1000, help='sample size', type=int)
     parser.add_argument('--loss_func', default='xent', help='loss func', type=str)
     parser.add_argument('--test', default='y', help='include run attack', type=str)
     parser.add_argument('--model_dir', default='naturally_trained', help='model name', type=str)
@@ -1200,10 +1200,11 @@ if __name__ == '__main__':
                               params.loss_func)
     saver = tf.train.Saver()
 
-    data_path = config['data_path']
+    data_path = './../cifar10_data'
     cifar = cifar10_input.CIFAR10Data(data_path)
 
-    indices = np.load('./../lazy-attack/cifar10_data/indices_untargeted.npy')
+    #indices = np.load('./../lazy-attack/cifar10_data/indices_untargeted.npy')
+    indices = []
 
     configs = tf.ConfigProto()
     configs.gpu_options.allow_growth = True
@@ -1219,10 +1220,11 @@ if __name__ == '__main__':
 
         bstart = 0
         while(True):
-            x_candid = cifar.eval_data.xs[indices[bstart:bstart+100]]
-            y_candid = cifar.eval_data.ys[indices[bstart:bstart+100]]
+            x_candid = cifar.eval_data.xs[bstart:bstart+100]
+            y_candid = cifar.eval_data.ys[bstart:bstart+100]
             mask = sess.run(model.correct_prediction, feed_dict = {model.x_input: x_candid,
                                                                    model.y_input: y_candid})
+            indices.append(mask)
             x_masked = x_candid[mask]
             y_masked = y_candid[mask]
             if bstart == 0:
@@ -1235,6 +1237,9 @@ if __name__ == '__main__':
             bstart += 100
             if len(x_full_batch) >= num_eval_examples:
                 break
+        
+        np.save('./out/nat_indices_untargeted.npy', indices)
+        exit()
 
         percentages = []
         total_times = []
