@@ -8,7 +8,6 @@ import math
 import sys
 import time
 import threading
-import time
 
 
 class LazyLocalSearchHelper(object):
@@ -118,20 +117,24 @@ class LazyLocalSearchHelper(object):
 
       if self.merge_per_batch:
         while success_checker.if_run():
-          time.sleep(5)
+          time.sleep(0.1)
 
         # Update global variable by averaging
         overlap_count = np.zeros_like(noise, np.float32)
         new_noise = np.zeros_like(noise, np.float32)
 
-        for block_noise, _, _, block, _ in results:
+        for block_noise_one_batch, _, _, block, _ in results:
           upper_left, lower_right = block
           new_noise[:, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], :] += \
-            block_noise[:, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], :]
+            block_noise_one_batch[:, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], :]
           overlap_count[:, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], :] += \
-            np.ones_like(block_noise[:, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], :], np.float32)
+            np.ones_like(block_noise_one_batch[:, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], :], np.float32)
 
         noise = new_noise / overlap_count
+
+        new_block_noise = np.copy(noise)
+        new_block_noise[:, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], :] = \
+          block_noise[:, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], :]
 
 
 

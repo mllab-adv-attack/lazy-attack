@@ -43,8 +43,8 @@ parser.add_argument('--save_img', dest='save_img', action='store_true')
 # Attack setting
 parser.add_argument('--attack', default='LazyLocalSearchAttack', type=str, help='The type of attack')
 parser.add_argument('--epsilon', default=0.05, type=float, help='The maximum perturbation')
-parser.add_argument('--max_queries', default=10000, type=int, help='The query limit')
-parser.add_argument('--targeted', action='store_true', help='Targeted attack if true')
+parser.add_argument('--max_queries', default=100000, type=int, help='The query limit')
+parser.add_argument('--targeted', default='False', type=str2bool, help='Targeted attack if true')
 
 # Parimonious attack setting
 parser.add_argument('--lls_block_size', default=32, type=int, help='Initial block size')
