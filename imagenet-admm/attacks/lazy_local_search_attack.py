@@ -14,6 +14,8 @@ from attacks.lazy_local_search_helper import LazyLocalSearchHelper
 class SuccessChecker(object):
   def __init__(self, success=False):
     self.flag = success
+    self.running = 0
+    self.lock = threading.Lock()
 
   def set(self):
     self.flag = True
@@ -23,6 +25,19 @@ class SuccessChecker(object):
 
   def check(self):
     return self.flag
+
+  def if_run(self):
+    return self.running != 0
+
+  def inc_run(self):
+    self.lock.acquire()
+    self.running += 1
+    self.lock.release()
+
+  def dec_run(self):
+    self.lock.acquire()
+    self.running -= 1
+    self.lock.release()
 
 
 class LazyLocalSearchAttack(object):

@@ -8,6 +8,7 @@ import math
 import sys
 import time
 import threading
+import time
 
 
 class LazyLocalSearchHelper(object):
@@ -18,6 +19,7 @@ class LazyLocalSearchHelper(object):
     self.targeted = args.targeted
     self.admm = args.admm
     self.batch_size = args.batch_size
+    self.merge_per_batch = args.merge_per_batch
    
     # Network setting
     self.model = model
@@ -79,6 +81,9 @@ class LazyLocalSearchHelper(object):
    
     # Initialize local noise
     block_noise = prev_block_noise
+
+    # Copy global noise
+    noise = np.copy(noise)
  
     # Initialize query count
     num_queries = 0
@@ -95,15 +100,40 @@ class LazyLocalSearchHelper(object):
       bstart = i*self.batch_size
       bend = min((i+1)*self.batch_size, num_blocks)
       blocks_batch = [blocks[curr_order[idx]] for idx in range(bstart, bend)]
+
+      success_checker.inc_run()
       
       block_noise, queries, loss, success = self._perturb_one_batch(
         image, block_noise, noise, label, admm_block, blocks_batch, success_checker, yk, rho)
       
-      num_queries += queries 
-   
+      num_queries += queries
+
+      results[index] = [block_noise, num_queries, loss, admm_block, success]
+
+      success_checker.dec_run()
+
       if success_checker.check():
         results[index] = [block_noise, num_queries, loss, admm_block, success]
         return
+
+      if self.merge_per_batch:
+        while success_checker.if_run():
+          time.sleep(5)
+
+        # Update global variable by averaging
+        overlap_count = np.zeros_like(noise, np.float32)
+        new_noise = np.zeros_like(noise, np.float32)
+
+        for block_noise, _, _, block, _ in results:
+          upper_left, lower_right = block
+          new_noise[:, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], :] += \
+            block_noise[:, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], :]
+          overlap_count[:, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], :] += \
+            np.ones_like(block_noise[:, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], :], np.float32)
+
+        noise = new_noise / overlap_count
+
+
 
     results[index] = [block_noise, num_queries, loss, admm_block, success]
     return
