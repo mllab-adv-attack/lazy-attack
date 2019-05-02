@@ -95,8 +95,8 @@ class LazyLocalSearchAttack(object):
       x0 = max(x-overlap, upper_left[0])
       y0 = max(y-overlap, upper_left[1])
       x1 = min(x+block_size+overlap, lower_right[0])
-      y1 = min(y+block_size+overlap, lower_right[1)    
-      blocks.append([x0, y0], [x1, y1])
+      y1 = min(y+block_size+overlap, lower_right[1])    
+      blocks.append([[x0, y0], [x1, y1]])
   
     return blocks
 
@@ -164,10 +164,10 @@ class LazyLocalSearchAttack(object):
       # Initialize threads
       threads = []
       prev_block_noises = [None]*len(self.blocks)
-      result = [None]*len(self.blocks)
+      results = [None]*len(self.blocks)
       result_queue = queue.Queue()
       
-      for i in range(len(self.blocks))    
+      for i in range(len(self.blocks)):    
         # Solve local search on a block
         if step == 0:
           prev_block_noises[i] = -self.epsilon*np.ones_like(noise, dtype=np.int32) 
@@ -198,7 +198,7 @@ class LazyLocalSearchAttack(object):
           for _ in range(self.parallel):
             block_noise, block_queries, block_loss, block, block_success, i = result_queue.get()
             results[i] = (block_noise, block_queries, block_loss, block, block_success)
-            num_quereis += block_queries
+            num_queries += block_queries
             
             # Early stop checking
             if block_success:
@@ -298,7 +298,7 @@ class LazyLocalSearchAttack(object):
           return adv_image, num_queries, parallel_queries, True, total_time
         
       end = time.time()
-      tf.logging.info('Step {}, loss: {}, total queries: {}, per-gpu queries: {:.0f}, change ratio: {:.4f}, time taken: {:.2f}'.format(
+      tf.logging.info('Step {}, loss: {:.5f}, total queries: {}, per-gpu queries: {:.0f}, change ratio: {:.4f}, time taken: {:.2f}'.format(
         step, curr_loss, num_queries, parallel_queries, change_ratio, end-start))
 
       # Divide lls_block_size if hierarchical is used

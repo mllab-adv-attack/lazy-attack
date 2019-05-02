@@ -17,6 +17,10 @@ ATTACK_CLASSES = [x for x in attacks.__dict__.values() if inspect.isclass(x)]
 for attack in ATTACK_CLASSES:
   setattr(sys.modules[__name__], attack.__name__, attack)
 
+""" For passing boolean values to slurm file in hyperparameter searching"""
+def str2bool(key):
+  return key.lower() in ('yes', 'true', 'y', 't')
+
 """ Namedtuple for model """
 Model = namedtuple('Model', 'x_input, y_input, logits, preds, losses')
 
@@ -37,16 +41,28 @@ parser.add_argument('--sample_size', default=1000, type=int)
 parser.add_argument('--save_img', dest='save_img', action='store_true')
 
 # Attack setting
-parser.add_argument('--attack', default='ParsimoniousAttack', type=str, help='The type of attack')
+parser.add_argument('--attack', default='LazyLocalSearchAttack', type=str, help='The type of attack')
 parser.add_argument('--epsilon', default=0.05, type=float, help='The maximum perturbation')
 parser.add_argument('--max_queries', default=10000, type=int, help='The query limit')
 parser.add_argument('--targeted', action='store_true', help='Targeted attack if true')
 
 # Parimonious attack setting
-parser.add_argument('--max_iters', default=1, type=int, help='The number of iterations in local search')
-parser.add_argument('--block_size', default=32, type=int, help='Initial block size')
+parser.add_argument('--lls_block_size', default=32, type=int, help='Initial block size')
 parser.add_argument('--batch_size', default=64, type=int, help='The size of batch. No batch if negative')
-parser.add_argument('--num_steps', default=2, type=int, help='The number of steps in a round')
+parser.add_argument('--lls_iter', default=2, type=int, help='The number of iterations in local search')
+parser.add_argument('--no_hier', default='False', type=str2bool)
+
+# ADMM setting
+parser.add_argument('--admm', default='False', type=str2bool, help='Use admm')
+parser.add_argument('--admm_block_size', default=128, type=int, help='Block size for admm')
+parser.add_argument('--partition', default='basic', type=str, help='Block partitioning scheme')
+parser.add_argument('--admm_iter', default=100, type=int, help='ADMM max iteration')
+parser.add_argument('--overlap', default=0, type=int, help='Overlap size')
+parser.add_argument('--admm_rho', default=1e-12, type=float, help='ADMM rho')
+parser.add_argument('--admm_tau', default=1.5, type=float, help='ADMM tau')
+parser.add_argument('--gpus', default=2, type=int, help='The number of gpus to use')
+parser.add_argument('--parallel', default=4, type=int, help='The number of parallel threads to use')
+
 
 args = parser.parse_args()
 
@@ -63,7 +79,10 @@ if __name__ == '__main__':
   graphs = []
   sesses = []
   models = []
- 
+  
+  # Assign 1~4 threads per gpu
+  assert (args.parallel >= args.gpus) and (args.parallel%args.gpus == 0) and (args.parallel//args.gpus <= 4)
+
   for gpu in range(4):
     graph = tf.Graph()
     graphs.append(graph)
@@ -137,7 +156,7 @@ if __name__ == '__main__':
     else: 
       tf.logging.info('Untargeted attack on {}th image starts, index: {}, orig class: {}'.format(
         count, indices[index], label_to_name(orig_class[0])))
-      adv_img, num_queries, success = attack.perturb(initial_img, orig_class, indices[index])
+      adv_img, _, num_queries, success, _ = attack.perturb(initial_img, orig_class, indices[index])
     
     # Check if the adversarial image satisfies the constraint
     assert np.amax(np.abs(adv_img-initial_img)) <= args.epsilon+1e-3    
