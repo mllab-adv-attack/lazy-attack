@@ -222,7 +222,7 @@ class LazyLocalSearchAttack(object):
             total_time = end-total_start
             tf.logging.info('Step {}, loss: {:.5f}, total queries: {}, per-gpu queries: {:.0f}, time taken: {:.2f}'.format(
               step, curr_loss, num_queries, parallel_queries, end-start))
-            return adv_image, num_queries, parallel_queries, False, total_time
+            return adv_image, num_queries, parallel_queries, True, total_time
         
           num_running = 0
       

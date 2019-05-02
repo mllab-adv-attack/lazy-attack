@@ -152,7 +152,7 @@ if __name__ == '__main__':
     if args.targeted:
       tf.logging.info('Targeted attack on {}th image starts, index: {}, orig class: {}, target class: {}'.format(
         count, indices[index], label_to_name(orig_class[0]), label_to_name(target_class[0])))
-      adv_img, num_queries, success = attack.perturb(initial_img, target_class, indices[index])
+      adv_img, _, num_queries, success, _ = attack.perturb(initial_img, target_class, indices[index])
     else: 
       tf.logging.info('Untargeted attack on {}th image starts, index: {}, orig class: {}'.format(
         count, indices[index], label_to_name(orig_class[0])))
