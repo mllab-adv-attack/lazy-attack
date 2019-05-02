@@ -307,7 +307,7 @@ class LazyLocalSearchAttack(object):
         step, curr_loss, num_queries, parallel_queries, change_ratio, end-start))
 
       # Divide lls_block_size if hierarchical is used
-      if not self.no_hier and ((step+1)%self.lls_iter == 0) and lls_block_size > 4:
+      if not self.no_hier and ((step+1)%self.lls_iter == 0) and lls_block_size > 1:
         lls_block_size //= 2
 
     # Attack failed

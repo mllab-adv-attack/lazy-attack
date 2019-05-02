@@ -193,7 +193,6 @@ class LazyLocalSearchHelper(object):
           block_noise[0, ...] = noise_batch[success_indices[0], ...]
           num_queries += success_indices[0] + 1
           curr_loss = losses[success_indices[0]]
-          
           success_checker.set()
           return block_noise, num_queries, curr_loss, True
 
@@ -249,7 +248,7 @@ class LazyLocalSearchHelper(object):
               return block_noise, num_queries, curr_loss, True
           else:
             if preds != label:
-              success_checke.set()
+              success_checker.set()
               return block_noise, num_queries, curr_loss, True
           
           if success_checker.check():
