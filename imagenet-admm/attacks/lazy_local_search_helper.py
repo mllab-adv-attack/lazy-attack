@@ -323,7 +323,7 @@ class LazyLocalSearchHelper(object):
       if len(priority_queue) > 0:
         best_margin, best_idx = heapq.heappop(priority_queue)
         curr_loss += best_margin
-        noise = self._flip_noise(noise, blocks[best_idx])
+        block_noise = self._flip_noise(block_noise, blocks[best_idx])
         A[best_idx] = 0
       
       # Delete elements into working set
@@ -332,7 +332,7 @@ class LazyLocalSearchHelper(object):
         cand_margin, cand_idx = heapq.heappop(priority_queue)
         # Re-evalulate the element
         image_batch = self._perturb_image(
-          image, self._flip_noise(noise, blocks[cand_idx]))
+          image, self._flip_noise(block_noise, blocks[cand_idx]))
         label_batch = np.copy(label)
         
         losses, preds = sess.run([model.losses, model.preds], 
