@@ -87,7 +87,7 @@ if __name__ == '__main__':
     graph = tf.Graph()
     graphs.append(graph)
     with graph.as_default():
-      with tf.device('/gpu:'+str(gpu//2)):
+      with tf.device('/gpu:'+str(gpu//args.gpus)):
         x_input = tf.placeholder(dtype=tf.float32, shape=[None, None, None, 3])
         y_input = tf.placeholder(dtype=tf.int32, shape=[None])
         sess = tf.Session(config=config)
