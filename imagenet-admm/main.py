@@ -37,7 +37,7 @@ parser.add_argument('--save_dir', default='./saves', type=str)
 
 # Experimental setting
 parser.add_argument('--img_index_start', default=0, type=int)
-parser.add_argument('--sample_size', default=1000, type=int)
+parser.add_argument('--sample_size', default=100, type=int)
 parser.add_argument('--save_img', dest='save_img', action='store_true')
 
 # Attack setting
@@ -56,9 +56,9 @@ parser.add_argument('--no_hier', default='False', type=str2bool)
 parser.add_argument('--admm', default='False', type=str2bool, help='Use admm')
 parser.add_argument('--admm_block_size', default=128, type=int, help='Block size for admm')
 parser.add_argument('--partition', default='basic', type=str, help='Block partitioning scheme')
-parser.add_argument('--admm_iter', default=100, type=int, help='ADMM max iteration')
-parser.add_argument('--overlap', default=0, type=int, help='Overlap size')
-parser.add_argument('--admm_rho', default=1e-12, type=float, help='ADMM rho')
+parser.add_argument('--admm_iter', default=1000, type=int, help='ADMM max iteration')
+parser.add_argument('--overlap', default=32, type=int, help='Overlap size')
+parser.add_argument('--admm_rho', default=1e-13, type=float, help='ADMM rho')
 parser.add_argument('--admm_tau', default=1.5, type=float, help='ADMM tau')
 parser.add_argument('--gpus', default=2, type=int, help='The number of gpus to use')
 parser.add_argument('--parallel', default=4, type=int, help='The number of parallel threads to use')

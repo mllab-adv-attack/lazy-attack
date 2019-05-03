@@ -26,6 +26,7 @@ class LazyLocalSearchHelper(object):
 
     # mini-batch block
     self.blocks = None
+    self.num_blocks = None
     self.curr_order = None
     self.num_batches = None
     self.merge_batch_size = None
@@ -61,11 +62,11 @@ class LazyLocalSearchHelper(object):
     self.blocks = self._split_block(upper_left, lower_right, lls_block_size)
 
     # Random permute mini-batches
-    num_blocks = len(self.blocks)
+    self.num_blocks = len(self.blocks)
     if self.batch_size == 0:
-      self.batch_size = num_blocks
-    self.curr_order = np.random.permutation(num_blocks)
-    self.num_batches = int(math.ceil(num_blocks/self.batch_size))
+      self.batch_size = self.num_blocks
+    self.curr_order = np.random.permutation(self.num_blocks)
+    self.num_batches = int(math.ceil(self.num_blocks/self.batch_size))
     self.merge_batch_size = 1 if self.merge_per_batch else self.num_batches
 
     return self.num_batches if self.merge_per_batch else 1
