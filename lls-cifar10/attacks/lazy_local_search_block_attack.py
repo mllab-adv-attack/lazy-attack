@@ -46,6 +46,7 @@ class LazyLocalSearchBlockAttack(object):
     self.adam = args.adam
     self.adam_adapt = args.adam_adapt
     self.parallel = args.parallel
+    self.merge_per_batch = args.merge_per_batch
 
     # lazy local search settings
     self.lls_iter = args.lls_iter
