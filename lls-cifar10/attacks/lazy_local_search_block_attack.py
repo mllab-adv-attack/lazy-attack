@@ -44,7 +44,7 @@ class LazyLocalSearchBlockAttack(object):
     self.admm_rho = args.admm_rho
     self.admm_tau = args.admm_tau
     self.adam = args.adam
-    self.adam_adapt = args.adam_adapt
+    self.adam_lr = args.adam_lr
     self.parallel = args.parallel
 
     # lazy local search settings
@@ -311,7 +311,7 @@ class LazyLocalSearchBlockAttack(object):
 
           # update by adam optimizer
           if self.adam:
-            lr = rho * np.sqrt(1-beta2**(step+1))/(1-beta1**(step+1))
+            lr = self.adam_lr * np.sqrt(1-beta2**(step+1))/(1-beta1**(step+1))
             mk[i] = beta1 * mk[i] + (1-beta1) * dist
             vk[i] = beta2 * vk[i] + (1-beta2) * (dist**2)
             yk[i] += lr * mk[i] / (np.sqrt(vk[i]) + 1e-8)
@@ -320,8 +320,7 @@ class LazyLocalSearchBlockAttack(object):
             yk[i] += rho * dist
 
         # tune rho with tau
-        if not self.adam or self.adam_adapt:
-          rho *= tau
+        rho *= tau
 
       # Check early stop
       noise_threshold = np.where(noise==0, -1, noise)
