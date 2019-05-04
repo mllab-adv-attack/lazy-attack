@@ -62,6 +62,7 @@ parser.add_argument('--admm_rho', default=1e-12, type=float, help='ADMM rho')
 parser.add_argument('--admm_tau', default=1.5, type=float, help='ADMM tau')
 parser.add_argument('--gpus', default=2, type=int, help='The number of gpus to use')
 parser.add_argument('--parallel', default=4, type=int, help='The number of parallel threads to use')
+parser.add_argument('--merge_per_batch', default='False', type=str2bool, help='merge after each mini-batch')
 
 
 args = parser.parse_args()

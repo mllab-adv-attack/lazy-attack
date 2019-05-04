@@ -11,9 +11,12 @@ import time
 
 from attacks.lazy_local_search_helper import LazyLocalSearchHelper
 
+
 class SuccessChecker(object):
   def __init__(self, success=False):
     self.flag = success
+    self.running = 0
+    self.lock = threading.Lock()
 
   def set(self):
     self.flag = True
@@ -45,6 +48,7 @@ class LazyLocalSearchAttack(object):
     self.admm_rho = args.admm_rho
     self.admm_tau = args.admm_tau
     self.parallel = args.parallel
+    self.merge_per_batch = args.merge_per_batch
 
     # Local search setting
     self.lls_iter = args.lls_iter
@@ -152,102 +156,158 @@ class LazyLocalSearchAttack(object):
       
       # Wall clock time (round)
       start = time.time()
-      
-      # Initialize threads
-      threads = []
-      new_block_noises = [None]*len(self.blocks)
-     
-      # Make results object to receive results from threads 
-      results = [None]*len(self.blocks)
-      
-      for i in range(len(self.blocks)):    
-        # Solve local search on a block
-        if step == 0:
-          new_block_noises[i] = -self.epsilon*np.ones_like(noise, dtype=np.float32) 
-        else:
-          prev_block_noise, _, _, block, _ = prev_results[i]
-          upper_left, lower_right = block
-          
-          # Initialize to (x; z\x)
-          new_block_noises[i] = np.copy(noise)
-          new_block_noises[i][:, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], :] = \
-            prev_block_noise[:, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], :]
-      
-        threads.append(threading.Thread(
-          target=self.lazy_local_search[i].perturb,
-          args=(image, 
-                new_block_noises[i], 
-                noise, 
-                label, 
-                self.blocks[i], 
-                lls_block_size, 
-                self.success_checker, 
-                yk[i], 
-                rho, 
-                i, 
-                results)
-        ))
- 
-      # Run threads
-      num_running = 0     
+
+      # initialize lls blocks
       for i in range(len(self.blocks)):
-        threads[i].start()
-        num_running += 1 
-      
-        # If all gpus are used, wait for results
-        if num_running == self.parallel:
-          
-          for j in range(i-self.parallel+1, i+1):
-            threads[j].join()
-          
-          # Gather results
-          for j in range(i-self.parallel+1, i+1):
-            block_noise, block_queries, block_loss, block, block_success = results[j]
-            num_queries += block_queries
-            
+        num_mini_batches = self.lazy_local_search[i].split_lls_blocks(self.blocks[i], lls_block_size)
+
+      # run threads
+      for ibatch in range(num_mini_batches):
+
+        # Initialize threads
+        threads = []
+        new_block_noises = [None]*len(self.blocks)
+
+        # Make results object to receive results from threads
+        results = [None]*len(self.blocks)
+
+        for i in range(len(self.blocks)):
+          # Solve local search on a block
+          if step == 0 and ibatch == 0:
+            new_block_noises[i] = -self.epsilon*np.ones_like(noise, dtype=np.float32)
+          else:
+            prev_block_noise, _, _, block, _ = prev_results[i]
+            upper_left, lower_right = block
+
+            # Initialize to (x; z\x)
+            new_block_noises[i] = np.copy(noise)
+            new_block_noises[i][:, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], :] = \
+              prev_block_noise[:, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], :]
+
+          threads.append(threading.Thread(
+            target=self.lazy_local_search[i].perturb,
+            args=(image,
+                  new_block_noises[i],
+                  noise,
+                  label,
+                  self.blocks[i],
+                  self.success_checker,
+                  yk[i],
+                  rho,
+                  i,
+                  ibatch,
+                  results)
+          ))
+
+        # Run threads
+        num_running = 0
+        for i in range(len(self.blocks)):
+          threads[i].start()
+          num_running += 1
+
+          # If all gpus are used, wait for results
+          if num_running == self.parallel:
+
+            for j in range(i-self.parallel+1, i+1):
+              threads[j].join()
+
+            # Gather results
+            for j in range(i-self.parallel+1, i+1):
+              block_noise, block_queries, block_loss, block, block_success = results[j]
+              num_queries += block_queries
+
+              # Early stop checking
+              if block_success:
+                noise = block_noise
+                curr_loss = block_loss
+                adv_image = self._perturb_image(image, noise)
+
+            # Max query checking
+            parallel_queries = self._parallel_queries(num_queries, non_parallel_queries)
+
+            if parallel_queries > self.max_queries:
+              end = time.time()
+              total_time = end-total_start
+              tf.logging.info('Step {}, loss: {:.5f}, total queries: {}, per-gpu queries: {:.0f}, time taken: {:.2f}'.format(
+                step, curr_loss, num_queries, parallel_queries, end-start))
+              return adv_image, num_queries, parallel_queries, False, total_time
+
             # Early stop checking
-            if block_success:
-              noise = block_noise
-              curr_loss = block_loss
-              adv_image = self._perturb_image(image, noise)
-          
-          # Max query checking
-          parallel_queries = self._parallel_queries(num_queries, non_parallel_queries)
+            if self.success_checker.check():
+              end = time.time()
+              total_time = end-total_start
+              tf.logging.info('Step {}, loss: {:.5f}, total queries: {}, per-gpu queries: {:.0f}, time taken: {:.2f}'.format(
+                step, curr_loss, num_queries, parallel_queries, end-start))
+              return adv_image, num_queries, parallel_queries, True, total_time
 
-          if parallel_queries > self.max_queries:
+            num_running = 0
+
+        # Update global variable by averaging
+        overlap_count = np.zeros_like(noise, np.float32)
+        new_noise = np.zeros_like(noise, np.float32)
+
+        for block_noise, _, _, block, _ in results:
+          upper_left, lower_right = block
+          new_noise[:, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], :] += \
+            block_noise[:, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], :]
+          overlap_count[:, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], :] += \
+            np.ones_like(block_noise[:, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], :], np.float32)
+
+        new_noise = new_noise/overlap_count
+
+        # Check convergence (global)
+        change_ratio = np.mean(new_noise != noise)
+        noise = new_noise
+
+        # Check early stop
+        noise_threshold = np.where(noise==0, -1, noise)
+        noise_threshold = self.epsilon*np.sign(noise_threshold)
+
+        adv_image = self._perturb_image(image, noise_threshold)
+        losses, preds = self.sess.run([self.model.losses, self.model.preds], feed_dict={
+          self.model.x_input: adv_image,
+          self.model.y_input: label
+          })
+
+        num_queries += 1
+        non_parallel_queries += 1
+        curr_loss = losses[0]
+
+        # Max query checking
+        parallel_queries = self._parallel_queries(num_queries, non_parallel_queries)
+
+        # Save previous results for next round
+        prev_results = copy.deepcopy(results)
+
+        # Max query checking
+        if parallel_queries > self.max_queries:
+          end = time.time()
+          total_time = end-total_start
+          tf.logging.info('Step {}, loss: {:.5f}, total queries: {}, per-gpu queries: {:.0f}, change ratio: {:.4f}, time taken: {:.2f}'.format(
+            step, curr_loss, num_queries, parallel_queries, change_ratio, end-start))
+          return adv_image, num_queries, parallel_queries, False, total_time
+
+        # Check early stop
+        if self.targeted:
+          if preds == label:
             end = time.time()
             total_time = end-total_start
-            tf.logging.info('Step {}, loss: {:.5f}, total queries: {}, per-gpu queries: {:.0f}, time taken: {:.2f}'.format(
-              step, curr_loss, num_queries, parallel_queries, end-start))
-            return adv_image, num_queries, parallel_queries, False, total_time
-
-          # Early stop checking
-          if self.success_checker.check():
-            end = time.time()
-            total_time = end-total_start
-            tf.logging.info('Step {}, loss: {:.5f}, total queries: {}, per-gpu queries: {:.0f}, time taken: {:.2f}'.format(
-              step, curr_loss, num_queries, parallel_queries, end-start))
+            tf.logging.info('Step {}, loss: {:.5f}, total queries: {}, per-gpu queries: {:.0f}, change ratio: {:.4f}, time taken: {:.2f}'.format(
+              step, curr_loss, num_queries, parallel_queries, change_ratio, end-start))
             return adv_image, num_queries, parallel_queries, True, total_time
-        
-          num_running = 0
-      
-      # Update global variable by averaging
-      overlap_count = np.zeros_like(noise, np.float32)
-      new_noise = np.zeros_like(noise, np.float32)
+        else:
+          if preds != label:
+            end = time.time()
+            total_time = end-total_start
+            tf.logging.info('Step {}, loss: {:.5f}, total queries: {}, per-gpu queries: {:.0f}, change ratio: {:.4f}, time taken: {:.2f}'.format(
+              step, curr_loss, num_queries, parallel_queries, change_ratio, end-start))
+            return adv_image, num_queries, parallel_queries, True, total_time
 
-      for block_noise, _, _, block, _ in results:
-        upper_left, lower_right = block
-        new_noise[:, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], :] += \
-          block_noise[:, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], :]
-        overlap_count[:, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], :] += \
-          np.ones_like(block_noise[:, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], :], np.float32)
-      
-      new_noise = new_noise/overlap_count
+        end = time.time()
+        tf.logging.info('Step {}, loss: {:.5f}, total queries: {}, per-gpu queries: {:.0f}, change ratio: {:.4f}, time taken: {:.2f}'.format(
+          step, curr_loss, num_queries, parallel_queries, change_ratio, end-start))
 
-      # Check convergence (global)
-      change_ratio = np.mean(new_noise != noise) 
-      noise = new_noise
-      
+
       # Update ADMM variables
       if self.admm:
         for i in range(len(self.blocks)):
@@ -255,56 +315,8 @@ class LazyLocalSearchAttack(object):
           upper_left, lower_right = block
           dist = (block_noise-noise)[0, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], :]
           yk[i] += rho*dist
-        
+
         rho *= tau
-      
-      # Check early stop
-      noise_threshold = np.where(noise==0, -1, noise)
-      noise_threshold = self.epsilon*np.sign(noise_threshold)
-      
-      adv_image = self._perturb_image(image, noise_threshold)
-      losses, preds = self.sess.run([self.model.losses, self.model.preds], feed_dict={
-        self.model.x_input: adv_image,
-        self.model.y_input: label
-        })
-      
-      num_queries += 1
-      non_parallel_queries += 1
-      curr_loss = losses[0]
-
-      # Max query checking
-      parallel_queries = self._parallel_queries(num_queries, non_parallel_queries)
-      
-      # Save previous results for next round
-      prev_results = copy.deepcopy(results)
-
-      # Max query checking
-      if parallel_queries > self.max_queries:
-        end = time.time()
-        total_time = end-total_start
-        tf.logging.info('Step {}, loss: {:.5f}, total queries: {}, per-gpu queries: {:.0f}, change ratio: {:.4f}, time taken: {:.2f}'.format(
-          step, curr_loss, num_queries, parallel_queries, change_ratio, end-start))
-        return adv_image, num_queries, parallel_queries, False, total_time
-
-      # Check early stop
-      if self.targeted:
-        if preds == label:
-          end = time.time()
-          total_time = end-total_start
-          tf.logging.info('Step {}, loss: {:.5f}, total queries: {}, per-gpu queries: {:.0f}, change ratio: {:.4f}, time taken: {:.2f}'.format(
-            step, curr_loss, num_queries, parallel_queries, change_ratio, end-start))
-          return adv_image, num_queries, parallel_queries, True, total_time
-      else:
-        if preds != label:
-          end = time.time()
-          total_time = end-total_start
-          tf.logging.info('Step {}, loss: {:.5f}, total queries: {}, per-gpu queries: {:.0f}, change ratio: {:.4f}, time taken: {:.2f}'.format(
-            step, curr_loss, num_queries, parallel_queries, change_ratio, end-start))
-          return adv_image, num_queries, parallel_queries, True, total_time
-        
-      end = time.time()
-      tf.logging.info('Step {}, loss: {:.5f}, total queries: {}, per-gpu queries: {:.0f}, change ratio: {:.4f}, time taken: {:.2f}'.format(
-        step, curr_loss, num_queries, parallel_queries, change_ratio, end-start))
 
       # Divide lls_block_size if hierarchical is used
       if not self.no_hier and ((step+1)%self.lls_iter == 0) and lls_block_size > 1:
