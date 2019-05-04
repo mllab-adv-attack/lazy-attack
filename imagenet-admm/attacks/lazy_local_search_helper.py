@@ -18,10 +18,18 @@ class LazyLocalSearchHelper(object):
     self.targeted = args.targeted
     self.admm = args.admm
     self.batch_size = args.batch_size
+    self.merge_per_batch = args.merge_per_batch
    
     # Network setting
     self.model = model
     self.sess = sess
+
+    # mini-batch block
+    self.blocks = None
+    self.num_blocks = None
+    self.curr_order = None
+    self.num_batches = None
+    self.merge_batch_size = None
     
   # Perturb image with given noise   
   def _perturb_image(self, image, noise):
@@ -48,6 +56,21 @@ class LazyLocalSearchHelper(object):
    
     return noise_new
 
+  def split_lls_blocks(self, admm_block, lls_block_size):
+    # Split to lls blocks
+    upper_left, lower_right = admm_block
+    self.blocks = self._split_block(upper_left, lower_right, lls_block_size)
+
+    # Random permute mini-batches
+    self.num_blocks = len(self.blocks)
+    if self.batch_size == 0:
+      self.batch_size = self.num_blocks
+    self.curr_order = np.random.permutation(self.num_blocks)
+    self.num_batches = int(math.ceil(self.num_blocks/self.batch_size))
+    self.merge_batch_size = 1 if self.merge_per_batch else self.num_batches
+
+    return self.num_batches if self.merge_per_batch else 1
+
   # Compute loss term involving (xi - Si z)
   def admm_loss(self, block, x, z, yk, rho):
     upper_left, lower_right = block
@@ -62,45 +85,37 @@ class LazyLocalSearchHelper(object):
               noise, 
               label, 
               admm_block, 
-              lls_block_size, 
               success_checker,
               yk,
               rho,
               index,
+              ibatch,
               results):		
 
     # Get the size of image
     self.width = np.shape(image)[1]
     self.height = np.shape(image)[2]
 
-    # Split to lls blocks
-    upper_left, lower_right = admm_block
-    blocks = self._split_block(upper_left, lower_right, lls_block_size)
-   
     # Initialize local noise
     block_noise = prev_block_noise
+
+    # Copy global noise
+    noise = np.copy(noise)
  
     # Initialize query count
     num_queries = 0
 
-    # Random permute mini-batches
-    num_blocks = len(blocks)
-    if self.batch_size == 0:
-      self.batch_size = num_blocks
-    curr_order = np.random.permutation(num_blocks)
-    num_batches = int(math.ceil(num_blocks/self.batch_size)) 
-    
     # Perform mini-batch lls
-    for i in range(num_batches):
+    for i in range(ibatch, ibatch+self.merge_batch_size):
       bstart = i*self.batch_size
-      bend = min((i+1)*self.batch_size, num_blocks)
-      blocks_batch = [blocks[curr_order[idx]] for idx in range(bstart, bend)]
-      
+      bend = min((i+1)*self.batch_size, self.num_blocks)
+      blocks_batch = [self.blocks[self.curr_order[idx]] for idx in range(bstart, bend)]
+
       block_noise, queries, loss, success = self._perturb_one_batch(
         image, block_noise, noise, label, admm_block, blocks_batch, success_checker, yk, rho)
       
-      num_queries += queries 
-   
+      num_queries += queries
+
       if success_checker.check():
         results[index] = [block_noise, num_queries, loss, admm_block, success]
         return

@@ -24,7 +24,7 @@ def str2bool(key):
 parser = argparse.ArgumentParser()
 
 # Directory
-parser.add_argument('--model_dir', default='models/naturally_trained', help='Model directory', type=str)
+parser.add_argument('--model_dir', default='models/adv_trained', help='Model directory', type=str)
 parser.add_argument('--data_dir', default='../cifar10_data', help='Data directory', type=str)
 
 # Experiment Setting
@@ -46,17 +46,18 @@ parser.add_argument('--admm', default='False', help='use admm', type=str2bool)
 parser.add_argument('--admm_block_size', default=16, help='block size for admm', type=int)
 parser.add_argument('--partition', default='basic', help='block partitioning scheme', type=str)
 parser.add_argument('--admm_iter', default=100, help='admm max iteration', type=int)
-parser.add_argument('--overlap', default=0, help='overlap size', type=int)
-parser.add_argument('--admm_rho', default=1e-12, help='admm rho', type=float)
+parser.add_argument('--overlap', default=4, help='overlap size', type=int)
+parser.add_argument('--admm_rho', default=1e-13, help='admm rho', type=float)
 parser.add_argument('--admm_tau', default=1.5, help='admm tau', type=float)
-parser.add_argument('--adam', default='False', help='use adam optimizer, use rho as lr', type=str2bool)
-parser.add_argument('--adam_adapt', default='False', help='in adam, update rho with tau', type=str2bool)
+parser.add_argument('--adam', default='False', help='use adam optimizer', type=str2bool)
+parser.add_argument('--adam_lr', default=1e-3, help='initial learning rate in adam', type=float)
 parser.add_argument('--gpus', default=1, help='number of gpus to use', type=int)
 parser.add_argument('--parallel', default=4, help='number of parallel threads to use', type=int)
+parser.add_argument('--merge_per_batch', default='False', help='merge after each mini-batch', type=str2bool)
 
 # Lazy Local Search Batch
 parser.add_argument('--lls_block_size', default=4, help='initial block size for lls', type=int)
-parser.add_argument('--lls_iter', default=1, type=int)
+parser.add_argument('--lls_iter', default=2, type=int)
 parser.add_argument('--batch_size', default=64, help='mini-batch size for lls, no mini-batch if set to 0', type=int)
 parser.add_argument('--no_hier', default='False', type=str2bool)
 args = parser.parse_args()
