@@ -306,15 +306,15 @@ class LazyLocalSearchAttack(object):
           step, curr_loss, num_queries, parallel_queries, change_ratio, end-start))
 
 
-      # Update ADMM variables
-      if self.admm:
-        for i in range(len(self.blocks)):
-          block_noise, _, _, block, _ = results[i]
-          upper_left, lower_right = block
-          dist = (block_noise-noise)[0, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], :]
-          yk[i] += rho*dist
+        # Update ADMM variables
+        if self.admm:
+          for i in range(len(self.blocks)):
+            block_noise, _, _, block, _ = results[i]
+            upper_left, lower_right = block
+            dist = (block_noise-noise)[0, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], :]
+            yk[i] += rho*dist
 
-        rho *= tau
+          rho *= tau
 
       # Divide lls_block_size if hierarchical is used
       if not self.no_hier and ((step+1)%self.lls_iter == 0) and lls_block_size > 1:

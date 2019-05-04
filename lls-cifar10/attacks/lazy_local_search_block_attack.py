@@ -362,27 +362,27 @@ class LazyLocalSearchBlockAttack(object):
                         'per-gpu queries: {:.0f}, change ratio: {:.4f}, Time taken: {:.2f}'.format(
           step, curr_loss, num_queries, parallel_queries, change_ratio, end - start))
 
-      # Update admm variables
-      if self.admm:
+        # Update admm variables
+        if self.admm:
 
-        for i in range(len(self.blocks)):
-          block_noise, _, _, block, _ = results[i]
+          for i in range(len(self.blocks)):
+            block_noise, _, _, block, _ = results[i]
 
-          upper_left, lower_right = block
-          dist = (block_noise - noise)[0, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], :]
+            upper_left, lower_right = block
+            dist = (block_noise - noise)[0, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], :]
 
-          # update by adam optimizer
-          if self.adam:
-            lr = self.adam_lr * np.sqrt(1-beta2**(step+1))/(1-beta1**(step+1))
-            mk[i] = beta1 * mk[i] + (1-beta1) * dist
-            vk[i] = beta2 * vk[i] + (1-beta2) * (dist**2)
-            yk[i] += lr * mk[i] / (np.sqrt(vk[i]) + 1e-8)
-          # else, update by rho tuned with tau (or not)
-          else:
-            yk[i] += rho * dist
+            # update by adam optimizer
+            if self.adam:
+              lr = self.adam_lr * np.sqrt(1-beta2**(step+1))/(1-beta1**(step+1))
+              mk[i] = beta1 * mk[i] + (1-beta1) * dist
+              vk[i] = beta2 * vk[i] + (1-beta2) * (dist**2)
+              yk[i] += lr * mk[i] / (np.sqrt(vk[i]) + 1e-8)
+            # else, update by rho tuned with tau (or not)
+            else:
+              yk[i] += rho * dist
 
-        # tune rho with tau
-        rho *= tau
+          # tune rho with tau
+          rho *= tau
 
       # Divide lls_block_size if hierarchical is used
       if not self.no_hier and ((step+1)% self.lls_iter == 0) and lls_block_size > 1:
