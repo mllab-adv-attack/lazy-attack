@@ -15,8 +15,6 @@ from attacks.lazy_local_search_helper import LazyLocalSearchHelper
 class SuccessChecker(object):
   def __init__(self, success=False):
     self.flag = success
-    self.running = 0
-    self.lock = threading.Lock()
 
   def set(self):
     self.flag = True
@@ -159,10 +157,10 @@ class LazyLocalSearchAttack(object):
 
       # initialize lls blocks
       for i in range(len(self.blocks)):
-        num_mini_batches = self.lazy_local_search[i].split_lls_blocks(self.blocks[i], lls_block_size)
+        num_merge_batches = self.lazy_local_search[i].split_lls_blocks(self.blocks[i], lls_block_size)
 
       # run threads
-      for ibatch in range(num_mini_batches):
+      for ibatch in range(num_merge_batches):
 
         # Initialize threads
         threads = []
