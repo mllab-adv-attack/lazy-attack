@@ -53,7 +53,7 @@ parser.add_argument('--adam', default='False', help='use adam optimizer, use rho
 parser.add_argument('--adam_adapt', default='False', help='in adam, update rho with tau', type=str2bool)
 parser.add_argument('--gpus', default=1, help='number of gpus to use', type=int)
 parser.add_argument('--parallel', default=4, help='number of parallel threads to use', type=int)
-parser.add_argument('--merge_per_batch', default='False', type=str2bool, help='merge after each mini-batch')
+parser.add_argument('--merge_per_batch', default='False', help='merge after each mini-batch', type=str2bool)
 
 # Lazy Local Search Batch
 parser.add_argument('--lls_block_size', default=4, help='initial block size for lls', type=int)
