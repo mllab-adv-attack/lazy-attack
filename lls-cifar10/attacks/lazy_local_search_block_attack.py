@@ -307,12 +307,9 @@ class LazyLocalSearchBlockAttack(object):
         change_ratio = np.mean(new_noise != noise)
 
         noise = new_noise
+        zero_ratio = np.mean(noise==0)
 
-        # Check early stop
-        noise_threshold = np.where(noise==0, -1, noise)
-        noise_threshold = self.epsilon * np.sign(noise_threshold)
-
-        adv_image = self._perturb_image(image, noise_threshold)
+        adv_image = self._perturb_image(image, noise)
         feed = {
           self.model.x_input: adv_image,
           self.model.y_input: label
@@ -335,8 +332,8 @@ class LazyLocalSearchBlockAttack(object):
           end = time.time()
           total_time = end - total_start
           tf.logging.info('Step {}, Loss: {:.5f}, total queries: {}, '
-                          'per-gpu queries: {:.0f}, change ratio: {:.4f}, Time taken: {:.2f}'.format(
-            step, curr_loss, num_queries, parallel_queries, change_ratio, end - start))
+                          'per-gpu queries: {:.0f}, change ratio: {:.4f}, zero ratio: {:.4f}, Time taken: {:.2f}'.format(
+            step, curr_loss, num_queries, parallel_queries, change_ratio, zero_ratio, end - start))
           return adv_image, num_queries, parallel_queries, False, total_time
 
         # Check early stop
@@ -345,22 +342,22 @@ class LazyLocalSearchBlockAttack(object):
             end = time.time()
             total_time = end - total_start
             tf.logging.info('Step {}, Loss: {:.5f}, total queries: {}, '
-                            'per-gpu queries: {:.0f}, change ratio: {:.4f}, Time taken: {:.2f}'.format(
-              step, curr_loss, num_queries, parallel_queries, change_ratio, end - start))
+                            'per-gpu queries: {:.0f}, change ratio: {:.4f}, zero ratio: {:.4f}, Time taken: {:.2f}'.format(
+              step, curr_loss, num_queries, parallel_queries, change_ratio, zero_ratio, end - start))
             return adv_image, num_queries, parallel_queries, True, total_time
         else:
           if preds != label:
             end = time.time()
             total_time = end - total_start
             tf.logging.info('Step {}, Loss: {:.5f}, total queries: {}, '
-                            'per-gpu queries: {:.0f}, change ratio: {:.4f}, Time taken: {:.2f}'.format(
-              step, curr_loss, num_queries, parallel_queries, change_ratio, end - start))
+                            'per-gpu queries: {:.0f}, change ratio: {:.4f}, zero ratio: {:.4f}, Time taken: {:.2f}'.format(
+              step, curr_loss, num_queries, parallel_queries, change_ratio, zero_ratio, end - start))
             return adv_image, num_queries, parallel_queries, True, total_time
 
         end = time.time()
         tf.logging.info('Step {}, Loss: {:.5f}, total queries: {}, '
-                        'per-gpu queries: {:.0f}, change ratio: {:.4f}, Time taken: {:.2f}'.format(
-          step, curr_loss, num_queries, parallel_queries, change_ratio, end - start))
+                        'per-gpu queries: {:.0f}, change ratio: {:.4f}, zero ratio: {:.4f}, Time taken: {:.2f}'.format(
+          step, curr_loss, num_queries, parallel_queries, change_ratio, zero_ratio, end - start))
 
         # Update admm variables
         if self.admm:

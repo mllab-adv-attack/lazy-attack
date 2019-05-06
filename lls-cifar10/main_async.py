@@ -199,8 +199,22 @@ if __name__ == '__main__':
 
     index += 1
 
-  admm = 'admm' if args.admm else 'basic'
+  targeted = 'targeted_' if args.targeted else 'untargeted_'
+  admm = 'admm_' if args.admm else ''
+  adam = 'adam_' if args.adam else ''
+  merge_per_batch = 'batch_' if args.merge_per_batch else 'round_'
 
-  filename = args.save_dir + '/lls_untargeted_{}_b{}_o{}_r{}_t{}_i{}.npy'.format(
-    admm, args.admm_block_size, args.overlap, args.admm_rho, args.admm_tau, args.img_index_start + args.sample_size)
+  filename = args.save_dir + '/lls_{}{}{}{}b{}_o{}_i{}_r{}_t{}_{}_{}.npy'.format(
+      targeted,
+      admm,
+      adam,
+      merge_per_batch,
+      args.admm_block_size,
+      args.overlap,
+      args.lls_iter,
+      args.admm_rho,
+      args.admm_tau,
+      args.img_index_start,
+      args.sample_size)
+  
   np.save(filename, index_to_num_queries)
