@@ -43,7 +43,7 @@ parser.add_argument('--save_img', dest='save_img', action='store_true')
 # Attack setting
 parser.add_argument('--attack', default='LazyLocalSearchAttack', type=str, help='The type of attack')
 parser.add_argument('--epsilon', default=0.05, type=float, help='The maximum perturbation')
-parser.add_argument('--max_queries', default=10000, type=int, help='The query limit')
+parser.add_argument('--max_queries', default=400000, type=int, help='The query limit')
 parser.add_argument('--targeted', action='store_true', help='Targeted attack if true')
 
 # Parimonious attack setting
@@ -53,14 +53,14 @@ parser.add_argument('--lls_iter', default=2, type=int, help='The number of itera
 parser.add_argument('--no_hier', default='False', type=str2bool)
 
 # ADMM setting
-parser.add_argument('--admm', default='False', type=str2bool, help='Use admm')
+parser.add_argument('--admm', default='True', type=str2bool, help='Use admm')
 parser.add_argument('--admm_block_size', default=128, type=int, help='Block size for admm')
 parser.add_argument('--partition', default='basic', type=str, help='Block partitioning scheme')
 parser.add_argument('--admm_iter', default=100, type=int, help='ADMM max iteration')
-parser.add_argument('--overlap', default=0, type=int, help='Overlap size')
-parser.add_argument('--admm_rho', default=1e-12, type=float, help='ADMM rho')
+parser.add_argument('--overlap', default=32, type=int, help='Overlap size')
+parser.add_argument('--admm_rho', default=1e-11, type=float, help='ADMM rho')
 parser.add_argument('--admm_tau', default=1.5, type=float, help='ADMM tau')
-parser.add_argument('--gpus', default=2, type=int, help='The number of gpus to use')
+parser.add_argument('--gpus', default=1, type=int, help='The number of gpus to use')
 parser.add_argument('--parallel', default=4, type=int, help='The number of parallel threads to use')
 parser.add_argument('--merge_per_batch', default='False', type=str2bool, help='merge after each mini-batch')
 
@@ -153,12 +153,14 @@ if __name__ == '__main__':
     if args.targeted:
       tf.logging.info('Targeted attack on {}th image starts, index: {}, orig class: {}, target class: {}'.format(
         count, indices[index], label_to_name(orig_class[0]), label_to_name(target_class[0])))
-      adv_img, _, num_queries, success, _ = attack.perturb(initial_img, target_class, indices[index])
+      adv_img, _, num_queries, success, _, losses = attack.perturb(initial_img, target_class, indices[index])
     else: 
       tf.logging.info('Untargeted attack on {}th image starts, index: {}, orig class: {}'.format(
         count, indices[index], label_to_name(orig_class[0])))
-      adv_img, _, num_queries, success, _ = attack.perturb(initial_img, orig_class, indices[index])
-    
+      adv_img, _, num_queries, success, _, losses = attack.perturb(initial_img, orig_class, indices[index])
+   
+    #np.save('./outputs/losses_{}.npy'.format(count), losses)
+     
     # Check if the adversarial image satisfies the constraint
     assert np.amax(np.abs(adv_img-initial_img)) <= args.epsilon+1e-3    
     assert np.amax(adv_img) <= 1.+1e-3

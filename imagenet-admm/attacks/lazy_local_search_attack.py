@@ -10,6 +10,7 @@ import threading
 import time
 
 from attacks.lazy_local_search_helper import LazyLocalSearchHelper
+from attacks.graph_cut_helper import GraphCutHelper
 
 
 class SuccessChecker(object):
@@ -66,7 +67,9 @@ class LazyLocalSearchAttack(object):
     # Build local search helper
     self.lazy_local_search = [LazyLocalSearchHelper(models[i%self.parallel], sesses[i%self.parallel], args) 
                               for i in range(len(self.blocks))]
-  
+    # Build graph cut helper
+    self.graph_cut = GraphCutHelper()
+
   # Calculate per-gpu queries
   def _parallel_queries(self, queries, non_parallel_queries):
     parallel_queries = (queries-non_parallel_queries)/self.parallel+non_parallel_queries
@@ -149,11 +152,15 @@ class LazyLocalSearchAttack(object):
     # Initialize success flag
     self.success_checker.reset()
     
+    losses_total = np.zeros([0, len(self.blocks)+1], np.float32)
+    zero_ratio_total = np.zeros([0], np.float32)
+     
     # Run ADMM iterations
     for step in range(self.admm_iter):
       
       # Wall clock time (round)
       start = time.time()
+      losses_step = np.zeros(len(self.blocks)+1, np.float32)
 
       # initialize lls blocks
       for i in range(len(self.blocks)):
@@ -181,7 +188,7 @@ class LazyLocalSearchAttack(object):
             new_block_noises[i] = np.copy(noise)
             new_block_noises[i][:, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], :] = \
               prev_block_noise[:, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], :]
-
+          
           threads.append(threading.Thread(
             target=self.lazy_local_search[i].perturb,
             args=(image,
@@ -213,7 +220,7 @@ class LazyLocalSearchAttack(object):
             for j in range(i-self.parallel+1, i+1):
               block_noise, block_queries, block_loss, block, block_success = results[j]
               num_queries += block_queries
-
+  
               # Early stop checking
               if block_success:
                 noise = block_noise
@@ -228,7 +235,7 @@ class LazyLocalSearchAttack(object):
               total_time = end-total_start
               tf.logging.info('Step {}, loss: {:.5f}, total queries: {}, per-gpu queries: {:.0f}, time taken: {:.2f}'.format(
                 step, curr_loss, num_queries, parallel_queries, end-start))
-              return adv_image, num_queries, parallel_queries, False, total_time
+              return adv_image, num_queries, parallel_queries, False, total_time, losses_total
 
             # Early stop checking
             if self.success_checker.check():
@@ -236,12 +243,12 @@ class LazyLocalSearchAttack(object):
               total_time = end-total_start
               tf.logging.info('Step {}, loss: {:.5f}, total queries: {}, per-gpu queries: {:.0f}, time taken: {:.2f}'.format(
                 step, curr_loss, num_queries, parallel_queries, end-start))
-              return adv_image, num_queries, parallel_queries, True, total_time
+              return adv_image, num_queries, parallel_queries, True, total_time, losses_total
 
             num_running = 0
 
         # Update global variable by averaging
-        overlap_count = np.zeros_like(noise, np.float32)
+        overlap_count = np.zeros_like(noise, np.int32)
         new_noise = np.zeros_like(noise, np.float32)
 
         for block_noise, _, _, block, _ in results:
@@ -249,23 +256,83 @@ class LazyLocalSearchAttack(object):
           new_noise[:, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], :] += \
             block_noise[:, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], :]
           overlap_count[:, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], :] += \
-            np.ones_like(block_noise[:, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], :], np.float32)
+            np.ones_like(block_noise[:, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], :], np.int32)
 
         new_noise = new_noise/overlap_count
-
+        
+        nodes = [[] for _ in range(3)] 
+        node_count = [1 for _ in range(3)]
+        xs = np.arange(self.upper_left[0], self.lower_right[0], lls_block_size)
+        ys = np.arange(self.upper_left[1], self.lower_right[1], lls_block_size)
+        for x, y in itertools.product(xs, ys):
+          for c in range(3):
+            count = overlap_count[0, x, y, c]
+            val = new_noise[0, x, y, c]
+            if count == 1 or np.abs(val) > self.epsilon-1e-3:
+              continue
+            loss_plus = [] 
+            loss_minus = []
+            for block_noise, _, block_loss, block, _ in results:
+              upper_left, lower_right = block
+              if x < upper_left[0] or x >= lower_right[0]:
+                continue
+              if y < upper_left[1] or y >= lower_right[1]:
+                continue
+              if block_noise[0, x, y, c] > 0:
+                loss_plus.append(block_loss)
+              else:
+                loss_minus.append(block_loss)
+            unary_source = np.sort(loss_plus)[0] 
+            unary_sink = np.sort(loss_minus)[0]
+            nodes[c].append([node_count[c], x//lls_block_size, y//lls_block_size, unary_source, unary_sink]) 
+            node_count[c] += 1
+        
+        self.graph_cut.create_graphs(nodes)
+        graph_cut_results = self.graph_cut.solve()
+        
+        for c in range(3):
+          for result in graph_cut_results[c]:
+            idx, x, y, sgn = result
+            new_noise[:, x*lls_block_size:(x+1)*lls_block_size, y*lls_block_size:(y+1)*lls_block_size, c] = sgn*self.epsilon
+            
         # Check convergence (global)
         change_ratio = np.mean(new_noise != noise)
         noise = new_noise
 
         # Check early stop
+        """
         noise_threshold = np.where(noise==0, -1, noise)
         noise_threshold = self.epsilon*np.sign(noise_threshold)
-
         adv_image = self._perturb_image(image, noise_threshold)
+        """  
+        
+        adv_image = self._perturb_image(image, noise) 
         losses, preds = self.sess.run([self.model.losses, self.model.preds], feed_dict={
           self.model.x_input: adv_image,
           self.model.y_input: label
+        })
+         
+        for i in range(len(self.blocks)):
+          block_noise, _, _, block, _ = results[i]
+          upper_left, lower_right = block
+          noise_temp = np.copy(noise)
+          noise_temp[:, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], :] = \
+            block_noise[:, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], :]
+          image_temp = self._perturb_image(image, noise_temp)
+          losses_temp = self.sess.run(self.model.losses, feed_dict={
+            self.model.x_input: image_temp,
+            self.model.y_input: label
           })
+          losses_step[i] = losses_temp[0]
+        
+        image_temp = self._perturb_image(image, noise)
+        losses_temp = self.sess.run(self.model.losses, feed_dict={
+          self.model.x_input: image_temp,
+          self.model.y_input: label
+        })
+        losses_step[-1] = losses_temp[0]
+         
+        losses_total = np.concatenate([losses_total, np.reshape(losses_step, [1, -1])], axis=0)
 
         num_queries += 1
         non_parallel_queries += 1
@@ -283,7 +350,7 @@ class LazyLocalSearchAttack(object):
           total_time = end-total_start
           tf.logging.info('Step {}, loss: {:.5f}, total queries: {}, per-gpu queries: {:.0f}, change ratio: {:.4f}, time taken: {:.2f}'.format(
             step, curr_loss, num_queries, parallel_queries, change_ratio, end-start))
-          return adv_image, num_queries, parallel_queries, False, total_time
+          return adv_image, num_queries, parallel_queries, False, total_time, losses_total
 
         # Check early stop
         if self.targeted:
@@ -292,14 +359,14 @@ class LazyLocalSearchAttack(object):
             total_time = end-total_start
             tf.logging.info('Step {}, loss: {:.5f}, total queries: {}, per-gpu queries: {:.0f}, change ratio: {:.4f}, time taken: {:.2f}'.format(
               step, curr_loss, num_queries, parallel_queries, change_ratio, end-start))
-            return adv_image, num_queries, parallel_queries, True, total_time
+            return adv_image, num_queries, parallel_queries, True, total_time, losses_total
         else:
           if preds != label:
             end = time.time()
             total_time = end-total_start
             tf.logging.info('Step {}, loss: {:.5f}, total queries: {}, per-gpu queries: {:.0f}, change ratio: {:.4f}, time taken: {:.2f}'.format(
               step, curr_loss, num_queries, parallel_queries, change_ratio, end-start))
-            return adv_image, num_queries, parallel_queries, True, total_time
+            return adv_image, num_queries, parallel_queries, True, total_time, losses_total
 
         end = time.time()
         tf.logging.info('Step {}, loss: {:.5f}, total queries: {}, per-gpu queries: {:.0f}, change ratio: {:.4f}, time taken: {:.2f}'.format(
@@ -322,5 +389,5 @@ class LazyLocalSearchAttack(object):
     # Attack failed
     total_end = time.time()
     total_time = total_end-total_start
-    return adv_image, num_queries, parallel_queries, False, total_time
+    return adv_image, num_queries, parallel_queries, False, total_time, losses_total    
 
