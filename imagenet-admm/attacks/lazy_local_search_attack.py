@@ -68,7 +68,7 @@ class LazyLocalSearchAttack(object):
     self.lazy_local_search = [LazyLocalSearchHelper(models[i%self.parallel], sesses[i%self.parallel], args) 
                               for i in range(len(self.blocks))]
     # Build graph cut helper
-    self.graph_cut = GraphCutHelper()
+    self.graph_cut = GraphCutHelper(args)
 
   # Calculate per-gpu queries
   def _parallel_queries(self, queries, non_parallel_queries):

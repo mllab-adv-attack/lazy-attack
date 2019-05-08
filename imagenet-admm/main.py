@@ -43,7 +43,7 @@ parser.add_argument('--save_img', dest='save_img', action='store_true')
 # Attack setting
 parser.add_argument('--attack', default='LazyLocalSearchAttack', type=str, help='The type of attack')
 parser.add_argument('--epsilon', default=0.05, type=float, help='The maximum perturbation')
-parser.add_argument('--max_queries', default=400000, type=int, help='The query limit')
+parser.add_argument('--max_queries', default=10000, type=int, help='The query limit')
 parser.add_argument('--targeted', action='store_true', help='Targeted attack if true')
 
 # Parimonious attack setting
@@ -53,7 +53,7 @@ parser.add_argument('--lls_iter', default=2, type=int, help='The number of itera
 parser.add_argument('--no_hier', default='False', type=str2bool)
 
 # ADMM setting
-parser.add_argument('--admm', default='True', type=str2bool, help='Use admm')
+parser.add_argument('--admm', default='False', type=str2bool, help='Use admm')
 parser.add_argument('--admm_block_size', default=128, type=int, help='Block size for admm')
 parser.add_argument('--partition', default='basic', type=str, help='Block partitioning scheme')
 parser.add_argument('--admm_iter', default=100, type=int, help='ADMM max iteration')
@@ -64,6 +64,9 @@ parser.add_argument('--gpus', default=1, type=int, help='The number of gpus to u
 parser.add_argument('--parallel', default=4, type=int, help='The number of parallel threads to use')
 parser.add_argument('--merge_per_batch', default='False', type=str2bool, help='merge after each mini-batch')
 
+# Graph cut setting
+parser.add_argument('--alpha', default=10000, type=int)
+parser.add_argument('--beta', default=1, type=int)
 
 args = parser.parse_args()
 
@@ -88,7 +91,7 @@ if __name__ == '__main__':
     graph = tf.Graph()
     graphs.append(graph)
     with graph.as_default():
-      with tf.device('/gpu:'+str(gpu//args.gpus)):
+      with tf.device('/gpu:'+str(gpu%args.gpus)):
         x_input = tf.placeholder(dtype=tf.float32, shape=[None, None, None, 3])
         y_input = tf.placeholder(dtype=tf.int32, shape=[None])
         sess = tf.Session(config=config)

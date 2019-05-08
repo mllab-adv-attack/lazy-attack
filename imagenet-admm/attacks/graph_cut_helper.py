@@ -5,16 +5,17 @@ from scipy.spatial import KDTree
 import tensorflow as tf
 
 class GraphCutHelper(object):
-  def __init__(self):
-    pass 
+  def __init__(self, args):
+    self.alpha = args.alpha
+    self.beta = args.beta
   
   def create_graphs(self, nodes):  
     self.graphs = [None]*3
-    alpha = 100
-    beta = 1
 
     for c in range(3):
       nodes_channel = nodes[c]
+      if len(nodes_channel) == 0:
+        continue
       num_nodes = len(nodes_channel)+2
       positions = np.zeros([0, 2], np.int32) 
       pos_to_idx = {}
@@ -32,11 +33,11 @@ class GraphCutHelper(object):
         # From source
         start_nodes.append(0)
         end_nodes.append(idx)
-        capacities.append(int(alpha*unary_source))
+        capacities.append(int(self.alpha*unary_source))
         # To sink
         start_nodes.append(idx)
         end_nodes.append(num_nodes-1)
-        capacities.append(int(alpha*unary_sink))
+        capacities.append(int(self.alpha*unary_sink))
    
       kdtree = KDTree(positions)
     
@@ -52,11 +53,11 @@ class GraphCutHelper(object):
           # Intermediate edges
           start_nodes.append(idx)
           end_nodes.append(idx_n)
-          capacities.append(beta)
+          capacities.append(self.beta)
           
           start_nodes.append(idx_n)
           end_nodes.append(idx)
-          capacities.append(beta)
+          capacities.append(self.beta)
       
       graph = [start_nodes, end_nodes, capacities, num_nodes, idx_to_pos]
       self.graphs[c] = graph
@@ -65,6 +66,8 @@ class GraphCutHelper(object):
     results = [[] for _ in range(3)]
     for c in range(3):
       graph = self.graphs[c]
+      if graph is None:
+        continue
       start_nodes, end_nodes, capacities, num_nodes, idx_to_pos = graph
       max_flow = SimpleMaxFlow()
       for i in range(len(start_nodes)):
