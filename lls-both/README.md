@@ -13,3 +13,7 @@ np_dir : cifar는 indices numpy file을 외부에 저장해서 따로 지정해�
 1) lls로 풀 batch(or blocks) 고르기. (based on flip된 횟수. 많이 flip된게 high priority).  
 2) unary term update. (image pixel마다 most recent marginal gain. u(x=1) = f(x=1|X^(t)) - f(x=-1|X^(t)) & u(x=-1)=0)
 3) graph cut 돌려보기. 
+
+### prerequisites
+ortools 꼭 설치하세요
+
