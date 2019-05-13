@@ -44,7 +44,7 @@ parser.add_argument('--save_img', dest='save_img', action='store_true')
 parser.add_argument('--attack', default='LazyLocalSearchAttack', type=str, help='The type of attack')
 parser.add_argument('--epsilon', default=0.05, type=float, help='The maximum perturbation')
 parser.add_argument('--max_queries', default=10000, type=int, help='The query limit')
-parser.add_argument('--targeted', action='store_true', help='Targeted attack if true')
+parser.add_argument('--targeted', default='False', type=str2bool, help='Targeted attack if true')
 
 # Parimonious attack setting
 parser.add_argument('--lls_block_size', default=32, type=int, help='Initial block size')
@@ -60,7 +60,9 @@ parser.add_argument('--admm_iter', default=100, type=int, help='ADMM max iterati
 parser.add_argument('--overlap', default=32, type=int, help='Overlap size')
 parser.add_argument('--admm_rho', default=1e-11, type=float, help='ADMM rho')
 parser.add_argument('--admm_tau', default=1.5, type=float, help='ADMM tau')
-parser.add_argument('--gpus', default=1, type=int, help='The number of gpus to use')
+parser.add_argument('--adam', default='False', help='use adam optimizer', type=str2bool)
+parser.add_argument('--adam_lr', default=1e-3, help='initial learning rate in adam', type=float)
+parser.add_argument('--gpus', default=2, type=int, help='The number of gpus to use')
 parser.add_argument('--parallel', default=4, type=int, help='The number of parallel threads to use')
 parser.add_argument('--merge_per_batch', default='False', type=str2bool, help='merge after each mini-batch')
 
@@ -69,6 +71,9 @@ parser.add_argument('--alpha', default=10000, type=int)
 parser.add_argument('--beta', default=1, type=int)
 
 args = parser.parse_args()
+
+# adam not implemented yet
+assert not args.adam
 
 if __name__ == '__main__':
   # Set verbosity

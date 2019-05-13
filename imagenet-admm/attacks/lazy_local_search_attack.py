@@ -298,14 +298,9 @@ class LazyLocalSearchAttack(object):
         # Check convergence (global)
         change_ratio = np.mean(new_noise != noise)
         noise = new_noise
+        zero_ratio = np.mean(noise==0)
 
         # Check early stop
-        """
-        noise_threshold = np.where(noise==0, -1, noise)
-        noise_threshold = self.epsilon*np.sign(noise_threshold)
-        adv_image = self._perturb_image(image, noise_threshold)
-        """  
-        
         adv_image = self._perturb_image(image, noise) 
         losses, preds = self.sess.run([self.model.losses, self.model.preds], feed_dict={
           self.model.x_input: adv_image,
@@ -348,29 +343,29 @@ class LazyLocalSearchAttack(object):
         if parallel_queries > self.max_queries:
           end = time.time()
           total_time = end-total_start
-          tf.logging.info('Step {}, loss: {:.5f}, total queries: {}, per-gpu queries: {:.0f}, change ratio: {:.4f}, time taken: {:.2f}'.format(
-            step, curr_loss, num_queries, parallel_queries, change_ratio, end-start))
-          return adv_image, num_queries, parallel_queries, False, total_time, losses_total
+          tf.logging.info('Step {}, loss: {:.5f}, total queries: {}, per-gpu queries: {:.0f}, change ratio: {:.4f}, zero ratio: {:.4f}, time taken: {:.2f}'.format(
+            step, curr_loss, num_queries, parallel_queries, change_ratio, zero_ratio, end-start))
+          return adv_image, num_queries, parallel_queries, False, total_time
 
         # Check early stop
         if self.targeted:
           if preds == label:
             end = time.time()
             total_time = end-total_start
-            tf.logging.info('Step {}, loss: {:.5f}, total queries: {}, per-gpu queries: {:.0f}, change ratio: {:.4f}, time taken: {:.2f}'.format(
-              step, curr_loss, num_queries, parallel_queries, change_ratio, end-start))
-            return adv_image, num_queries, parallel_queries, True, total_time, losses_total
+            tf.logging.info('Step {}, loss: {:.5f}, total queries: {}, per-gpu queries: {:.0f}, change ratio: {:.4f}, zero ratio: {:.4f}, time taken: {:.2f}'.format(
+              step, curr_loss, num_queries, parallel_queries, change_ratio, zero_ratio, end-start))
+            return adv_image, num_queries, parallel_queries, True, total_time
         else:
           if preds != label:
             end = time.time()
             total_time = end-total_start
-            tf.logging.info('Step {}, loss: {:.5f}, total queries: {}, per-gpu queries: {:.0f}, change ratio: {:.4f}, time taken: {:.2f}'.format(
-              step, curr_loss, num_queries, parallel_queries, change_ratio, end-start))
-            return adv_image, num_queries, parallel_queries, True, total_time, losses_total
+            tf.logging.info('Step {}, loss: {:.5f}, total queries: {}, per-gpu queries: {:.0f}, change ratio: {:.4f}, zero ratio: {:.4f}, time taken: {:.2f}'.format(
+              step, curr_loss, num_queries, parallel_queries, change_ratio, zero_ratio, end-start))
+            return adv_image, num_queries, parallel_queries, True, total_time
 
         end = time.time()
-        tf.logging.info('Step {}, loss: {:.5f}, total queries: {}, per-gpu queries: {:.0f}, change ratio: {:.4f}, time taken: {:.2f}'.format(
-          step, curr_loss, num_queries, parallel_queries, change_ratio, end-start))
+        tf.logging.info('Step {}, loss: {:.5f}, total queries: {}, per-gpu queries: {:.0f}, change ratio: {:.4f}, zero ratio: {:.4f}, time taken: {:.2f}'.format(
+          step, curr_loss, num_queries, parallel_queries, change_ratio, zero_ratio, end-start))
 
         # Update ADMM variables
         if self.admm:
