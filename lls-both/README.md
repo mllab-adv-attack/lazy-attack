@@ -17,6 +17,6 @@ np_dir : cifar는 indices numpy file을 외부에 저장해서 따로 지정해�
 ### prerequisites
 ortools 꼭 설치하세요
 
-## Graph cut helper
+### Graph cut helper
 1) mask라는 변수에 각 블럭이 graph cut으로 풀어야하는 블록인지 아닌지 0, 1로 표시해야함 (1이면 graph cut으로 푸는 block). size는 [h//block_size, w//block_size] 
 
