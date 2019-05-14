@@ -7,9 +7,6 @@ class GraphCutHelper(object):
   def __init__(self, args):
     self.alpha = args.alpha
     self.beta = args.beta
-  
-  
-  
 
   def _find_neighbors(self, x, y):
     height = self.height
