@@ -33,9 +33,9 @@ def str2bool(key):
 # MODEL_DIR = '/Users/janghyun/Documents/Codes/Attack/Models/inception_v3.ckpt'
 # DATA_DIR = '/Users/janghyun/Documents/Codes/Attack/Data_Test/imageNet'
 # SAVE_DIR = '/Users/janghyun/Documents/Results/Attack/imageNet'
-MODEL_DIR = '/home/janghyun/Codes/Attack/Models/inception_v3.ckpt'
-DATA_DIR = '/home/janghyun/Codes/Attack/Data_Test/imageNet'
-SAVE_DIR = '/home/janghyun/Results/Attack/imageNet'
+MODEL_DIR = '/home/gaon/lazy-attack/lls-imagenet/tools/data/inception_v3.ckpt'
+DATA_DIR = '/home/gaon/lazy-attack/imagenet_data'
+SAVE_DIR = '/home/gaon/lazy-attack/lls-both/lls-imagenet/results'
 
 # Directory
 parser.add_argument('--model_dir', default=MODEL_DIR, type=str)
@@ -48,11 +48,11 @@ parser.add_argument('--img_index_start', default=0, type=int)
 parser.add_argument('--sample_size', default=100, type=int)
 
 parser.add_argument('--summary', default='True', type=str2bool)
-parser.add_argument('--save_img', default=False, type=str2bool)
+parser.add_argument('--save_img', default='False', type=str2bool)
 
 # Attack
 parser.add_argument('--attack', default='LazyLocalSearchAttack', type=str)
-parser.add_argument('--targeted', default=False, type=str2bool)
+parser.add_argument('--targeted', default='False', type=str2bool)
 parser.add_argument('--loss_func', default='xent', type=str)
 parser.add_argument('--epsilon', default=0.05, type=int)
 parser.add_argument('--noise_size', default=256, help="noise size", type=int)
@@ -63,7 +63,7 @@ parser.add_argument('--max_queries', default=10000, type=int)
 parser.add_argument('--lls_iter', default=1, type=int)
 parser.add_argument('--lls_block_size', default=32, type=int)
 parser.add_argument('--batch_size', default=64, type=int)
-parser.add_argument('--no_hier', default=False, type=str2bool)
+parser.add_argument('--no_hier', default='False', type=str2bool)
 
 args = parser.parse_args()
 
