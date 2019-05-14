@@ -1,6 +1,6 @@
 import itertools
 import numpy as np
-import ortools.graph.pywrapgraph import SimpleMaxFlow
+from ortools.graph.pywrapgraph import SimpleMaxFlow
 
 
 class GraphCutHelper(object):
@@ -15,7 +15,7 @@ class GraphCutHelper(object):
     hs = np.arange(max(x-radius, 0), min(x+radius, height))
     ws = np.arange(max(y-radius, 0), min(y+radius, width))
     
-    return itertools.product(hs, ys): 
+    return itertools.product(hs, ws)
 
   def create_graph(self, mask):
     self.height, self.width = np.shape(mask)
@@ -70,14 +70,14 @@ class GraphCutHelper(object):
         w = idx % self.width
         assignment[h, w] = -1
       
-      for idx in source
+      for idx in source:
         if idx == self.end_index:
           continue
         h = idx // self.width
         w = idx % self.width
         assignment[h, w] = 1
       
-      return assignemnt
+      return assignment
     
     return None
 
