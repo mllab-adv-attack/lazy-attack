@@ -70,7 +70,7 @@ class GraphCutHelper(object):
         w = idx % self.width
         assignment[h, w] = -1
       
-      for idx in source:
+      for idx in sink:
         if idx == self.end_index:
           continue
         h = idx // self.width
