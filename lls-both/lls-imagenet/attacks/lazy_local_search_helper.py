@@ -42,7 +42,7 @@ class LazyLocalSearchHelper(object):
         noise_new[0, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], channel] *= -1
         return noise_new
 
-    def perturb(self, image, noise, label, sess, blocks):
+    def perturb(self, image, noise, label, sess, blocks, flip_count, latest_gain):
         # Local variables
         priority_queue = []
         num_queries = 0
@@ -112,6 +112,11 @@ class LazyLocalSearchHelper(object):
                     margin = losses[i] - curr_loss
                     heapq.heappush(priority_queue, (margin, idx))
 
+                # margin update
+                for i, idx in enumerate(indices[bstart:bend]):
+                    upper_left, lower_right, channel = blocks[idx]
+                    latest_gain[0, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], channel] += losses[i] - curr_loss
+
             # Pick the best element and insert it into working set
             if len(priority_queue) > 0:
                 best_margin, best_idx = heapq.heappop(priority_queue)
@@ -119,6 +124,10 @@ class LazyLocalSearchHelper(object):
                     curr_loss += best_margin
                     noise = self._flip_noise(noise, blocks[best_idx])
                     A[best_idx] = 1
+
+                    # flip count update
+                    upper_left, lower_right, channel = blocks[best_idx]
+                    flip_count[0, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], channel] += 1
 
             # Add elements into working set
             while len(priority_queue) > 0:
@@ -134,6 +143,10 @@ class LazyLocalSearchHelper(object):
                 num_queries += 1
                 margin = losses[0] - curr_loss
 
+                # latest gain update
+                upper_left, lower_right, channel = blocks[cand_idx]
+                latest_gain[0, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], channel] = margin
+
                 # If the cardinality has not changed, add the element
                 if len(priority_queue) == 0 or margin <= priority_queue[0][0]:
                     # If there is no element that has negative margin, then break
@@ -143,6 +156,11 @@ class LazyLocalSearchHelper(object):
                     curr_loss = losses[0]
                     noise = self._flip_noise(noise, blocks[cand_idx])
                     A[cand_idx] = 1
+
+                    # flip count update
+                    upper_left, lower_right, channel = blocks[cand_idx]
+                    flip_count[0, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], channel] +=1
+
                     # Early stopping
                     if self.targeted:
                         if preds == label:
@@ -193,6 +211,11 @@ class LazyLocalSearchHelper(object):
                     margin = losses[i] - curr_loss
                     heapq.heappush(priority_queue, (margin, idx))
 
+                # margin update (**for deletion gain is - margin**)
+                for i, idx in enumerate(indices[bstart:bend]):
+                    upper_left, lower_right, channel = blocks[idx]
+                    latest_gain[0, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], channel] = - (losses[i] - curr_loss)
+
             # Pick the best element and remove it from working set
             if len(priority_queue) > 0:
                 best_margin, best_idx = heapq.heappop(priority_queue)
@@ -201,19 +224,26 @@ class LazyLocalSearchHelper(object):
                     noise = self._flip_noise(noise, blocks[best_idx])
                     A[best_idx] = 0
 
+                    # flip count update
+                    upper_left, lower_right, channel = blocks[best_idx]
+                    flip_count[0, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], channel] += 1
+
             # Delete elements into working set
             while len(priority_queue) > 0:
                 # pick the best element
                 cand_margin, cand_idx = heapq.heappop(priority_queue)
                 # Re-evalulate the element
-                image_batch = self._perturb_image(
-                    image, self._flip_noise(noise, blocks[cand_idx]))
+                image_batch = self._perturb_image(image, self._flip_noise(noise, blocks[cand_idx]))
                 label_batch = np.copy(label)
 
                 losses, preds = sess.run([self.losses, self.preds],
                                          feed_dict={self.x_input: image_batch, self.y_input: label_batch})
                 num_queries += 1
                 margin = losses[0] - curr_loss
+
+                # latest gain update (**for deletion gain is - margin**)
+                upper_left, lower_right, channel = blocks[cand_idx]
+                latest_gain[0, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], channel] = - margin
 
                 # If the cardinality has not changed, remove the element
                 if len(priority_queue) == 0 or margin <= priority_queue[0][0]:
@@ -224,6 +254,11 @@ class LazyLocalSearchHelper(object):
                     curr_loss = losses[0]
                     noise = self._flip_noise(noise, blocks[cand_idx])
                     A[cand_idx] = 0
+
+                    # flip count update
+                    upper_left, lower_right, channel = blocks[cand_idx]
+                    flip_count[0, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], channel] +=1
+
                     # Early stopping
                     if self.targeted:
                         if preds == label:

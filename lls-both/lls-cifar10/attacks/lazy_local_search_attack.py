@@ -57,6 +57,12 @@ class LazyLocalSearchAttack(object):
         # Initialize noise
         noise = -self.epsilon * np.ones([1, self.noise_size, self.noise_size, 3], dtype=image.dtype)
 
+        # for batch ordering
+        flip_count = np.zeros([1, self.noise_size, self.noise_size, 3])
+
+        # for unary term, gain := f(x=1) - f(x=-1) (**lower is better !!**)
+        latest_gain = np.zeros([1, self.noise_size, self.noise_size, 3])
+
         # Split image into blocks
         blocks = self._split_block([0, 0], [self.noise_size, self.noise_size], lls_block_size)
 
@@ -78,11 +84,12 @@ class LazyLocalSearchAttack(object):
 
                 # Run lazy local search
                 noise, queries, loss, success = self.lazy_local_search.perturb(
-                    image, noise, label, sess, blocks_batch)
+                    image, noise, label, sess, blocks_batch, flip_count, latest_gain)
 
                 num_queries += queries
                 tf.logging.info("Block size: {}, batch: {}, loss: {:.4f}, num queries: {}".format(
                     lls_block_size, i, loss, num_queries))
+                # tf.logging.info("total flip count : {}, latest gain : {:.4f}/ {:.4f}".format(np.sum(flip_count)/lls_block_size**2, np.max(latest_gain), np.min(latest_gain)))
 
                 self.history['step'].append(step)
                 self.history['block_size'].append(lls_block_size)
