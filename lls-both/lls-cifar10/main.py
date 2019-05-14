@@ -21,15 +21,15 @@ for attack in ATTACK_CLASSES:
 """ Arguments """
 parser = argparse.ArgumentParser()
 
-# MODEL_DIR = '/Users/janghyun/Documents/Codes/Attack/Models/adv_trained'
-# DATA_DIR = '/Users/janghyun/Documents/Codes/Attack/Data_Test/cifar10'
-# SAVE_DIR = '/Users/janghyun/Documents/Results/Attack/cifar10'
-# NP_DIR = '/Users/janghyun/Documents/Codes/Attack/Data_Test/cifar10/indices_untargeted.npy'
-#
-MODEL_DIR = '/home/janghyun/Codes/Attack/Models/adv_trained'
-DATA_DIR = '/home/janghyun/Codes/Attack/Data_Test/cifar10'
-SAVE_DIR = '/home/janghyun/Results/Attack/cifar10'
-NP_DIR = '/home/janghyun/Codes/Attack/Data_Test/cifar10/indices_untargeted.npy'
+MODEL_DIR = r'C:\Users\LG\Downloads\Attack\Models\adv_trained'
+DATA_DIR = r'C:\Users\LG\Downloads\Attack\Data_Test\cifar10'
+SAVE_DIR = './'
+NP_DIR = r'C:\Users\LG\Downloads\Attack\Data_Test\cifar10\indices_untargeted.npy'
+
+# MODEL_DIR = '/home/janghyun/Codes/Attack/Models/adv_trained'
+# DATA_DIR = '/home/janghyun/Codes/Attack/Data_Test/cifar10'
+# SAVE_DIR = '/home/janghyun/Results/Attack/cifar10'
+# NP_DIR = '/home/janghyun/Codes/Attack/Data_Test/cifar10/indices_untargeted.npy'
 
 def str2bool(key):
     return key.lower() in ('yes', 'true', 'y', 't')
