@@ -69,7 +69,7 @@ class LazyLocalSearchAttack(object):
         latest_gain = np.zeros([1, self.noise_size, self.noise_size, 3])
 
         # graph-cut mask. 1 if the block is to be solved with graph-cut
-        mask = np.zeros([1, self.noise_size, self.noise_size, 3])
+        mask = np.ones([1, self.noise_size, self.noise_size, 3])
 
         # Split image into blocks
         blocks = self._split_block([0, 0], [self.noise_size, self.noise_size], lls_block_size)
@@ -83,9 +83,6 @@ class LazyLocalSearchAttack(object):
         self.history = {'step': [], 'block_size': [], 'num_batch': [], 'num_queries': [], 'loss': [], 'success': []}
         while True:
             num_batches = int(math.ceil(num_blocks / batch_size))
-
-            # initialize graph-cut mask
-            mask[:] = 1
 
             for i in range(num_batches//2):
                 # Construct a mini-batch
