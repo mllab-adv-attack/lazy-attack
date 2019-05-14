@@ -2,10 +2,10 @@ import cv2
 import tensorflow as tf
 import math
 import numpy as np
-import time
 import itertools
 
 from attacks.lazy_local_search_helper import LazyLocalSearchHelper
+from attacks.graph_cut_helper import GraphCutHelper
 
 
 class LazyLocalSearchAttack(object):
@@ -22,9 +22,14 @@ class LazyLocalSearchAttack(object):
         self.noise_size = args.noise_size
         self.image_range = args.image_range
 
-        self.history = {'step': [], 'block_size': [], 'num_batch': [], 'num_queries': [], 'loss': [], 'success':[]}
+        self.width = None
+        self.height = None
+
+        self.history = {'step': [], 'block_size': [], 'num_batch': [], 'num_queries': [], 'loss': [], 'success': []}
 
         self.lazy_local_search = LazyLocalSearchHelper(model, args)
+
+        self.graph_cut = GraphCutHelper(args)
 
     @staticmethod
     def _split_block(upper_left, lower_right, block_size):
@@ -63,6 +68,9 @@ class LazyLocalSearchAttack(object):
         # for unary term, gain := f(x=1) - f(x=-1) (**lower is better !!**)
         latest_gain = np.zeros([1, self.noise_size, self.noise_size, 3])
 
+        # graph-cut mask. 1 if the block is to be solved with graph-cut
+        mask = np.zeros([1, self.noise_size, self.noise_size, 3])
+
         # Split image into blocks
         blocks = self._split_block([0, 0], [self.noise_size, self.noise_size], lls_block_size)
 
@@ -72,11 +80,14 @@ class LazyLocalSearchAttack(object):
         curr_order = np.random.permutation(num_blocks)
 
         step = 0
-        self.history = {'step': [], 'block_size': [], 'num_batch': [], 'num_queries': [], 'loss': [], 'success':[]}
+        self.history = {'step': [], 'block_size': [], 'num_batch': [], 'num_queries': [], 'loss': [], 'success': []}
         while True:
             num_batches = int(math.ceil(num_blocks / batch_size))
 
-            for i in range(num_batches):
+            # initialize graph-cut mask
+            mask[:] = 1
+
+            for i in range(num_batches//2):
                 # Construct a mini-batch
                 bstart = i * batch_size
                 bend = min(bstart + batch_size, num_blocks)
@@ -108,6 +119,21 @@ class LazyLocalSearchAttack(object):
                 # If success, return True
                 if success:
                     return adv_image, num_queries, True
+
+                # update graph-cut mask
+                for block in blocks_batch:
+                    upper_left, lower_right, channel = block
+                    mask[0, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], channel] = 0
+
+            # perform graph-cut
+            self.graph_cut.set_block_size(lls_block_size)
+            cut_results = np.zeros_like(noise)
+            for c in range(3):
+                self.graph_cut.create_graph(mask[0, :, :, c], latest_gain[0, :, :, c])
+                cut_results[0, :, :, c] = self.graph_cut.solve()
+
+            # update noise with graph-cut results
+            noise[0, :, :, :] = np.where(cut_results == 0, noise[0, :, :, :], cut_results)
 
             # If block size >= 2, then split blocks
             if not self.no_hier and lls_block_size > 1 and (step + 1) % self.lls_iter == 0:

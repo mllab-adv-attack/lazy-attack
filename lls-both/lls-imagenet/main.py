@@ -65,6 +65,11 @@ parser.add_argument('--lls_block_size', default=32, type=int)
 parser.add_argument('--batch_size', default=64, type=int)
 parser.add_argument('--no_hier', default='False', type=str2bool)
 
+# Graph Cut Setting
+parser.add_argument('--alpha', default=10000, type=int)
+parser.add_argument('--beta', default=1, type=int)
+parser.add_argument('--radius', default=1, type=int)
+
 args = parser.parse_args()
 
 if __name__ == '__main__':
