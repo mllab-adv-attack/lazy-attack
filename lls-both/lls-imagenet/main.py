@@ -45,7 +45,7 @@ parser.add_argument('--name', default='imageNet', type=str)
 
 # Experiment Setting
 parser.add_argument('--img_index_start', default=0, type=int)
-parser.add_argument('--sample_size', default=100, type=int)
+parser.add_argument('--sample_size', default=1000, type=int)
 
 parser.add_argument('--summary', default='True', type=str2bool)
 parser.add_argument('--save_img', default='False', type=str2bool)
@@ -66,9 +66,11 @@ parser.add_argument('--batch_size', default=64, type=int)
 parser.add_argument('--no_hier', default='False', type=str2bool)
 
 # Graph Cut Setting
-parser.add_argument('--alpha', default=10000, type=int)
-parser.add_argument('--beta', default=1, type=int)
-parser.add_argument('--radius', default=1, type=int)
+parser.add_argument('--gc', default='False', help="use graph-cut", type=str2bool)
+parser.add_argument('--alpha', default=10000, help="unary weight", type=int)
+parser.add_argument('--beta', default=1, help="binary weight", type=int)
+parser.add_argument('--radius', default=1, help="neightborhood size (by block)", type=int)
+parser.add_argument('--gc_ratio', default=0.5, help="ratio of blocks to solve by gc", type=float)
 
 args = parser.parse_args()
 

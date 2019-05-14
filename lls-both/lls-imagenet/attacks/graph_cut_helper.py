@@ -10,9 +10,9 @@ class GraphCutHelper(object):
         self.beta = args.beta
         self.radius = args.radius
 
-        self.block_size = args.block_size
+        self.block_size = args.lls_block_size
 
-        self.height, self.width, self.radius = None, None, None
+        self.height, self.width = None, None
         self.start_index, self.end_index = None, None
         self.graph = None
 
@@ -32,8 +32,8 @@ class GraphCutHelper(object):
         height = self.height
         width = self.width
         radius = self.radius
-        hs = np.arange(max(x-radius, 0), min(x+radius, height))
-        ws = np.arange(max(y-radius, 0), min(y+radius, width))
+        hs = np.arange(max(x-radius, 0), min(x+radius+1, height))
+        ws = np.arange(max(y-radius, 0), min(y+radius+1, width))
 
         return itertools.product(hs, ws)
 
@@ -56,7 +56,7 @@ class GraphCutHelper(object):
             index = x*self.width+y
 
             # unary
-            edges[(self.start_index, index)] = latest_gain_c_rs[x, y]
+            edges[(self.start_index, index)] = int(self.alpha * latest_gain_c_rs[x, y])
             edges[(index, self.end_index)] = 0
 
             # pairwise
@@ -82,7 +82,7 @@ class GraphCutHelper(object):
         for key, val in edges.items():
             start, end = key
             capacity = val
-            max_flow.AddArcWithCapacity(start, end, capacity)
+            max_flow.AddArcWithCapacity(int(start), int(end), capacity)
 
         if max_flow.Solve(self.start_index, self.end_index) == max_flow.OPTIMAL:
             source = max_flow.GetSourceSideMinCut()

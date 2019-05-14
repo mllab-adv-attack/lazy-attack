@@ -29,6 +29,8 @@ class LazyLocalSearchAttack(object):
 
         self.lazy_local_search = LazyLocalSearchHelper(model, args)
 
+        self.gc = args.gc
+        self.gc_ratio = args.gc_ratio
         self.graph_cut = GraphCutHelper(args)
 
     @staticmethod
@@ -84,7 +86,10 @@ class LazyLocalSearchAttack(object):
         while True:
             num_batches = int(math.ceil(num_blocks / batch_size))
 
-            for i in range(num_batches//2):
+            if self.gc:
+                num_batches = int(math.ceil(num_batches * self.gc_ratio))
+
+            for i in range(num_batches):
                 # Construct a mini-batch
                 bstart = i * batch_size
                 bend = min(bstart + batch_size, num_blocks)
@@ -123,14 +128,15 @@ class LazyLocalSearchAttack(object):
                     mask[0, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], channel] = 0
 
             # perform graph-cut
-            self.graph_cut.set_block_size(lls_block_size)
-            cut_results = np.zeros_like(noise)
-            for c in range(3):
-                self.graph_cut.create_graph(mask[0, :, :, c], latest_gain[0, :, :, c])
-                cut_results[0, :, :, c] = self.graph_cut.solve()
+            if self.gc:
+                self.graph_cut.set_block_size(lls_block_size)
+                cut_results = np.zeros_like(noise)
+                for c in range(3):
+                    self.graph_cut.create_graph(mask[0, :, :, c], latest_gain[0, :, :, c])
+                    cut_results[0, :, :, c] = self.graph_cut.solve()
 
-            # update noise with graph-cut results
-            noise[0, :, :, :] = np.where(cut_results == 0, noise[0, :, :, :], cut_results)
+                # update noise with graph-cut results
+                noise[0, :, :, :] = np.where(cut_results == 0, noise[0, :, :, :], cut_results)
 
             # If block size >= 2, then split blocks
             if not self.no_hier and lls_block_size > 1 and (step + 1) % self.lls_iter == 0:
@@ -138,6 +144,9 @@ class LazyLocalSearchAttack(object):
                 blocks = self._split_block([0, 0], [self.noise_size, self.noise_size], lls_block_size)
                 num_blocks = len(blocks)
                 batch_size = self.batch_size if self.batch_size > 0 else num_blocks
+
+                # graph-cut unary term rescaling
+                latest_gain //= 2
 
             curr_order = np.random.permutation(num_blocks)
             step += 1
