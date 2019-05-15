@@ -55,6 +55,13 @@ class GraphCutHelper(object):
         xs, ys = np.where(mask_rs == 1)
         for x, y in zip(xs, ys):
             index = x*self.width+y
+            
+            # perform gc only if its neighbor was solved with lls
+            neighbors = self._find_neighbors(x, y)
+            neighbors_mask = [mask_rs[h, w] for h, w in neighbors]
+            
+            if not (0 in neighbors_mask):
+                continue
 
             # unary
             if latest_gain_rs[x, y] >= 0:
@@ -64,8 +71,9 @@ class GraphCutHelper(object):
                 edges[(self.start_index, index)] = 0
                 edges[(index, self.end_index)] = -int(self.alpha * latest_gain_rs[x, y])
 
-            # pairwise
             neighbors = self._find_neighbors(x, y)
+            
+            # pairwise
             for neighbor in neighbors:
                 h, w = neighbor
                 index_neighbor = h*self.width+w
