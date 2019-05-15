@@ -115,7 +115,7 @@ class LazyLocalSearchHelper(object):
                 # margin update
                 for i, idx in enumerate(indices[bstart:bend]):
                     upper_left, lower_right, channel = blocks[idx]
-                    latest_gain[0, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], channel] += losses[i] - curr_loss
+                    latest_gain[0, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], channel] = losses[i] - curr_loss
 
             # Pick the best element and insert it into working set
             if len(priority_queue) > 0:

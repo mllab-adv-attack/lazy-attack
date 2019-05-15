@@ -86,6 +86,9 @@ class LazyLocalSearchAttack(object):
         while True:
             num_batches = int(math.ceil(num_blocks / batch_size))
 
+            # initialize mask
+            mask[:] = 1
+
             if self.gc:
                 num_batches = int(math.ceil(num_batches * self.gc_ratio))
 
@@ -102,7 +105,7 @@ class LazyLocalSearchAttack(object):
                 num_queries += queries
                 tf.logging.info("Block size: {}, batch: {}, loss: {:.4f}, num queries: {}".format(
                     lls_block_size, i, loss, num_queries))
-                # tf.logging.info("total flip count : {}, latest gain : {:.4f}/ {:.4f}".format(np.sum(flip_count)/lls_block_size**2, np.max(latest_gain), np.min(latest_gain)))
+                tf.logging.info("total flip count : {}, latest gain : {:.4f}/ {:.4f}".format(np.sum(flip_count)/lls_block_size**2, np.max(latest_gain), np.min(latest_gain)))
 
                 self.history['step'].append(step)
                 self.history['block_size'].append(lls_block_size)
@@ -127,16 +130,21 @@ class LazyLocalSearchAttack(object):
                     upper_left, lower_right, channel = block
                     mask[0, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], channel] = 0
 
+            np.save('results/latest_gain_before_{}.npy'.format(lls_block_size), latest_gain)
+
             # perform graph-cut
             if self.gc:
                 self.graph_cut.set_block_size(lls_block_size)
                 cut_results = np.zeros_like(noise)
                 for c in range(3):
-                    self.graph_cut.create_graph(mask[0, :, :, c], latest_gain[0, :, :, c])
+                    self.graph_cut.create_graph(mask[0, :, :, c], latest_gain[0, :, :, c], noise[0, :, :, c])
                     cut_results[0, :, :, c] = self.graph_cut.solve()
+                #print(np.unique(cut_results, return_counts=True))
 
                 # update noise with graph-cut results
-                noise[0, :, :, :] = np.where(cut_results == 0, noise[0, :, :, :], cut_results)
+                noise = np.where(cut_results == 0, noise, cut_results * self.epsilon)
+            
+            np.save('results/latest_gain_mid_{}.npy'.format(lls_block_size), latest_gain)
 
             # If block size >= 2, then split blocks
             if not self.no_hier and lls_block_size > 1 and (step + 1) % self.lls_iter == 0:
@@ -146,7 +154,9 @@ class LazyLocalSearchAttack(object):
                 batch_size = self.batch_size if self.batch_size > 0 else num_blocks
 
                 # graph-cut unary term rescaling
-                latest_gain //= 2
+                latest_gain /= 4
+            
+            np.save('results/latest_gain_after_{}.npy'.format(lls_block_size), latest_gain)
 
             curr_order = np.random.permutation(num_blocks)
             step += 1

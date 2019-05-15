@@ -1,8 +1,8 @@
 import itertools
 import numpy as np
-import cv2
 from ortools.graph.pywrapgraph import SimpleMaxFlow
 
+LARGE_INT = int(1e+8)
 
 class GraphCutHelper(object):
     def __init__(self, args):
@@ -20,13 +20,13 @@ class GraphCutHelper(object):
     def _array_downsize(arr, block_size):
         height, width = arr.shape
 
-        return cv2.resize(arr, (height//block_size, width//block_size), interpolation=cv2.INTER_NEAREST)
+        return np.copy(arr[::block_size, ::block_size])
 
     @staticmethod
     def _array_upsize(arr, block_size):
         height, width = arr.shape
 
-        return cv2.resize(arr, (height*block_size, width*block_size), interpolation=cv2.INTER_NEAREST)
+        return arr.repeat(block_size, axis=0).repeat(block_size, axis=1)
 
     def _find_neighbors(self, x, y):
         height = self.height
@@ -40,10 +40,12 @@ class GraphCutHelper(object):
     def set_block_size(self, block_size):
         self.block_size = block_size
 
-    def create_graph(self, mask, latest_gain_c):
+    def create_graph(self, mask, latest_gain, noise):
         # downscaling
         mask_rs = self._array_downsize(mask, self.block_size)
-        latest_gain_c_rs = self._array_downsize(latest_gain_c, self.block_size)
+        latest_gain_rs = self._array_downsize(latest_gain, self.block_size) * self.alpha
+        #print(latest_gain_rs)
+        noise_rs = self._array_downsize(noise, self.block_size)
 
         self.height, self.width = np.shape(mask_rs)
         num_nodes = self.height*self.width
@@ -53,11 +55,16 @@ class GraphCutHelper(object):
 
         xs, ys = np.where(mask_rs == 1)
         for x, y in zip(xs, ys):
+            #print(x, y, latest_gain_rs[x, y])
             index = x*self.width+y
 
             # unary
-            edges[(self.start_index, index)] = int(self.alpha * latest_gain_c_rs[x, y])
-            edges[(index, self.end_index)] = 0
+            if latest_gain_rs[x, y] >= 0:
+                edges[(self.start_index, index)] = int(latest_gain_rs[x, y])
+                edges[(index, self.end_index)] = 0
+            else:
+                edges[(self.start_index, index)] = 0
+                edges[(index, self.end_index)] = -int(latest_gain_rs[x, y])
 
             # pairwise
             neighbors = self._find_neighbors(x, y)
@@ -67,8 +74,12 @@ class GraphCutHelper(object):
 
                 # this node need to be fixed
                 if mask_rs[h, w] == 0:
-                    edges[(self.start_index, index_neighbor)] = 0
-                    edges[(index_neighbor, self.end_index)] = 0
+                    if noise_rs[h, w] > 0:
+                        edges[(self.start_index, index_neighbor)] = 0
+                        edges[(index_neighbor, self.end_index)] = LARGE_INT
+                    else:
+                        edges[(self.start_index, index_neighbor)] = LARGE_INT
+                        edges[(index_neighbor, self.end_index)] = 0
 
                 edges[(index, index_neighbor)] = self.beta
                 edges[(index_neighbor, index)] = self.beta
@@ -82,6 +93,10 @@ class GraphCutHelper(object):
         for key, val in edges.items():
             start, end = key
             capacity = val
+            '''
+            if capacity not in [0, 1, LARGE_INT]:
+                print(start, end, capacity)
+            '''
             max_flow.AddArcWithCapacity(int(start), int(end), capacity)
 
         if max_flow.Solve(self.start_index, self.end_index) == max_flow.OPTIMAL:
@@ -109,5 +124,6 @@ class GraphCutHelper(object):
 
             return assignment
 
+        print('failed...')
         return None
 
