@@ -5,7 +5,7 @@ from ortools.graph.pywrapgraph import SimpleMaxFlow
 
 class GraphCutHelper(object):
     def __init__(self, args):
-        self.alpha = 100000
+        self.alpha = 10000000
         self.beta = 100
         self.radius = 1
 

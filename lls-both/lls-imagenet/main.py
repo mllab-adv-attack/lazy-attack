@@ -33,9 +33,9 @@ def str2bool(key):
 # MODEL_DIR = '/Users/janghyun/Documents/Codes/Attack/Models/inception_v3.ckpt'
 # DATA_DIR = '/Users/janghyun/Documents/Codes/Attack/Data_Test/imageNet'
 # SAVE_DIR = '/Users/janghyun/Documents/Results/Attack/imageNet'
-MODEL_DIR = '/home/janghyun/Codes/Attack/Models/inception_v3.ckpt'
-DATA_DIR = '/home/janghyun/Codes/Attack/Data_Test/imageNet'
-SAVE_DIR = '/home/janghyun/Results/Attack/imageNet'
+MODEL_DIR = '/home/gaon/lazy-attack/lls-imagenet/tools/data/inception_v3.ckpt'
+DATA_DIR = '/home/gaon/lazy-attack/imagenet_data'
+SAVE_DIR = '/home/gaon/lazy-attack/lls-both/lls-imagenet/results'
 
 # Directory
 parser.add_argument('--model_dir', default=MODEL_DIR, type=str)

@@ -87,7 +87,7 @@ class LazyLocalSearchAttack(object):
         # Prepare for batch
         num_blocks = len(blocks)
         batch_size = self.batch_size if self.batch_size > 0 else num_blocks
-        curr_order = np.random.choice(num_blocks, int(0.5*num_blocks))
+        curr_order = np.random.choice(num_blocks, int(0.5*num_blocks), replace=False)
 
         step = 0
         self.history = {'step': [], 'block_size': [], 'num_batch': [], 'num_queries': [], 'loss': [], 'success':[]}
@@ -158,8 +158,10 @@ class LazyLocalSearchAttack(object):
                     for h, w in zip(hs, ws):
                         x = h*lls_block_size
                         y = w*lls_block_size
+
                         noise[0, x:x+lls_block_size, y:y+lls_block_size, c] = result[h, w]*self.epsilon
             
+            print(np.unique(noise, return_counts=True))
             adv_image = self._perturb_image(image, noise)
             loss = sess.run(self.losses, feed_dict={self.x_input: adv_image, self.y_input: label})
             tf.logging.info('loss: {}'.format(loss[0]))        
@@ -171,5 +173,7 @@ class LazyLocalSearchAttack(object):
                 num_blocks = len(blocks)
                 batch_size = self.batch_size if self.batch_size > 0 else num_blocks
 
-            curr_order = np.random.choice(num_blocks, int(0.5*num_blocks))
+                latest_gain /= 4
+
+            curr_order = np.random.choice(num_blocks, int(0.5*num_blocks), replace=False)
             step += 1
