@@ -13,8 +13,8 @@ class GraphCutHelper(object):
         height = self.height
         width = self.width
         radius = self.radius
-        hs = np.arange(max(x-radius, 0), min(x+radius, height))
-        ws = np.arange(max(y-radius, 0), min(y+radius, width))
+        hs = np.arange(max(x-radius, 0), min(x+radius+1, height))
+        ws = np.arange(max(y-radius, 0), min(y+radius+1, width))
         
         return itertools.product(hs, ws)
 
