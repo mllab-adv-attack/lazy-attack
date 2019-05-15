@@ -6,7 +6,7 @@ import time
 import itertools
 
 from attacks.lazy_local_search_helper import LazyLocalSearchHelper
-
+from attacks.graph_cut_helper import GraphCutHelper
 
 class LazyLocalSearchAttack(object):
     def __init__(self, model, args, **kwargs):
@@ -25,6 +25,7 @@ class LazyLocalSearchAttack(object):
         self.history = {'step': [], 'block_size': [], 'num_batch': [], 'num_queries': [], 'loss': [], 'success':[]}
 
         self.lazy_local_search = LazyLocalSearchHelper(model, args)
+        self.graph_cut_helper = GraphCutHelper(args)
 
     @staticmethod
     def _split_block(upper_left, lower_right, block_size):
@@ -108,6 +109,13 @@ class LazyLocalSearchAttack(object):
                 # If success, return True
                 if success:
                     return adv_image, num_queries, True
+            
+            """ Graph cut
+            for c in range(3):
+              please preprocess mask, noise, and latest_gain 
+              self.graph_cut_helper(mask, noise, latest_gain)
+              assignment = self.graph_cut_helper.solve()
+            """
 
             # If block size >= 2, then split blocks
             if not self.no_hier and lls_block_size > 1 and (step + 1) % self.lls_iter == 0:
