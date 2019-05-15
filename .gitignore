@@ -48,3 +48,4 @@ imagenet-admm/tools/data/**
 *.swp
 
 **/results
+**/.DS_Store
