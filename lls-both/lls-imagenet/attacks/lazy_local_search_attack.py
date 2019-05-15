@@ -162,7 +162,6 @@ class LazyLocalSearchAttack(object):
 
                 # update noise with graph-cut results
                 noise = np.where(cut_results == 0, noise, cut_results * self.epsilon)
-                print(np.unique(noise, return_counts=True))
 
             adv_image = self._perturb_image(image, noise)
             loss = sess.run(self.losses, feed_dict={self.x_input: adv_image, self.y_input: label})

@@ -3,6 +3,7 @@ import inspect
 import pickle
 import os
 import sys
+import csv
 import tensorflow as tf
 from PIL import Image
 
@@ -189,5 +190,20 @@ if __name__ == '__main__':
                     label_to_name(p[0]), average_queries, median_queries, success_rate))
 
         index += 1
+
+    csv_filename = './results/result.csv'
+    row = [args.lls_block_size, args.lls_iter, args.alpha, args.beta, args.radius, args.gc_ratio, average_queries, median_queries, success_rate]
+    index_row = ['lls_block_size', 'lls_iter', 'alpha', 'beta', 'radius', 'gc_ratio', 'avg_queries', 'med_queries', 'success_rate']
+    
+    if not os.path.isfile(csv_filename):
+        with open(csv_filename, 'w+') as csvFile:
+            writer = csv.writer(csvFile)
+            writer.writerow(index_row)
+        csvFile.close()
+        
+    with open(csv_filename, 'a') as csvFile:
+        writer = csv.writer(csvFile)
+        writer.writerow(row)
+    csvFile.close()
 
     # np.save('outputs/loss_func_{}_epsilon_{}_img_index_start_{}.npy'.format(args.loss_func, args.epsilon, args.img_index_start), index_to_query)
