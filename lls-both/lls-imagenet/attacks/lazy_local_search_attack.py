@@ -27,6 +27,23 @@ class LazyLocalSearchAttack(object):
         self.lazy_local_search = LazyLocalSearchHelper(model, args)
         self.graph_cut_helper = GraphCutHelper(args)
 
+        self.model = model
+        self.x_input = model.x_input
+        self.y_input = model.y_input
+        self.logits = model.logits
+        self.preds = model.predictions
+
+        if self.loss_func == 'xent':
+            self.losses = model.y_xent
+        elif self.loss_func == 'cw':
+            self.losses = model.loss_cw
+        else:
+            tf.logging.info('Loss function must be xent or cw')
+            sys.exit()
+
+        if not args.targeted:
+            self.losses = -self.losses
+
     @staticmethod
     def _split_block(upper_left, lower_right, block_size):
         blocks = []
@@ -70,17 +87,17 @@ class LazyLocalSearchAttack(object):
         # Prepare for batch
         num_blocks = len(blocks)
         batch_size = self.batch_size if self.batch_size > 0 else num_blocks
-        curr_order = np.random.permutation(num_blocks)
+        curr_order = np.random.choice(num_blocks, int(0.5*num_blocks))
 
         step = 0
         self.history = {'step': [], 'block_size': [], 'num_batch': [], 'num_queries': [], 'loss': [], 'success':[]}
         while True:
-            num_batches = int(math.ceil(num_blocks / batch_size))
+            num_batches = int(math.ceil(len(curr_order) / batch_size))
 
             for i in range(num_batches):
                 # Construct a mini-batch
                 bstart = i * batch_size
-                bend = min(bstart + batch_size, num_blocks)
+                bend = min(bstart + batch_size, len(curr_order))
                 blocks_batch = [blocks[curr_order[idx]] for idx in range(bstart, bend)]
 
                 # Run lazy local search
@@ -109,13 +126,43 @@ class LazyLocalSearchAttack(object):
                 # If success, return True
                 if success:
                     return adv_image, num_queries, True
+          
+            if step > 0: 
+                mask = np.ones([self.noise_size//lls_block_size, self.noise_size//lls_block_size, 3], dtype=np.int32)
+                assignment = np.zeros([self.noise_size//lls_block_size, self.noise_size//lls_block_size, 3], dtype=np.int32)
+                marginal_gain = np.zeros([self.noise_size//lls_block_size, self.noise_size//lls_block_size, 3], dtype=np.float32)
+
+                for block in blocks:
+                    upper_left, lower_right, c = block
+                    x, y = upper_left
+                    h = x//lls_block_size
+                    w = y//lls_block_size
+                    assignment[h, w, c] = np.sign(noise[0, x, y, c]).astype(np.int32)
+                    marginal_gain[h, w, c] = latest_gain[0, x, y, c] 
+                 
+                for idx in curr_order:
+                    upper_left, lower_right, c = blocks[idx]
+                    x, y = upper_left
+                    h = x//lls_block_size
+                    w = y//lls_block_size
+                    mask[h, w, c] = 0
+                 
+                for c in range(3):
+                    mask_channel = mask[:, :, c]
+                    assignment_channel = assignment[:, :, c]
+                    marginal_gain_channel = marginal_gain[:, :, c]
+                    self.graph_cut_helper.create_graph(mask_channel, assignment_channel, marginal_gain_channel)
+                    result = self.graph_cut_helper.solve()
+                    
+                    hs, ws = np.where(mask_channel==1)
+                    for h, w in zip(hs, ws):
+                        x = h*lls_block_size
+                        y = w*lls_block_size
+                        noise[0, x:x+lls_block_size, y:y+lls_block_size, c] = result[h, w]*self.epsilon
             
-            """ Graph cut
-            for c in range(3):
-              please preprocess mask, noise, and latest_gain 
-              self.graph_cut_helper(mask, noise, latest_gain)
-              assignment = self.graph_cut_helper.solve()
-            """
+            adv_image = self._perturb_image(image, noise)
+            loss = sess.run(self.losses, feed_dict={self.x_input: adv_image, self.y_input: label})
+            tf.logging.info('loss: {}'.format(loss[0]))        
 
             # If block size >= 2, then split blocks
             if not self.no_hier and lls_block_size > 1 and (step + 1) % self.lls_iter == 0:
@@ -124,5 +171,5 @@ class LazyLocalSearchAttack(object):
                 num_blocks = len(blocks)
                 batch_size = self.batch_size if self.batch_size > 0 else num_blocks
 
-            curr_order = np.random.permutation(num_blocks)
+            curr_order = np.random.choice(num_blocks, int(0.5*num_blocks))
             step += 1

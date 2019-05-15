@@ -5,8 +5,9 @@ from ortools.graph.pywrapgraph import SimpleMaxFlow
 
 class GraphCutHelper(object):
     def __init__(self, args):
-        self.alpha = args.alpha
-        self.beta = args.beta
+        self.alpha = 100000
+        self.beta = 100
+        self.radius = 1
 
     def _find_neighbors(self, x, y):
         height = self.height
@@ -17,21 +18,22 @@ class GraphCutHelper(object):
         
         return itertools.product(hs, ws)
 
-    def create_graph(self, mask, noise, latest_gain):
+    def create_graph(self, mask, assignment, marginal_gain):
         self.height, self.width = np.shape(mask)
         num_nodes = self.height*self.width
-        self.source_index = num_nodes
-        self.sink_index = num_nodes+1
+        self.source_index = int(num_nodes)
+        self.sink_index = int(num_nodes+1)
         edges = {}
     
         xs, ys = np.where(mask==1)
-        for x, y in zip(xs, ys): 
+        for x, y in zip(xs, ys):
+            x = int(x)
+            y = int(y) 
             index = x*self.width+y
-            gain = latest_gain[x, y]
-      
-            """Should be fixed, check if gain is positive or negative"""
-            source_capacity = 0
-            sink_capacity = 0
+            unary = marginal_gain[x, y]
+             
+            source_capacity = unary if unary > 0 else 0
+            sink_capacity = -unary if unary < 0 else 0
 
             # unary term
             edges[(self.source_index, index)] = int(self.alpha*source_capacity)
@@ -41,19 +43,21 @@ class GraphCutHelper(object):
             neighbors = self._find_neighbors(x, y)      
             for neighbor in neighbors:   
                 h, w = neighbor
+                h = int(h)
+                w = int(w)
                 index_neighbor = h*self.width+w
               
                 # this node need to be fixed
                 if mask[h, w] == 0:
-                    """Should be fixed, check the sign of noise""" 
-                    source_capacity = 0 
-                    sink_capacity = 0
+                    sign = assignment[h, w]
+                    source_capacity = 1 if sign == -1 else 0
+                    sink_capacity = 1 if sign == 1 else 0
                  
                     edges[(self.source_index, index_neighbor)] = int(self.alpha*source_capacity)
                     edges[(index_neighbor, self.sink_index)] = int(self.alpha*sink_capacity)
               
-              edges[(index, index_neighbor)] = self.beta
-              edges[(index_neighbor, index)] = self.beta
+                edges[(index, index_neighbor)] = self.beta
+                edges[(index_neighbor, index)] = self.beta
 
         self.graph = edges
       
