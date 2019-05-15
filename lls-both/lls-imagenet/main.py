@@ -68,8 +68,8 @@ parser.add_argument('--no_hier', default='False', type=str2bool)
 # Graph Cut Setting
 parser.add_argument('--gc', default='False', help="use graph-cut", type=str2bool)
 parser.add_argument('--radius', default=1, help="neightborhood size (by block)", type=int)
-parser.add_argument('--alpha', default=10000, help="unary weight", type=int)
-parser.add_argument('--beta', default=1, help="binary weight", type=int)
+parser.add_argument('--alpha', default=1e+6, help="unary weight", type=float)
+parser.add_argument('--beta', default=100, help="binary weight", type=int)
 parser.add_argument('--gc_ratio', default=0.5, help="ratio of blocks to solve by gc", type=float)
 
 args = parser.parse_args()

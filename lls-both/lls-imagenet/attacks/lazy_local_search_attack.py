@@ -3,6 +3,7 @@ import tensorflow as tf
 import math
 import numpy as np
 import itertools
+import sys
 
 from attacks.lazy_local_search_helper import LazyLocalSearchHelper
 from attacks.graph_cut_helper import GraphCutHelper
@@ -13,6 +14,7 @@ class LazyLocalSearchAttack(object):
         self.loss_func = args.loss_func
         self.max_queries = args.max_queries
         self.epsilon = args.epsilon
+        self.targeted = args.targeted
 
         self.lls_iter = args.lls_iter
         self.batch_size = args.batch_size
@@ -32,6 +34,25 @@ class LazyLocalSearchAttack(object):
         self.gc = args.gc
         self.gc_ratio = args.gc_ratio
         self.graph_cut = GraphCutHelper(args)
+        
+        # Network Setting
+        self.model = model
+        self.x_input = model.x_input
+        self.y_input = model.y_input
+        self.logits = model.logits
+        self.preds = model.predictions
+
+        if self.loss_func == 'xent':
+            self.losses = model.y_xent
+        elif self.loss_func == 'cw':
+            self.losses = model.loss_cw
+        else:
+            tf.logging.info('Loss function must be xent or cw')
+            sys.exit()
+
+        if not self.targeted:
+            self.losses = -self.losses
+
 
     @staticmethod
     def _split_block(upper_left, lower_right, block_size):
@@ -105,7 +126,7 @@ class LazyLocalSearchAttack(object):
                 num_queries += queries
                 tf.logging.info("Block size: {}, batch: {}, loss: {:.4f}, num queries: {}".format(
                     lls_block_size, i, loss, num_queries))
-                tf.logging.info("total flip count : {}, latest gain : {:.4f}/ {:.4f}".format(np.sum(flip_count)/lls_block_size**2, np.max(latest_gain), np.min(latest_gain)))
+                #tf.logging.info("total flip count : {}, latest gain : {:.4f}/ {:.4f}".format(np.sum(flip_count)/lls_block_size**2, np.max(latest_gain), np.min(latest_gain)))
 
                 self.history['step'].append(step)
                 self.history['block_size'].append(lls_block_size)
@@ -130,8 +151,6 @@ class LazyLocalSearchAttack(object):
                     upper_left, lower_right, channel = block
                     mask[0, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], channel] = 0
 
-            np.save('results/latest_gain_before_{}.npy'.format(lls_block_size), latest_gain)
-
             # perform graph-cut
             if self.gc:
                 self.graph_cut.set_block_size(lls_block_size)
@@ -143,8 +162,11 @@ class LazyLocalSearchAttack(object):
 
                 # update noise with graph-cut results
                 noise = np.where(cut_results == 0, noise, cut_results * self.epsilon)
-            
-            np.save('results/latest_gain_mid_{}.npy'.format(lls_block_size), latest_gain)
+                print(np.unique(noise, return_counts=True))
+
+            adv_image = self._perturb_image(image, noise)
+            loss = sess.run(self.losses, feed_dict={self.x_input: adv_image, self.y_input: label})
+            tf.logging.info('loss after graph-cut: {:.4f}'.format(loss[0]))
 
             # If block size >= 2, then split blocks
             if not self.no_hier and lls_block_size > 1 and (step + 1) % self.lls_iter == 0:
@@ -155,8 +177,6 @@ class LazyLocalSearchAttack(object):
 
                 # graph-cut unary term rescaling
                 latest_gain /= 4
-            
-            np.save('results/latest_gain_after_{}.npy'.format(lls_block_size), latest_gain)
 
             curr_order = np.random.permutation(num_blocks)
             step += 1

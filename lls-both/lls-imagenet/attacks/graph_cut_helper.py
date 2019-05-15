@@ -2,7 +2,7 @@ import itertools
 import numpy as np
 from ortools.graph.pywrapgraph import SimpleMaxFlow
 
-LARGE_INT = int(1e+8)
+LARGE_INT = int(1e+15)
 
 class GraphCutHelper(object):
     def __init__(self, args):
@@ -43,8 +43,7 @@ class GraphCutHelper(object):
     def create_graph(self, mask, latest_gain, noise):
         # downscaling
         mask_rs = self._array_downsize(mask, self.block_size)
-        latest_gain_rs = self._array_downsize(latest_gain, self.block_size) * self.alpha
-        #print(latest_gain_rs)
+        latest_gain_rs = self._array_downsize(latest_gain, self.block_size)
         noise_rs = self._array_downsize(noise, self.block_size)
 
         self.height, self.width = np.shape(mask_rs)
@@ -55,16 +54,15 @@ class GraphCutHelper(object):
 
         xs, ys = np.where(mask_rs == 1)
         for x, y in zip(xs, ys):
-            #print(x, y, latest_gain_rs[x, y])
             index = x*self.width+y
 
             # unary
             if latest_gain_rs[x, y] >= 0:
-                edges[(self.start_index, index)] = int(latest_gain_rs[x, y])
+                edges[(self.start_index, index)] = int(self.alpha * latest_gain_rs[x, y])
                 edges[(index, self.end_index)] = 0
             else:
                 edges[(self.start_index, index)] = 0
-                edges[(index, self.end_index)] = -int(latest_gain_rs[x, y])
+                edges[(index, self.end_index)] = -int(self.alpha * latest_gain_rs[x, y])
 
             # pairwise
             neighbors = self._find_neighbors(x, y)
@@ -93,10 +91,7 @@ class GraphCutHelper(object):
         for key, val in edges.items():
             start, end = key
             capacity = val
-            '''
-            if capacity not in [0, 1, LARGE_INT]:
-                print(start, end, capacity)
-            '''
+            
             max_flow.AddArcWithCapacity(int(start), int(end), capacity)
 
         if max_flow.Solve(self.start_index, self.end_index) == max_flow.OPTIMAL:
