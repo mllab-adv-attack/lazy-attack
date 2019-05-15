@@ -110,8 +110,14 @@ class LazyLocalSearchAttack(object):
             # initialize mask
             mask[:] = 1
 
+            '''
             if self.gc:
                 num_batches = int(math.ceil(num_batches * self.gc_ratio))
+            '''
+            if self.gc:
+                gc_order = np.random.choice(curr_order,
+                                            size=int(math.ceil((len(curr_order) * self.gc_ratio))),
+                                            replace=False)
 
             for i in range(num_batches):
                 # Construct a mini-batch
@@ -146,10 +152,16 @@ class LazyLocalSearchAttack(object):
                 if success:
                     return adv_image, num_queries, True
 
+                '''
                 # update graph-cut mask
                 for block in blocks_batch:
                     upper_left, lower_right, channel = block
                     mask[0, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], channel] = 0
+                '''
+
+            for idx in gc_order:
+                upper_left, lower_right, channel = blocks[idx]
+                mask[0, upper_left[0]:lower_right[0], upper_left[1]:lower_right[1], channel] = 0
 
             # perform graph-cut
             if self.gc:
