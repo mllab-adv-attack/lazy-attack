@@ -14,42 +14,22 @@ import cifar10_input
 from pgd_attack import LinfPGDAttack
 
 
-if __name__ == '__main__':
-    import argparse
-
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--sample_size', default=100, help='sample size', type=int)
-    parser.add_argument('--model_dir', default='adv_trained', type=str)
-    parser.add_argument('--loss_func', default='xent', type=str)
-    # PGD
-    parser.add_argument('--eps', default=8, help='Attack eps', type=float)
-    parser.add_argument('--pgd_random_start', action='store_true')
-    parser.add_argument('--pgd_num_steps', default=20, type=int)
-    parser.add_argument('--pgd_step_size', default=2, type=float)
-    # impenetrable
-    parser.add_argument('--imp_random_start', action='store_true')
-    parser.add_argument('--imp_num_steps', default=0, help='0 for until convergence', type=int)
-    parser.add_argument('--imp_step_size', default=2, type=float)
-    params = parser.parse_args()
-    for key, val in vars(params).items():
-        print('{}={}'.format(key, val))
-
-
 class Impenetrable(object):
     def __init__(self, model, args):
         self.model = model
         self.eps = args.eps
         self.loss_func = args.loss_func
         self.random_start = args.imp_random_start
-        self.num_steps = args.imp_num_steps
-        self.step_size = args.imp_step_size
+        self.imp_num_steps = args.imp_num_steps
+        self.res_num_steps = args.res_num_steps
+        self.res_step_size = args.res_step_size
 
-        self.attack = LinfPGDAttack(self.model,
-                                        self.eps,
-                                        args.pgd_num_steps,
-                                        args.pgd_step_size,
-                                        args.pgd_random_start,
-                                        args.loss_func)
+        self.pgd = LinfPGDAttack(self.model,
+                                 self.eps,
+                                 args.pgd_num_steps,
+                                 args.pgd_step_size,
+                                 args.pgd_random_start,
+                                 args.loss_func)
 
         if self.loss_func == 'xent':
             self.loss = self.model.xent
@@ -85,13 +65,13 @@ class Impenetrable(object):
         print()
 
         step = 1
-        while self.num_steps <= 0 or step <= self.num_steps:
+        while self.imp_num_steps <= 0 or step <= self.imp_num_steps:
             print("step:", step)
 
             # attack image
-            x_adv = self.attack.perturb(x, y, sess)
+            x_adv = self.pgd.perturb(x, y, sess)
 
-            cur_corr, grad = sess.run([self.model.num_correct, self.grad],
+            cur_corr = sess.run(self.model.num_correct,
                                       feed_dict={self.model.x_input: x_adv,
                                                  self.model.y_input: y})
 
@@ -99,8 +79,9 @@ class Impenetrable(object):
             print("attack accuracy: {:.2f}%".format(cur_corr/num_images*100))
             print("change ratio: {:.2f}%".format(change_ratio*100))
 
-            x_res = x_adv - self.step_size * np.sign(grad)
-            x_res = np.clip(x_res, 0, 255)
+            x_res = self.pgd.perturb(x, y, sess,
+                                     proj=False, reverse=True,
+                                     step_size=self.res_step_size, num_steps=self.res_num_steps)
 
             cur_corr = sess.run(self.model.num_correct,
                                 feed_dict={self.model.x_input: x_res,
@@ -116,8 +97,8 @@ class Impenetrable(object):
 
             step += 1
 
-
         return x
+
 
 def result(x_imp, x_adv, model, sess, x_full_batch, y_full_batch):
     num_eval_samples = x_imp.shape[0]
@@ -182,8 +163,27 @@ def result(x_imp, x_adv, model, sess, x_full_batch, y_full_batch):
 
 
 if __name__ == '__main__':
+    import argparse
     import json
     import sys
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--sample_size', default=100, help='sample size', type=int)
+    parser.add_argument('--model_dir', default='adv_trained', type=str)
+    parser.add_argument('--loss_func', default='xent', type=str)
+    # PGD
+    parser.add_argument('--eps', default=8, help='Attack eps', type=float)
+    parser.add_argument('--pgd_random_start', action='store_true')
+    parser.add_argument('--pgd_num_steps', default=20, type=int)
+    parser.add_argument('--pgd_step_size', default=2, type=float)
+    # impenetrable
+    parser.add_argument('--imp_random_start', action='store_true')
+    parser.add_argument('--imp_num_steps', default=0, help='0 for until convergence', type=int)
+    parser.add_argument('--res_num_steps', default=20, type=int)
+    parser.add_argument('--res_step_size', default=2, type=float)
+    params = parser.parse_args()
+    for key, val in vars(params).items():
+        print('{}={}'.format(key, val))
 
     from model import Model
 
@@ -251,7 +251,7 @@ if __name__ == '__main__':
 
             print('fortifying image ', bstart)
             x_batch_imp = impenet.fortify(x_batch, y_batch, sess)
-            x_batch_adv = impenet.attack.perturb(x_batch_imp, y_batch, sess)
+            x_batch_adv = impenet.pgd.perturb(x_batch_imp, y_batch, sess)
 
             x_imp.append(x_batch_imp)
             x_adv.append(x_batch_adv)
@@ -261,8 +261,10 @@ if __name__ == '__main__':
 
         if np.amax(x_imp) > 255.0001 or \
             np.amin(x_imp) < -0.0001 or \
-                np.isnan(np.amax(x_imp)):
+            np.isnan(np.amax(x_imp)):
             print('Invalid pixel range. Expected [0,255], fount[{},{}]'.format(np.amin(x_imp),
                                                                                np.amax(x_imp)))
         else:
             result(x_imp, x_adv, model, sess, x_full_batch, y_full_batch)
+
+
