@@ -52,7 +52,7 @@ class Impenetrable(object):
 
         num_images = len(x_orig)
 
-        if self.random_start:
+        if self.imp_random_start:
             x = np.random.randint(0, 256, x_orig.shape, dtype='int32')
         else:
             x = np.copy(x_orig)
@@ -81,7 +81,7 @@ class Impenetrable(object):
             print("change ratio: {:.2f}%".format(change_ratio*100))
 
             # restore image
-            x_res = self.pgd.perturb(x, y, sess,
+            x_res = self.pgd.perturb(x_adv, y, sess,
                                      proj=False, reverse=True,
                                      step_size=self.res_step_size, num_steps=self.res_num_steps)
 
@@ -94,7 +94,7 @@ class Impenetrable(object):
             print("change ratio: {:.2f}%".format(change_ratio*100))
 
             # validation
-            val_iter = 20
+            val_iter = 100
             val_total_corr = 0
             for i in range(val_iter):
                 x_val = self.pgd.perturb(x_res, y, sess,
@@ -111,6 +111,11 @@ class Impenetrable(object):
             print()
 
             x = x_res
+            
+            # goal achievement check
+            if val_total_corr == (num_images*val_iter):
+                print("reached performance goal!")
+                break
 
             step += 1
 
@@ -196,7 +201,7 @@ if __name__ == '__main__':
     # impenetrable
     parser.add_argument('--imp_random_start', action='store_true')
     parser.add_argument('--imp_num_steps', default=0, help='0 for until convergence', type=int)
-    parser.add_argument('--res_num_steps', default=8, type=int)
+    parser.add_argument('--res_num_steps', default=9, type=int)
     parser.add_argument('--res_step_size', default=1, type=float)
     params = parser.parse_args()
     for key, val in vars(params).items():
