@@ -19,7 +19,7 @@ class Impenetrable(object):
         self.model = model
         self.eps = args.eps
         self.loss_func = args.loss_func
-        self.random_start = args.imp_random_start
+        self.imp_random_start = args.imp_random_start
         self.imp_num_steps = args.imp_num_steps
         self.res_num_steps = args.res_num_steps
         self.res_step_size = args.res_step_size
@@ -69,7 +69,8 @@ class Impenetrable(object):
             print("step:", step)
 
             # attack image
-            x_adv = self.pgd.perturb(x, y, sess)
+            x_adv = self.pgd.perturb(x, y, sess,
+                                     proj=True, reverse=False)
 
             cur_corr = sess.run(self.model.num_correct,
                                       feed_dict={self.model.x_input: x_adv,
@@ -79,6 +80,7 @@ class Impenetrable(object):
             print("attack accuracy: {:.2f}%".format(cur_corr/num_images*100))
             print("change ratio: {:.2f}%".format(change_ratio*100))
 
+            # restore image
             x_res = self.pgd.perturb(x, y, sess,
                                      proj=False, reverse=True,
                                      step_size=self.res_step_size, num_steps=self.res_num_steps)
@@ -90,6 +92,21 @@ class Impenetrable(object):
             change_ratio = np.count_nonzero(x_res - x_adv) / x.size
             print("restored accuracy: {:.2f}%".format(cur_corr/num_images*100))
             print("change ratio: {:.2f}%".format(change_ratio*100))
+
+            # validation
+            val_iter = 20
+            val_total_corr = 0
+            for i in range(val_iter):
+                x_val = self.pgd.perturb(x_res, y, sess,
+                                         proj=True, reverse=False, rand=True)
+
+                cur_corr = sess.run(self.model.num_correct,
+                                    feed_dict={self.model.x_input: x_val,
+                                               self.model.y_input: y})
+
+                val_total_corr += cur_corr
+
+            print("validation accuracy: {:.2f}%".format(val_total_corr/(num_images*val_iter)*100))
 
             print()
 
@@ -179,8 +196,8 @@ if __name__ == '__main__':
     # impenetrable
     parser.add_argument('--imp_random_start', action='store_true')
     parser.add_argument('--imp_num_steps', default=0, help='0 for until convergence', type=int)
-    parser.add_argument('--res_num_steps', default=20, type=int)
-    parser.add_argument('--res_step_size', default=2, type=float)
+    parser.add_argument('--res_num_steps', default=8, type=int)
+    parser.add_argument('--res_step_size', default=1, type=float)
     params = parser.parse_args()
     for key, val in vars(params).items():
         print('{}={}'.format(key, val))
