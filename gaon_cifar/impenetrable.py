@@ -29,7 +29,7 @@ if __name__ == '__main__':
     # impenetrable
     parser.add_argument('--imp_random_start', action='store_true')
     parser.add_argument('--imp_num_steps', default=0, help='0 for until convergence', type=int)
-    parser.add_argument('--imp_step_size', default=0, type=float)
+    parser.add_argument('--imp_step_size', default=2, type=float)
     params = parser.parse_args()
     for key, val in vars(params).items():
         print('{}={}'.format(key, val))
@@ -66,7 +66,7 @@ class Impenetrable(object):
             print('Unknown loss function. Defaulting to cross-entropy')
             self.loss = self.model.xent
 
-        self.grad = tf.gradient(self.loss, self.model.x_input)[0]
+        self.grad = tf.gradients(self.loss, self.model.x_input)[0]
 
     def fortify(self, x_orig, y, sess):
 
@@ -81,7 +81,7 @@ class Impenetrable(object):
                             feed_dict={self.model.x_input: x,
                                        self.model.y_input: y})
 
-        print("original accuracy: {.2f}%".format(cur_corr/num_images*100))
+        print("original accuracy: {:.2f}%".format(cur_corr/num_images*100))
         print()
 
         step = 1
@@ -96,18 +96,19 @@ class Impenetrable(object):
                                                  self.model.y_input: y})
 
             change_ratio = np.count_nonzero(x_adv - x) / x.size
-            print("attack accuracy: {.2f}%".format(cur_corr/num_images*100))
-            print("change ratio: {.2f}%".format(change_ratio))
+            print("attack accuracy: {:.2f}%".format(cur_corr/num_images*100))
+            print("change ratio: {:.2f}%".format(change_ratio*100))
 
             x_res = x_adv - self.step_size * np.sign(grad)
+            x_res = np.clip(x_res, 0, 255)
 
             cur_corr = sess.run(self.model.num_correct,
                                 feed_dict={self.model.x_input: x_res,
                                            self.model.y_input: y})
 
             change_ratio = np.count_nonzero(x_res - x_adv) / x.size
-            print("restored accuracy: {.2f}%".format(cur_corr/num_images*100))
-            print("change ratio: {.2f}%".format(change_ratio))
+            print("restored accuracy: {:.2f}%".format(cur_corr/num_images*100))
+            print("change ratio: {:.2f}%".format(change_ratio*100))
 
             print()
 
@@ -117,25 +118,6 @@ class Impenetrable(object):
 
 
         return x
-
-    def validate(self, x, y, sess):
-
-        num_images = len(x)
-
-        cur_corr = sess.run(self.model.num_correct,
-                            feed_dict={self.model.x_input: x,
-                                       self.model.y_inpuy: y})
-
-        print("original accuracy: {.2f}%".format(cur_corr/num_images*100))
-
-        x_adv = self.attack.perturb(x, y, sess)
-
-        cur_corr = sess.run(self.model.num_correct,
-                            feed_dict={self.model.x_input: x_adv,
-                                       self.model.y_inpuy: y})
-
-        print("adv accuracy: {.2f}%".format(cur_corr/num_images*100))
-
 
 def result(x_imp, x_adv, model, sess, x_full_batch, y_full_batch):
     num_eval_samples = x_imp.shape[0]
