@@ -7,6 +7,9 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+from matplotlib import pyplot as plt
+plt.switch_backend('Agg')
+
 import math
 import tensorflow as tf
 import numpy as np
@@ -48,7 +51,10 @@ class Impenetrable(object):
 
         self.grad = tf.gradients(self.loss, self.model.x_input)[0]
 
-    def fortify(self, x_orig, y, sess):
+    def fortify(self, x_orig, y, ibatch, sess):
+
+        suc_flag = False
+        obj_eps = 20
 
         num_images = len(x_orig)
 
@@ -72,52 +78,85 @@ class Impenetrable(object):
             x_adv = self.pgd.perturb(x, y, sess,
                                      proj=True, reverse=False)
 
-            cur_corr = sess.run(self.model.num_correct,
+            adv_corr, grad = sess.run([self.model.num_correct, self.grad],
                                       feed_dict={self.model.x_input: x_adv,
                                                  self.model.y_input: y})
 
-            change_ratio = np.count_nonzero(x_adv - x) / x.size
-            print("attack accuracy: {:.2f}%".format(cur_corr/num_images*100))
-            print("change ratio: {:.2f}%".format(change_ratio*100))
+            l1_dist = np.linalg.norm(x_adv-x, 1) / x.size
+            print("attack accuracy: {:.2f}%".format(adv_corr/num_images*100))
+            print("l1 distance: {:.2f}%".format(l1_dist))
 
             # restore image
+            '''
             x_res = self.pgd.perturb(x_adv, y, sess,
                                      proj=False, reverse=True,
                                      step_size=self.res_step_size, num_steps=self.res_num_steps)
+            '''
+            x_res = x - self.res_step_size * np.sign(grad)
 
-            cur_corr = sess.run(self.model.num_correct,
+            res_corr = sess.run(self.model.num_correct,
                                 feed_dict={self.model.x_input: x_res,
                                            self.model.y_input: y})
 
-            change_ratio = np.count_nonzero(x_res - x_adv) / x.size
-            print("restored accuracy: {:.2f}%".format(cur_corr/num_images*100))
-            print("change ratio: {:.2f}%".format(change_ratio*100))
+            l1_dist = np.linalg.norm(x_res - x, 1) / x.size
+            print("restored accuracy: {:.2f}%".format(res_corr/num_images*100))
+            print("change ratio: {:.2f}%".format(l1_dist))
+
+            x = x_res
 
             # validation
-            val_num = 2
-            val_total_corr = 0
-            for i in range(val_num):
-                x_val = self.pgd.perturb(x_res, y, sess,
-                                         proj=True, reverse=False, rand=True)
+            if step % 50 == 0:
 
-                cur_corr = sess.run(self.model.num_correct,
-                                    feed_dict={self.model.x_input: x_val,
-                                               self.model.y_input: y})
+                filename = "./arr/img{}_step{}".format(ibatch, step)
 
-                val_total_corr += cur_corr
+                if adv_corr == cur_corr:
 
-            print("validation accuracy: {:.2f}%".format(val_total_corr/(num_images*val_num)*100))
+                    val_eps = self.eps
+
+                    while val_eps <= obj_eps:
+                        val_iter = 1000
+                        val_total_corr = 0
+
+                        self.pgd.epsilon = val_eps
+
+                        for i in range(val_iter):
+
+                            x_val = self.pgd.perturb(x_batch, y_batch, sess,
+                                                     proj=True, reverse=False, rand=True)
+
+                            cur_corr = sess.run(self.model.num_correct,
+                                                feed_dict={self.model.x_input: x_val,
+                                                           self.model.y_input: y})
+
+                            val_total_corr += cur_corr
+
+                        print("{} validation accuracy: {:.2f}%".format(val_eps, val_total_corr / (num_images * val_iter) * 100))
+
+                        # goal achievement check
+                        if val_total_corr == (num_images * val_iter):
+                            print("reached performance goal for", val_eps)
+                            filename += '_{}'.format(val_eps)
+
+                            if val_eps == obj_eps:
+                                print("reached final objective!")
+                                suc_flag = True
+                                break
+                        else:
+                            print("failed for", val_eps)
+                            break
+
+                        val_eps += 1
+
+                    self.pgd.epsilon = self.eps
+
+                np.save(filename, x)
 
             print()
 
-            x = x_res
-            
-            # goal achievement check
-            if val_total_corr == (num_images*val_num):
-                print("reached performance goal!")
-                break
-
             step += 1
+
+            if suc_flag:
+                break
 
         return x
 
@@ -185,7 +224,7 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--sample_size', default=100, help='sample size', type=int)
-    parser.add_argument('--model_dir', default='adv_trained', type=str)
+    parser.add_argument('--model_dir', default='naturally_trained', type=str)
     parser.add_argument('--loss_func', default='xent', type=str)
     # PGD
     parser.add_argument('--eps', default=8, help='Attack eps', type=float)
@@ -196,7 +235,7 @@ if __name__ == '__main__':
     parser.add_argument('--imp_random_start', action='store_true')
     parser.add_argument('--imp_num_steps', default=0, help='0 for until convergence', type=int)
     parser.add_argument('--res_num_steps', default=1, type=int)
-    parser.add_argument('--res_step_size', default=10, type=float)
+    parser.add_argument('--res_step_size', default=1, type=float)
     params = parser.parse_args()
     for key, val in vars(params).items():
         print('{}={}'.format(key, val))
@@ -227,7 +266,8 @@ if __name__ == '__main__':
 
         # Iterate over the samples batch-by-batch
         num_eval_examples = params.sample_size
-        eval_batch_size = min(config['eval_batch_size'], num_eval_examples)
+        #eval_batch_size = min(config['eval_batch_size'], num_eval_examples)
+        eval_batch_size = 1
         num_batches = int(math.ceil(num_eval_examples / eval_batch_size))
 
         x_imp = []  # imp accumulator
@@ -266,7 +306,7 @@ if __name__ == '__main__':
             y_batch = y_full_batch[bstart:bend]
 
             print('fortifying image ', bstart)
-            x_batch_imp = impenet.fortify(x_batch, y_batch, sess)
+            x_batch_imp = impenet.fortify(x_batch, y_batch, ibatch, sess)
             x_batch_adv = impenet.pgd.perturb(x_batch_imp, y_batch, sess)
 
             x_imp.append(x_batch_imp)
