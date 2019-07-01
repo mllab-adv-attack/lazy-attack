@@ -7,8 +7,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from matplotlib import pyplot as plt
-plt.switch_backend('Agg')
+from PIL import Image
 
 import math
 import tensorflow as tf
@@ -23,6 +22,7 @@ class Impenetrable(object):
         self.eps = args.eps
         self.loss_func = args.loss_func
         self.imp_random_start = args.imp_random_start
+        self.imp_gray_start = args.imp_gray_start
         self.imp_num_steps = args.imp_num_steps
         self.res_num_steps = args.res_num_steps
         self.res_step_size = args.res_step_size
@@ -51,7 +51,7 @@ class Impenetrable(object):
 
         self.grad = tf.gradients(self.loss, self.model.x_input)[0]
 
-    def fortify(self, x_orig, y, ibatch, sess):
+    def fortify(self, x_orig, y, ibatch, meta_name, sess):
 
         suc_flag = False
         obj_eps = 20
@@ -59,15 +59,17 @@ class Impenetrable(object):
         num_images = len(x_orig)
 
         if self.imp_random_start:
-            x = np.random.randint(0, 256, x_orig.shape, dtype='int32')
+            x = np.random.randint(0, 256, x_orig.shape, dtype='int32').astype('float32')
+        elif self.imp_gray_start:
+            x = np.ones_like(x_orig).astype('float32') * 128
         else:
             x = np.copy(x_orig)
 
-        cur_corr = sess.run(self.model.num_correct,
+        orig_corr = sess.run(self.model.num_correct,
                             feed_dict={self.model.x_input: x,
                                        self.model.y_input: y})
 
-        print("original accuracy: {:.2f}%".format(cur_corr/num_images*100))
+        print("original accuracy: {:.2f}%".format(orig_corr/num_images*100))
         print()
 
         step = 1
@@ -82,9 +84,9 @@ class Impenetrable(object):
                                       feed_dict={self.model.x_input: x_adv,
                                                  self.model.y_input: y})
 
-            l1_dist = np.linalg.norm(x_adv-x, 1) / x.size
+            l1_dist = np.linalg.norm((x_adv - x).flatten(), 1) / x.size
             print("attack accuracy: {:.2f}%".format(adv_corr/num_images*100))
-            print("l1 distance: {:.2f}%".format(l1_dist))
+            print("l1 distance: {:.2f}".format(l1_dist))
 
             # restore image
             '''
@@ -93,35 +95,42 @@ class Impenetrable(object):
                                      step_size=self.res_step_size, num_steps=self.res_num_steps)
             '''
             x_res = x - self.res_step_size * np.sign(grad)
+            x_res = np.clip(x_res, 0, 255)
 
             res_corr = sess.run(self.model.num_correct,
                                 feed_dict={self.model.x_input: x_res,
                                            self.model.y_input: y})
 
-            l1_dist = np.linalg.norm(x_res - x, 1) / x.size
+            l1_dist = np.linalg.norm((x_res - x).flatten(), 1) / x.size
             print("restored accuracy: {:.2f}%".format(res_corr/num_images*100))
-            print("change ratio: {:.2f}%".format(l1_dist))
+            print("l1 distance: {:.2f}".format(l1_dist))
 
             x = x_res
 
             # validation
             if step % 50 == 0:
 
-                filename = "./arr/img{}_step{}".format(ibatch, step)
+                filename = "{}_img{}_step{}".format(meta_name, ibatch, step)
 
-                if adv_corr == cur_corr:
+                if adv_corr == num_images:
 
-                    val_eps = self.eps
+                    val_eps = 8
 
                     while val_eps <= obj_eps:
                         val_iter = 1000
                         val_total_corr = 0
 
+                        assert val_iter%100 == 0
+
+                        x_val_batch = np.tile(x, (100, 1, 1, 1))
+                        y_val_batch = np.tile(y, 100)
+
                         self.pgd.epsilon = val_eps
+                        self.pgd.step_size = self.pgd.epsilon//4
 
-                        for i in range(val_iter):
+                        for i in range(val_iter//100):
 
-                            x_val = self.pgd.perturb(x_batch, y_batch, sess,
+                            x_val = self.pgd.perturb(x_val_batch, y_val_batch, sess,
                                                      proj=True, reverse=False, rand=True)
 
                             cur_corr = sess.run(self.model.num_correct,
@@ -148,8 +157,11 @@ class Impenetrable(object):
                         val_eps += 1
 
                     self.pgd.epsilon = self.eps
+                    self.pgd.step_size = self.pgd.epsilon//4
 
-                np.save(filename, x)
+                np.save("./arr/" + filename, x)
+                im = Image.fromarray(np.uint8(x).reshape((32, 32, 3)))
+                im.save("./img/" + filename +'.png')
 
             print()
 
@@ -227,18 +239,26 @@ if __name__ == '__main__':
     parser.add_argument('--model_dir', default='naturally_trained', type=str)
     parser.add_argument('--loss_func', default='xent', type=str)
     # PGD
-    parser.add_argument('--eps', default=8, help='Attack eps', type=float)
+    parser.add_argument('--eps', default=8, help='Attack eps', type=int)
     parser.add_argument('--pgd_random_start', action='store_true')
     parser.add_argument('--pgd_num_steps', default=20, type=int)
     parser.add_argument('--pgd_step_size', default=2, type=float)
     # impenetrable
     parser.add_argument('--imp_random_start', action='store_true')
+    parser.add_argument('--imp_gray_start', action='store_true')
     parser.add_argument('--imp_num_steps', default=0, help='0 for until convergence', type=int)
     parser.add_argument('--res_num_steps', default=1, type=int)
-    parser.add_argument('--res_step_size', default=1, type=float)
+    parser.add_argument('--res_step_size', default=1, type=int)
     params = parser.parse_args()
     for key, val in vars(params).items():
         print('{}={}'.format(key, val))
+
+    assert not (params.imp_random_start and params.imp_gray_start)
+
+    meta_name = 'nat' if params.model_dir=='naturally_trained' else 'adv'
+    meta_name += '_pgd' + '_' + str(params.eps) + '_' + str(params.pgd_num_steps) + '_' + str(params.pgd_step_size) + ('_rand' if params.pgd_random_start else '')
+    meta_name += '_imp' + '_' + str(params.imp_num_steps) + ('_rand' if params.imp_random_start else '') + ('_gray' if params.imp_gray_start else '')
+    meta_name += '_res' + '_' + str(params.res_num_steps) + '_' + str(params.res_step_size)
 
     from model import Model
 
@@ -306,7 +326,7 @@ if __name__ == '__main__':
             y_batch = y_full_batch[bstart:bend]
 
             print('fortifying image ', bstart)
-            x_batch_imp = impenet.fortify(x_batch, y_batch, ibatch, sess)
+            x_batch_imp = impenet.fortify(x_batch, y_batch, ibatch, meta_name, sess)
             x_batch_adv = impenet.pgd.perturb(x_batch_imp, y_batch, sess)
 
             x_imp.append(x_batch_imp)
