@@ -127,12 +127,6 @@ def result(x_imp, x_adv, model, sess, x_full_batch, y_full_batch):
     eval_batch_size = min(num_eval_samples, 100)
     num_batches = int(math.ceil(num_eval_examples / eval_batch_size))
 
-    l_inf = np.amax(np.abs(x_full_batch - x_imp))
-    if l_inf > params.eps + 0.001:
-        print('breached maximum perturbation')
-        print(l_inf)
-        return
-
     total_corr = 0
     for ibatch in range(num_batches):
         bstart = ibatch * eval_batch_size
