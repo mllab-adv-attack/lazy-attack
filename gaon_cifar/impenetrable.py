@@ -94,9 +94,9 @@ class Impenetrable(object):
             print("change ratio: {:.2f}%".format(change_ratio*100))
 
             # validation
-            val_iter = 100
+            val_num = 2
             val_total_corr = 0
-            for i in range(val_iter):
+            for i in range(val_num):
                 x_val = self.pgd.perturb(x_res, y, sess,
                                          proj=True, reverse=False, rand=True)
 
@@ -106,14 +106,14 @@ class Impenetrable(object):
 
                 val_total_corr += cur_corr
 
-            print("validation accuracy: {:.2f}%".format(val_total_corr/(num_images*val_iter)*100))
+            print("validation accuracy: {:.2f}%".format(val_total_corr/(num_images*val_num)*100))
 
             print()
 
             x = x_res
             
             # goal achievement check
-            if val_total_corr == (num_images*val_iter):
+            if val_total_corr == (num_images*val_num):
                 print("reached performance goal!")
                 break
 
@@ -195,8 +195,8 @@ if __name__ == '__main__':
     # impenetrable
     parser.add_argument('--imp_random_start', action='store_true')
     parser.add_argument('--imp_num_steps', default=0, help='0 for until convergence', type=int)
-    parser.add_argument('--res_num_steps', default=9, type=int)
-    parser.add_argument('--res_step_size', default=1, type=float)
+    parser.add_argument('--res_num_steps', default=1, type=int)
+    parser.add_argument('--res_step_size', default=10, type=float)
     params = parser.parse_args()
     for key, val in vars(params).items():
         print('{}={}'.format(key, val))
