@@ -31,6 +31,7 @@ class Impenetrable(object):
         self.res_num_steps = args.res_num_steps
         self.res_step_size = args.res_step_size
         self.save_dir_num = args.save_dir_num
+        self.val_step = args.val_step
         self.val_num = args.val_num
 
         self.pgd = LinfPGDAttack(self.model,
@@ -86,60 +87,62 @@ class Impenetrable(object):
         print("original accuracy: {:.2f}%".format(orig_corr/num_images*100))
         print()
         
-        step= 0
+        step = 0
 
-        filename = "{}_img{}_step{}".format(meta_name, ibatch, step)
+        if self.val_step > 0:
 
-        val_eps = 8
-        self.pgd.num_steps = 20
+            filename = "{}_img{}_step{}".format(meta_name, ibatch, step)
 
-        while val_eps <= obj_eps:
-            val_iter = self.val_num
-            val_total_corr = 0
+            val_eps = 8
+            self.pgd.num_steps = 20
 
-            assert val_iter%100 == 0
+            while val_eps <= obj_eps:
+                val_iter = self.val_num
+                val_total_corr = 0
 
-            x_val_batch = np.tile(x, (100, 1, 1, 1))
-            y_val_batch = np.tile(y, 100)
+                assert val_iter % 100 == 0
 
-            self.pgd.epsilon = val_eps
-            self.pgd.step_size = self.pgd.epsilon//4
+                x_val_batch = np.tile(x, (100, 1, 1, 1))
+                y_val_batch = np.tile(y, 100)
 
-            for i in range(val_iter//100):
+                self.pgd.epsilon = val_eps
+                self.pgd.step_size = self.pgd.epsilon//4
 
-                x_val = self.pgd.perturb(x_val_batch, y_val_batch, sess,
-                                         proj=True, reverse=False, rand=True)
+                for i in range(val_iter//100):
 
-                cur_corr = sess.run(self.model.num_correct,
-                                    feed_dict={self.model.x_input: x_val,
-                                               self.model.y_input: y})
+                    x_val = self.pgd.perturb(x_val_batch, y_val_batch, sess,
+                                             proj=True, reverse=False, rand=True)
 
-                val_total_corr += cur_corr
+                    cur_corr = sess.run(self.model.num_correct,
+                                        feed_dict={self.model.x_input: x_val,
+                                                   self.model.y_input: y})
 
-            print("{} validation accuracy: {:.2f}%".format(val_eps, val_total_corr / (num_images * val_iter) * 100))
+                    val_total_corr += cur_corr
 
-            # goal achievement check
-            if val_total_corr == (num_images * val_iter):
-                print("reached performance goal for", val_eps)
-                filename += '_{}'.format(val_eps)
+                print("{} validation accuracy: {:.2f}%".format(val_eps, val_total_corr / (num_images * val_iter) * 100))
 
-                if val_eps == obj_eps:
-                    print("reached final objective!")
-                    suc_flag = True
+                # goal achievement check
+                if val_total_corr == (num_images * val_iter):
+                    print("reached performance goal for", val_eps)
+                    filename += '_{}'.format(val_eps)
+
+                    if val_eps == obj_eps:
+                        print("reached final objective!")
+                        suc_flag = True
+                        break
+                else:
+                    print("failed for", val_eps)
                     break
-            else:
-                print("failed for", val_eps)
-                break
 
-            val_eps += 1
+                val_eps += 1
 
-        self.pgd.epsilon = self.eps
-        self.pgd.step_size = self.pgd_step_size
-        self.pgd.num_steps = self.pgd_num_steps
+            self.pgd.epsilon = self.eps
+            self.pgd.step_size = self.pgd_step_size
+            self.pgd.num_steps = self.pgd_num_steps
 
-        np.save(arr_dir + filename, x)
-        im = Image.fromarray(np.uint8(x).reshape((32, 32, 3)))
-        im.save(img_dir + filename +'.png')
+            np.save(arr_dir + filename, x)
+            im = Image.fromarray(np.uint8(x).reshape((32, 32, 3)))
+            im.save(img_dir + filename + '.png')
 
         step = 1
         while self.imp_num_steps <= 0 or step <= self.imp_num_steps:
@@ -174,7 +177,7 @@ class Impenetrable(object):
             x = x_res
 
             # validation
-            if step % 50 == 0:
+            if self.val_step > 0 and step % self.val_step == 0:
 
                 filename = "{}_img{}_step{}".format(meta_name, ibatch, step)
 
@@ -320,12 +323,14 @@ if __name__ == '__main__':
     parser.add_argument('--res_num_steps', default=1, type=int)
     parser.add_argument('--res_step_size', default=1, type=int)
     # evaluation
+    parser.add_argument('--val_step', default=50, help="validation per val_step iterations. =< 0 means no evaluation", type=int)
     parser.add_argument('--val_num', default=100, help="validation PGD numbers per eps", type=int)
     params = parser.parse_args()
     for key, val in vars(params).items():
         print('{}={}'.format(key, val))
 
     assert not (params.imp_random_start and params.imp_gray_start)
+    assert not (params.val_step <= 0 and params.bstart >= 0)
 
     meta_name = 'nat' if params.model_dir=='naturally_trained' else 'adv'
     meta_name += '_pgd' + '_' + str(params.eps) + '_' + str(params.pgd_num_steps) + '_' + str(params.pgd_step_size) + ('_rand' if params.pgd_random_start else '')
@@ -358,8 +363,11 @@ if __name__ == '__main__':
 
         # Iterate over the samples batch-by-batch
         num_eval_examples = params.sample_size + params.bstart
-        #eval_batch_size = min(config['eval_batch_size'], num_eval_examples)
-        eval_batch_size = 1
+        if params.val_step > 0:
+            eval_batch_size = 1
+        else:
+            eval_batch_size = min(config['eval_batch_size'], num_eval_examples)
+
         num_batches = int(math.ceil(num_eval_examples / eval_batch_size))
 
         x_imp = []  # imp accumulator
@@ -390,7 +398,7 @@ if __name__ == '__main__':
         x_full_batch = x_full_batch.astype(np.float32)
 
         for ibatch in range(num_batches):
-            if (ibatch >= params.bstart):
+            if ibatch >= params.bstart:
                 bstart = ibatch * eval_batch_size
                 bend = min(bstart + eval_batch_size, num_eval_examples)
                 print('batch size: {}'.format(bend - bstart))
@@ -400,7 +408,50 @@ if __name__ == '__main__':
 
                 print('fortifying image ', bstart)
                 x_batch_imp = impenet.fortify(x_batch, y_batch, ibatch, meta_name, sess)
-                x_batch_adv = impenet.pgd.perturb(x_batch_imp, y_batch, sess)
+
+                # evaluation
+                filename = "{}_img{}_step{}".format(meta_name, ibatch, impenet.imp_num_steps)
+                x_batch_adv = np.copy(x_batch_imp)
+
+                val_eps = 8
+                obj_eps = 20
+                num_images = len(x_batch_imp)
+
+                impenet.pgd.num_steps = 20
+
+                while val_eps <= obj_eps:
+                    val_iter = impenet.val_num
+                    val_total_corr = 0
+
+                    impenet.pgd.epsilon = val_eps
+                    impenet.pgd.step_size = impenet.pgd.epsilon//4
+
+                    for i in range(100):
+
+                        x_batch_adv = impenet.pgd.perturb(x_batch_imp, y_batch, sess,
+                                                          proj=True, reverse=False, rand=True)
+
+                        cur_corr = sess.run(impenet.model.num_correct,
+                                            feed_dict={impenet.model.x_input: x_batch_adv,
+                                                       impenet.model.y_input: y_batch})
+
+                        val_total_corr += cur_corr
+
+                    print("{} validation accuracy: {:.2f}%".format(val_eps, val_total_corr / (num_images * val_iter)))
+
+                    # goal achievement check
+                    if val_total_corr == (num_images * val_iter):
+                        print("reached performance goal for", val_eps)
+                        filename += '_{}'.format(val_eps)
+
+                        if val_eps == obj_eps:
+                            print("reached final objective!")
+                            break
+                    else:
+                        print("failed for", val_eps)
+                        break
+
+                    val_eps += 1
 
                 x_imp.append(x_batch_imp)
                 x_adv.append(x_batch_adv)
@@ -411,8 +462,13 @@ if __name__ == '__main__':
         if np.amax(x_imp) > 255.0001 or \
             np.amin(x_imp) < -0.0001 or \
             np.isnan(np.amax(x_imp)):
-            print('Invalid pixel range. Expected [0,255], fount[{},{}]'.format(np.amin(x_imp),
-                                                                               np.amax(x_imp)))
+            print('Invalid pixel range in x_imp. Expected [0,255], fount[{},{}]'.format(np.amin(x_imp),
+                                                                                        np.amax(x_imp)))
+        elif np.amax(x_adv) > 255.0001 or \
+            np.amin(x_adv) < -0.0001 or \
+            np.isnan(np.amax(x_adv)):
+            print('Invalid pixel range in x_adv. Expected [0,255], fount[{},{}]'.format(np.amin(x_adv),
+                                                                                        np.amax(x_adv)))
         else:
             result(x_imp, x_adv, model, sess, x_full_batch, y_full_batch)
 
