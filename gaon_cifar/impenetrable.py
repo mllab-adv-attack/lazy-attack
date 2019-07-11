@@ -159,7 +159,7 @@ class Impenetrable(object):
             l1_dist = np.linalg.norm((x_adv - x).flatten(), 1) / x.size
             print("attack accuracy: {:.2f}%".format(adv_corr/num_images*100))
             print("l1 distance: {:.2f}".format(l1_dist))
-            print("adv loss: {:.20f}".format(adv_loss))
+            print("adv loss: {:.20f}".format(adv_loss/num_images*100))
 
             # restore image
             x_res = x - self.res_step_size * np.sign(grad)
@@ -172,7 +172,7 @@ class Impenetrable(object):
             l1_dist = np.linalg.norm((x_res - x).flatten(), 1) / x.size
             print("restored accuracy: {:.2f}%".format(res_corr/num_images*100))
             print("l1 distance: {:.2f}".format(l1_dist))
-            print("res loss: {:.20f}".format(res_loss))
+            print("res loss: {:.20f}".format(res_loss/num_images*100))
 
             x = x_res
 
@@ -306,16 +306,16 @@ if __name__ == '__main__':
     import sys
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--sample_size', default=5, help='sample size', type=int)
+    parser.add_argument('--sample_size', default=1000, help='sample size', type=int)
     parser.add_argument('--bstart', default=0, type=int)
     parser.add_argument('--model_dir', default='adv_trained', type=str)
-    parser.add_argument('--save_dir_num', default=7, type=int)
+    parser.add_argument('--save_dir_num', default=9, type=int)
     parser.add_argument('--loss_func', default='xent', type=str)
     # PGD
-    parser.add_argument('--eps', default=20, help='Attack eps', type=int)
+    parser.add_argument('--eps', default=8, help='Attack eps', type=int)
     parser.add_argument('--pgd_random_start', action='store_true')
     parser.add_argument('--pgd_num_steps', default=20, type=int)
-    parser.add_argument('--pgd_step_size', default=5, type=float)
+    parser.add_argument('--pgd_step_size', default=2, type=float)
     # impenetrable
     parser.add_argument('--imp_random_start', action='store_true')
     parser.add_argument('--imp_gray_start', action='store_true')
@@ -323,14 +323,13 @@ if __name__ == '__main__':
     parser.add_argument('--res_num_steps', default=1, type=int)
     parser.add_argument('--res_step_size', default=1, type=int)
     # evaluation
-    parser.add_argument('--val_step', default=50, help="validation per val_step iterations. =< 0 means no evaluation", type=int)
+    parser.add_argument('--val_step', default=0, help="validation per val_step iterations. =< 0 means no evaluation", type=int)
     parser.add_argument('--val_num', default=100, help="validation PGD numbers per eps", type=int)
     params = parser.parse_args()
     for key, val in vars(params).items():
         print('{}={}'.format(key, val))
 
     assert not (params.imp_random_start and params.imp_gray_start)
-    assert not (params.val_step <= 0 and params.bstart >= 0)
 
     meta_name = 'nat' if params.model_dir=='naturally_trained' else 'adv'
     meta_name += '_pgd' + '_' + str(params.eps) + '_' + str(params.pgd_num_steps) + '_' + str(params.pgd_step_size) + ('_rand' if params.pgd_random_start else '')
@@ -397,8 +396,10 @@ if __name__ == '__main__':
 
         x_full_batch = x_full_batch.astype(np.float32)
 
+        assert params.bstart % eval_batch_size == 0
+
         for ibatch in range(num_batches):
-            if ibatch >= params.bstart:
+            if ibatch * eval_batch_size >= params.bstart:
                 bstart = ibatch * eval_batch_size
                 bend = min(bstart + eval_batch_size, num_eval_examples)
                 print('batch size: {}'.format(bend - bstart))
@@ -410,7 +411,6 @@ if __name__ == '__main__':
                 x_batch_imp = impenet.fortify(x_batch, y_batch, ibatch, meta_name, sess)
 
                 # evaluation
-                filename = "{}_img{}_step{}".format(meta_name, ibatch, impenet.imp_num_steps)
                 x_batch_adv = np.copy(x_batch_imp)
 
                 val_eps = 8
@@ -419,6 +419,8 @@ if __name__ == '__main__':
 
                 impenet.pgd.num_steps = 20
 
+                success_mask = [True for _ in range(num_images)]
+
                 while val_eps <= obj_eps:
                     val_iter = impenet.val_num
                     val_total_corr = 0
@@ -426,38 +428,43 @@ if __name__ == '__main__':
                     impenet.pgd.epsilon = val_eps
                     impenet.pgd.step_size = impenet.pgd.epsilon//4
 
-                    for i in range(100):
+                    for i in range(val_iter):
 
                         x_batch_adv = impenet.pgd.perturb(x_batch_imp, y_batch, sess,
                                                           proj=True, reverse=False, rand=True)
 
-                        cur_corr = sess.run(impenet.model.num_correct,
-                                            feed_dict={impenet.model.x_input: x_batch_adv,
-                                                       impenet.model.y_input: y_batch})
+                        corr_mask = sess.run(impenet.model.correct_prediction,
+                                                       feed_dict={impenet.model.x_input: x_batch_adv,
+                                                                  impenet.model.y_input: y_batch})
 
-                        val_total_corr += cur_corr
+                        success_mask *= corr_mask
+                        num_survived = np.sum(success_mask) / len(success_mask)
 
-                    print("{} validation accuracy: {:.2f}%".format(val_eps, val_total_corr / (num_images * val_iter)))
+                    print("{} validation accuracy: {:.2f}%".format(val_eps, num_survived * 100))
 
                     # goal achievement check
-                    if val_total_corr == (num_images * val_iter):
+                    if num_survived >= 1:
                         print("reached performance goal for", val_eps)
-                        filename += '_{}'.format(val_eps)
 
                         if val_eps == obj_eps:
                             print("reached final objective!")
                             break
                     else:
                         print("failed for", val_eps)
-                        break
 
                     val_eps += 1
+                
+                impenet.pgd.epsilon = impenet.eps
+                impenet.pgd.step_size = impenet.pgd_step_size
+                impenet.pgd.num_steps = impenet.pgd_num_steps
 
                 x_imp.append(x_batch_imp)
                 x_adv.append(x_batch_adv)
 
         x_imp = np.concatenate(x_imp)
         x_adv = np.concatenate(x_adv)
+        
+        np.save(meta_name, x_imp)
 
         if np.amax(x_imp) > 255.0001 or \
             np.amin(x_imp) < -0.0001 or \
@@ -470,6 +477,6 @@ if __name__ == '__main__':
             print('Invalid pixel range in x_adv. Expected [0,255], fount[{},{}]'.format(np.amin(x_adv),
                                                                                         np.amax(x_adv)))
         else:
-            result(x_imp, x_adv, model, sess, x_full_batch, y_full_batch)
+            result(x_imp, x_adv, model, sess, x_full_batch[-params.sample_size:], y_full_batch[-params.sample_size:])
 
 
