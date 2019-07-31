@@ -93,7 +93,7 @@ class Impenetrable(object):
 
             filename = "{}_img{}_step{}".format(meta_name, ibatch, step)
 
-            val_eps = 8
+            val_eps = 20
             self.pgd.num_steps = 20
 
             while val_eps <= obj_eps:
@@ -183,7 +183,7 @@ class Impenetrable(object):
 
                 if adv_corr == num_images:
 
-                    val_eps = 8
+                    val_eps = 20
                     self.pgd.num_steps = 20
 
                     while val_eps <= obj_eps:
@@ -371,11 +371,17 @@ if __name__ == '__main__':
 
         x_imp = []  # imp accumulator
         x_adv = []  # adv accumulator
+        y_imp = []  # y accumulator
+
+        if params.model_dir=='naturally_trained':
+            indices = np.load('/data/home/gaon/lazy-attack/cifar10_data/nat_indices_untargeted.npy')
+        else:
+            indices = np.load('/data/home/gaon/lazy-attack/cifar10_data/indices_untargeted.npy')
 
         bstart = 0
         while (True):
-            x_candid = cifar.eval_data.xs[bstart:bstart + 100]
-            y_candid = cifar.eval_data.ys[bstart:bstart + 100]
+            x_candid = cifar.eval_data.xs[indices[bstart:bstart + 100]]
+            y_candid = cifar.eval_data.ys[indices[bstart:bstart + 100]]
             mask = sess.run(model.correct_prediction, feed_dict={model.x_input: x_candid,
                                                                  model.y_input: y_candid})
             x_masked = x_candid[mask]
@@ -413,7 +419,7 @@ if __name__ == '__main__':
                 # evaluation
                 x_batch_adv = np.copy(x_batch_imp)
 
-                val_eps = 8
+                val_eps = 20
                 obj_eps = 20
                 num_images = len(x_batch_imp)
 
@@ -460,11 +466,14 @@ if __name__ == '__main__':
 
                 x_imp.append(x_batch_imp)
                 x_adv.append(x_batch_adv)
+                y_imp.append(y_batch)
 
         x_imp = np.concatenate(x_imp)
         x_adv = np.concatenate(x_adv)
+        y_imp = np.concatenate(y_imp)
         
-        np.save(meta_name, x_imp)
+        np.save(meta_name + '_x', x_imp)
+        np.save(meta_name + '_y', y_imp)
 
         if np.amax(x_imp) > 255.0001 or \
             np.amin(x_imp) < -0.0001 or \
