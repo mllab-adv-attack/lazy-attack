@@ -17,8 +17,8 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--eps', default=8, help='Attack eps', type=float)
-    parser.add_argument('--sample_size', default=100, help='sample size', type=int)
-    parser.add_argument('--model_dir', default='adv_trained', type=str)
+    parser.add_argument('--sample_size', default=10000, help='sample size', type=int)
+    parser.add_argument('--model_dir', default='naturally_trained', type=str)
     parser.add_argument('--loss_func', default='xent', type=str)
     parser.add_argument('--random_start', default='n', type=str)
     parser.add_argument('--num_steps', default=20, type=int)
@@ -185,6 +185,7 @@ if __name__ == '__main__':
         num_batches = int(math.ceil(num_eval_examples / eval_batch_size))
 
         x_adv = [] # adv accumulator
+        masks = []
 
         bstart = 0
         while(True):
@@ -203,8 +204,15 @@ if __name__ == '__main__':
                 x_full_batch = np.concatenate((x_full_batch, x_masked[:index]))
                 y_full_batch = np.concatenate((y_full_batch, y_masked[:index]))
             bstart += 100
+            masks.append(mask)
             if len(x_full_batch) >= num_eval_examples or bstart >= 10000:
                 break
+
+        masks = np.concatenate(masks)
+        indices = np.nonzero(masks)
+        np.save('nat_indices_untargeted.npy', indices)
+
+        sys.exit()
 
         print('Iterating over {} batches'.format(num_batches))
 
