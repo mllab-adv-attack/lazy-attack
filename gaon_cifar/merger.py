@@ -11,8 +11,13 @@ import math
 import tensorflow as tf
 import numpy as np
 
+from pgd_attack import LinfPGDAttack
 
-def merge(arr_name, file_name, params):
+
+def merge(params):
+    load_arr = params.load_arr
+    save_arr = params.save_arr
+    file_name = params.file_name
     bstart = params.bstart
     batch_size = params.batch_size
     sample_size = params.sample_size
@@ -24,7 +29,7 @@ def merge(arr_name, file_name, params):
     num_batches = sample_size//batch_size
 
     for i in range(num_batches):
-        full_name = arr_name + file_name + '_' + str(bstart) + '_' + str(batch_size)
+        full_name = load_arr + file_name + '_' + str(bstart) + '_' + str(batch_size)
         org_full_name = full_name + '_x_org.npy'
         imp_full_name = full_name + '_x_imp.npy'
         y_full_name = full_name + '_y.npy'
@@ -43,7 +48,7 @@ def merge(arr_name, file_name, params):
     x_imp = np.concatenate(x_imp)
     y = np.concatenate(y)
 
-    final_name = arr_name + file_name + '_' + params.bstart + '_' + str(sample_size)
+    final_name = save_arr + file_name + '_' + str(params.bstart) + '_' + str(sample_size)
 
     np.save(final_name + '_x_org.npy', x_org)
     np.save(final_name + '_x_imp.npy', x_imp)
@@ -52,6 +57,33 @@ def merge(arr_name, file_name, params):
     print("saved at:", final_name)
 
     return x_org, x_imp, y
+
+def safe_validation(x, y, model, sess, start_eps=8, end_eps=8, val_num=100):
+
+    cur_eps = start_eps
+
+    true_mask = [True for _ in range(len(x))]
+
+    while cur_eps <= end_eps:
+        pgd = LinfPGDAttack(model, cur_eps, num_steps=20, step_size=cur_eps/4, random_start=True, loss_func='xent')
+
+        for i in range(val_num):
+            x_adv = pgd.perturb(x, y, sess, rand=True)
+
+            corr_mask = sess.run(model.correct_prediction,
+                                feed_dict={model.x_input: x_adv,
+                                           model.y_input: y})
+
+            true_mask *= corr_mask
+            if sum(true_mask)==0:
+                break
+
+        if sum(true_mask)==0:
+            break
+
+        cur_eps += 1
+
+    return sum(true_mask)
 
 
 def result(x_imp, model, sess, x_full_batch, y_full_batch):
@@ -74,6 +106,19 @@ def result(x_imp, model, sess, x_full_batch, y_full_batch):
     accuracy = total_corr / num_eval_examples
 
     print('nat Accuracy: {:.2f}%'.format(100.0 * accuracy))
+    
+    total_corr = 0
+    for ibatch in range(num_batches):
+        bstart = ibatch * eval_batch_size
+        bend = min(bstart + eval_batch_size, num_eval_examples)
+
+        x_batch = x_full_batch[bstart:bend, :]
+        y_batch = y_full_batch[bstart:bend]
+        cur_corr = safe_validation(x_batch, y_batch, model, sess) 
+        total_corr += cur_corr
+    accuracy = total_corr / num_eval_examples
+
+    print('nat(PGD) Accuracy: {:.2f}%'.format(100.0 * accuracy))
 
     total_corr = 0
     for ibatch in range(num_batches):
@@ -92,6 +137,18 @@ def result(x_imp, model, sess, x_full_batch, y_full_batch):
 
     print('imp Accuracy: {:.2f}%'.format(100.0 * accuracy))
 
+    total_corr = 0
+    for ibatch in range(num_batches):
+        bstart = ibatch * eval_batch_size
+        bend = min(bstart + eval_batch_size, num_eval_examples)
+
+        x_batch = x_imp[bstart:bend, :]
+        y_batch = y_full_batch[bstart:bend]
+        cur_corr = safe_validation(x_batch, y_batch, model, sess)
+        total_corr += cur_corr
+    accuracy = total_corr / num_eval_examples
+
+    print('nat(PGD) Accuracy: {:.2f}%'.format(100.0 * accuracy))
 
 if __name__ == '__main__':
     import argparse
@@ -99,11 +156,12 @@ if __name__ == '__main__':
     import sys
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--model_dir', default='adv_trained', type=str)
+    parser.add_argument('--model_dir', default='naturally_trained', type=str)
     parser.add_argument('--bstart', default=0, type=int)
     parser.add_argument('--batch_size', default=100, type=int)
     parser.add_argument('--sample_size', default=1000, type=int)
-    parser.add_argument('--arr_name', default='./arr_main/', type=str)
+    parser.add_argument('--load_arr', default='./arr_main/', type=str)
+    parser.add_argument('--save_arr', default='./arr_full/', type=str)
     parser.add_argument('--file_name', default='nat_pgd_8_20_2.0_imp_1000_res_1_1', type=str)
     params = parser.parse_args()
     for key, val in vars(params).items():
@@ -124,22 +182,13 @@ if __name__ == '__main__':
     model = Model(mode='eval')
     saver = tf.train.Saver()
 
-    x_org, x_imp, y = merge(params.arr_name, params.file_name, params)
+    x_org, x_imp, y = merge(params)
 
     configs = tf.ConfigProto()
     configs.gpu_options.allow_growth = True
     with tf.Session(config=configs) as sess:
         # Restore the checkpoint
         saver.restore(sess, model_file)
-
-        # Iterate over the samples batch-by-batch
-        num_eval_examples = params.sample_size + params.bstart
-        if params.val_step > 0:
-            eval_batch_size = 1
-        else:
-            eval_batch_size = min(config['eval_batch_size'], num_eval_examples)
-
-        num_batches = int(math.ceil(num_eval_examples / eval_batch_size))
 
         if np.amax(x_imp) > 255.0001 or \
             np.amin(x_imp) < -0.0001 or \

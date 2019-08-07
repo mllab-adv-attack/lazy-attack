@@ -69,7 +69,7 @@ class Impenetrable(object):
             os.makedirs(arr_dir)
 
         suc_flag = False
-        obj_eps = 20
+        obj_eps = 8
 
         num_images = len(x_orig)
 
@@ -93,7 +93,7 @@ class Impenetrable(object):
 
             filename = "{}_img{}_step{}".format(meta_name, ibatch, step)
 
-            val_eps = 20
+            val_eps = 8
             self.pgd.num_steps = 20
 
             while val_eps <= obj_eps:
@@ -183,7 +183,7 @@ class Impenetrable(object):
 
                 if adv_corr == num_images:
 
-                    val_eps = 20
+                    val_eps = 8
                     self.pgd.num_steps = 20
 
                     while val_eps <= obj_eps:
@@ -422,8 +422,8 @@ if __name__ == '__main__':
                 # evaluation
                 x_batch_adv = np.copy(x_batch_imp)
 
-                val_eps = 20
-                obj_eps = 20
+                val_eps = 8
+                obj_eps = 8
                 num_images = len(x_batch_imp)
 
                 impenet.pgd.num_steps = 20
