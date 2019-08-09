@@ -28,8 +28,7 @@ class Impenetrable(object):
         self.imp_num_steps = args.imp_num_steps
         self.pgd_num_steps = args.pgd_num_steps
         self.pgd_step_size = args.pgd_step_size
-        self.res_num_steps = args.res_num_steps
-        self.res_step_size = args.res_step_size
+        self.imp_step_size = args.imp_step_size
         self.save_dir_num = args.save_dir_num
         self.val_step = args.val_step
         self.val_num = args.val_num
@@ -69,8 +68,7 @@ class Impenetrable(object):
             os.makedirs(arr_dir)
 
         suc_flag = False
-        #obj_eps = 8
-        obj_eps = 20
+        obj_eps = 8
 
         num_images = len(x_orig)
 
@@ -94,9 +92,8 @@ class Impenetrable(object):
 
             filename = "{}_img{}_step{}".format(meta_name, ibatch, step)
 
-            #val_eps = 8
-            val_eps = 20
-            self.pgd.num_steps = 20
+            val_eps = 8
+            self.pgd.num_steps = 100
 
             while val_eps <= obj_eps:
                 val_iter = self.val_num
@@ -164,7 +161,7 @@ class Impenetrable(object):
             print("adv loss: {:.20f}".format(adv_loss/num_images*100))
 
             # restore image
-            x_res = x - self.res_step_size * np.sign(grad)
+            x_res = x - self.imp_step_size * np.sign(grad)
             x_res = np.clip(x_res, 0, 255)
 
             res_loss, res_corr = sess.run([self.loss, self.model.num_correct],
@@ -185,9 +182,8 @@ class Impenetrable(object):
 
                 if adv_corr == num_images:
 
-                    #val_eps = 8
-                    val_eps = 20
-                    self.pgd.num_steps = 20
+                    val_eps = 8
+                    self.pgd.num_steps = 100
 
                     while val_eps <= obj_eps:
                         val_iter = self.val_num
@@ -318,17 +314,16 @@ if __name__ == '__main__':
     parser.add_argument('--loss_func', default='xent', type=str)
     # PGD
     parser.add_argument('--eps', default=8, help='Attack eps', type=int)
-    parser.add_argument('--pgd_random_start', action='store_true')
-    parser.add_argument('--pgd_num_steps', default=20, type=int)
+    parser.add_argument('--pgd_num_steps', default=100, type=int)
     parser.add_argument('--pgd_step_size', default=2, type=float)
+    parser.add_argument('--pgd_random_start', action='store_true')
     # impenetrable
     parser.add_argument('--imp_random_start', action='store_true')
     parser.add_argument('--imp_gray_start', action='store_true')
     parser.add_argument('--imp_num_steps', default=1000, help='0 for until convergence', type=int)
-    parser.add_argument('--res_num_steps', default=0, type=int)
-    parser.add_argument('--res_step_size', default=1, type=int)
+    parser.add_argument('--imp_step_size', default=1, type=int)
     # evaluation
-    parser.add_argument('--val_step', default=100, help="validation per val_step iterations. =< 0 means no evaluation", type=int)
+    parser.add_argument('--val_step', default=10, help="validation per val_step iterations. =< 0 means no evaluation", type=int)
     parser.add_argument('--val_num', default=100, help="validation PGD numbers per eps", type=int)
     params = parser.parse_args()
     for key, val in vars(params).items():
@@ -339,7 +334,7 @@ if __name__ == '__main__':
     meta_name = 'nat' if params.model_dir=='naturally_trained' else 'adv'
     meta_name += '_pgd' + '_' + str(params.eps) + '_' + str(params.pgd_num_steps) + '_' + str(params.pgd_step_size) + ('_rand' if params.pgd_random_start else '')
     meta_name += '_imp' + '_' + str(params.imp_num_steps) + ('_rand' if params.imp_random_start else '') + ('_gray' if params.imp_gray_start else '')
-    meta_name += '_res' + '_' + str(params.res_num_steps) + '_' + str(params.res_step_size)
+    meta_name += '_res' + '_' + str(params.imp_step_size)
 
     from model import Model
 
@@ -420,13 +415,11 @@ if __name__ == '__main__':
             # evaluation
             x_batch_adv = np.copy(x_batch_imp)
 
-            #val_eps = 8
-            val_eps = 20
-            #obj_eps = 8
-            obj_eps = 20
+            val_eps = 8
+            obj_eps = 8
             num_images = len(x_batch_imp)
 
-            impenet.pgd.num_steps = 20
+            impenet.pgd.num_steps = 100
 
             success_mask = [True for _ in range(num_images)]
 
