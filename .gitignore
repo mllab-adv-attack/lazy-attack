@@ -46,6 +46,7 @@ imagenet-admm/tools/data/**
 *.test_exp
 *__par_main_wrapper__.py
 *.swp
+*.png
 
 **/results
 **/.DS_Store
