@@ -65,7 +65,7 @@ def safe_validation(x, y, model, sess, start_eps=8, end_eps=8, val_num=100):
     true_mask = [True for _ in range(len(x))]
 
     while cur_eps <= end_eps:
-        pgd = LinfPGDAttack(model, cur_eps, num_steps=20, step_size=cur_eps/4, random_start=True, loss_func='xent')
+        pgd = LinfPGDAttack(model, cur_eps, num_steps=100, step_size=cur_eps/4, random_start=True, loss_func='xent')
 
         for i in range(val_num):
             x_adv = pgd.perturb(x, y, sess, rand=True)
@@ -162,7 +162,7 @@ if __name__ == '__main__':
     parser.add_argument('--sample_size', default=1000, type=int)
     parser.add_argument('--load_arr', default='./arr_main/', type=str)
     parser.add_argument('--save_arr', default='./arr_full/', type=str)
-    parser.add_argument('--file_name', default='nat_pgd_8_20_2.0_imp_1000_res_1_1', type=str)
+    parser.add_argument('--file_name', default='nat_pgd_8_100_2.0_imp_1000_res_1_1', type=str)
     params = parser.parse_args()
     for key, val in vars(params).items():
         print('{}={}'.format(key, val))

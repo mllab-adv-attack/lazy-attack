@@ -32,6 +32,7 @@ class Impenetrable(object):
         self.save_dir_num = args.save_dir_num
         self.val_step = args.val_step
         self.val_num = args.val_num
+        self.adam = args.imp_adam
 
         self.pgd = LinfPGDAttack(self.model,
                                  self.eps,
@@ -87,6 +88,10 @@ class Impenetrable(object):
         print()
         
         step = 0
+        beta1 = 0.9
+        beta2 = 0.999
+        m = np.zeros_like(x)
+        v = np.zeros_like(x)
 
         if self.val_step > 0:
 
@@ -143,6 +148,9 @@ class Impenetrable(object):
             im = Image.fromarray(np.uint8(x).reshape((32, 32, 3)))
             im.save(img_dir + filename + '.png')
 
+        if suc_flag:
+            return x
+
         step = 1
         while self.imp_num_steps <= 0 or step <= self.imp_num_steps:
             print("step:", step)
@@ -161,7 +169,14 @@ class Impenetrable(object):
             print("adv loss: {:.20f}".format(adv_loss/num_images*100))
 
             # restore image
-            x_res = x - self.imp_step_size * np.sign(grad)
+            if not self.adam:
+                x_res = x - self.imp_step_size * np.sign(grad)
+            else:
+                adam_lr = self.imp_step_size * np.sqrt(1-beta2**step)/(1-beta1**step)
+                m = beta1 * m + (1-beta1) * grad
+                v = beta2 * v + (1-beta2) * grad * grad
+                x_res = x - adam_lr * m / (np.sqrt(v) + 1e-8)
+
             x_res = np.clip(x_res, 0, 255)
 
             res_loss, res_corr = sess.run([self.loss, self.model.num_correct],
@@ -309,7 +324,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--sample_size', default=1000, help='sample size', type=int)
     parser.add_argument('--bstart', default=0, type=int)
-    parser.add_argument('--model_dir', default='adv_trained', type=str)
+    parser.add_argument('--model_dir', default='naturally_trained', type=str)
     parser.add_argument('--save_dir_num', default=10, type=int)
     parser.add_argument('--loss_func', default='xent', type=str)
     # PGD
@@ -321,7 +336,8 @@ if __name__ == '__main__':
     parser.add_argument('--imp_random_start', action='store_true')
     parser.add_argument('--imp_gray_start', action='store_true')
     parser.add_argument('--imp_num_steps', default=1000, help='0 for until convergence', type=int)
-    parser.add_argument('--imp_step_size', default=1, type=int)
+    parser.add_argument('--imp_step_size', default=1, type=float)
+    parser.add_argument('--imp_adam', action='store_false')
     # evaluation
     parser.add_argument('--val_step', default=10, help="validation per val_step iterations. =< 0 means no evaluation", type=int)
     parser.add_argument('--val_num', default=100, help="validation PGD numbers per eps", type=int)
@@ -335,6 +351,7 @@ if __name__ == '__main__':
     meta_name += '_pgd' + '_' + str(params.eps) + '_' + str(params.pgd_num_steps) + '_' + str(params.pgd_step_size) + ('_rand' if params.pgd_random_start else '')
     meta_name += '_imp' + '_' + str(params.imp_num_steps) + ('_rand' if params.imp_random_start else '') + ('_gray' if params.imp_gray_start else '')
     meta_name += '_res' + '_' + str(params.imp_step_size)
+    meta_name += ('_adam' if params.imp_adam else '')
 
     from model import Model
 
@@ -411,6 +428,8 @@ if __name__ == '__main__':
 
             print('fortifying image ', bstart)
             x_batch_imp = impenet.fortify(x_batch, y_batch, ibatch, meta_name, sess)
+            print()
+
 
             # evaluation
             x_batch_adv = np.copy(x_batch_imp)
