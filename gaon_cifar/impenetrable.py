@@ -43,6 +43,7 @@ class Impenetrable(object):
 
         if self.loss_func == 'xent':
             self.loss = self.model.xent
+            self.loss2 = self.model.xent2
         elif self.loss_func == 'cw':
             label_mask = tf.one_hot(self.model.y_input,
                                     10,
@@ -57,6 +58,7 @@ class Impenetrable(object):
             self.loss = self.model.xent
 
         self.grad = tf.gradients(self.loss, self.model.x_input)[0]
+        self.grad2 = tf.gradients(self.loss2, self.model.x_input)[0]
 
     def fortify(self, x_orig, y, ibatch, meta_name, sess):
 
@@ -80,9 +82,9 @@ class Impenetrable(object):
         else:
             x = np.copy(x_orig)
 
-        orig_corr = sess.run(self.model.num_correct,
+        orig_corr = sess.run(self.model.num_correct2,
                             feed_dict={self.model.x_input: x,
-                                       self.model.y_input: y})
+                                       self.model.y_input2: y})
 
         print("original accuracy: {:.2f}%".format(orig_corr/num_images*100))
         print()
@@ -117,9 +119,9 @@ class Impenetrable(object):
                     x_val = self.pgd.perturb(x_val_batch, y_val_batch, sess,
                                              proj=True, reverse=False, rand=True)
 
-                    cur_corr = sess.run(self.model.num_correct,
+                    cur_corr = sess.run(self.model.num_correct2,
                                         feed_dict={self.model.x_input: x_val,
-                                                   self.model.y_input: y})
+                                                   self.model.y_input2: y})
 
                     val_total_corr += cur_corr
 
@@ -159,9 +161,9 @@ class Impenetrable(object):
             x_adv = self.pgd.perturb(x, y, sess,
                                      proj=True, reverse=False)
 
-            adv_loss, adv_corr, grad = sess.run([self.loss, self.model.num_correct, self.grad],
+            adv_loss, adv_corr, grad = sess.run([self.loss2, self.model.num_correct2, self.grad2],
                                       feed_dict={self.model.x_input: x_adv,
-                                                 self.model.y_input: y})
+                                                 self.model.y_input2: y})
 
             l1_dist = np.linalg.norm((x_adv - x).flatten(), 1) / x.size
             print("attack accuracy: {:.2f}%".format(adv_corr/num_images*100))
@@ -179,9 +181,9 @@ class Impenetrable(object):
 
             x_res = np.clip(x_res, 0, 255)
 
-            res_loss, res_corr = sess.run([self.loss, self.model.num_correct],
+            res_loss, res_corr = sess.run([self.loss2, self.model.num_correct2],
                                 feed_dict={self.model.x_input: x_res,
-                                           self.model.y_input: y})
+                                           self.model.y_input2: y})
 
             l1_dist = np.linalg.norm((x_res - x).flatten(), 1) / x.size
             print("restored accuracy: {:.2f}%".format(res_corr/num_images*100))
@@ -217,9 +219,9 @@ class Impenetrable(object):
                             x_val = self.pgd.perturb(x_val_batch, y_val_batch, sess,
                                                      proj=True, reverse=False, rand=True)
 
-                            cur_corr = sess.run(self.model.num_correct,
+                            cur_corr = sess.run(self.model.num_correct2,
                                                 feed_dict={self.model.x_input: x_val,
-                                                           self.model.y_input: y})
+                                                           self.model.y_input2: y})
 
                             val_total_corr += cur_corr
 
@@ -274,7 +276,7 @@ def result(x_imp, x_adv, model, sess, x_full_batch, y_full_batch):
         y_batch = y_full_batch[bstart:bend]
         dict_adv = {model.x_input: x_batch,
                     model.y_input: y_batch}
-        cur_corr, y_pred_batch = sess.run([model.num_correct, model.predictions],
+        cur_corr, y_pred_batch = sess.run([model.num_correct2, model.predictions],
                                           feed_dict=dict_adv)
         total_corr += cur_corr
     accuracy = total_corr / num_eval_examples
@@ -291,7 +293,7 @@ def result(x_imp, x_adv, model, sess, x_full_batch, y_full_batch):
         dict_adv = {model.x_input: x_batch,
                     model.y_input: y_batch}
         cur_corr, y_pred_batch, correct_prediction, losses = \
-            sess.run([model.num_correct, model.predictions, model.correct_prediction, model.y_xent],
+            sess.run([model.num_correct2, model.predictions, model.correct_prediction2, model.y_xent2],
                      feed_dict=dict_adv)
         total_corr += cur_corr
         accuracy = total_corr / num_eval_examples
@@ -308,7 +310,7 @@ def result(x_imp, x_adv, model, sess, x_full_batch, y_full_batch):
         dict_adv = {model.x_input: x_batch,
                     model.y_input: y_batch}
         cur_corr, y_pred_batch, correct_prediction, losses = \
-            sess.run([model.num_correct, model.predictions, model.correct_prediction, model.y_xent],
+            sess.run([model.num_correct2, model.predictions, model.correct_prediction2, model.y_xent2],
                      feed_dict=dict_adv)
         total_corr += cur_corr
         accuracy = total_corr / num_eval_examples
@@ -338,6 +340,7 @@ if __name__ == '__main__':
     parser.add_argument('--imp_num_steps', default=1000, help='0 for until convergence', type=int)
     parser.add_argument('--imp_step_size', default=1, type=float)
     parser.add_argument('--imp_adam', action='store_false')
+    parser.add_argument('--soft_label', default=0, help='0: hard gt, 1: hard inferred, 2: soft inferred', type=int)
     # evaluation
     parser.add_argument('--val_step', default=10, help="validation per val_step iterations. =< 0 means no evaluation", type=int)
     parser.add_argument('--val_num', default=100, help="validation PGD numbers per eps", type=int)
@@ -418,6 +421,9 @@ if __name__ == '__main__':
 
         x_full_batch = x_full_batch.astype(np.float32)
 
+        # y to one-hot
+        y_full_batch = np.eye(10)[y_full_batch.reshape(-1)]
+
         for ibatch in range(num_batches):
             bstart = ibatch * eval_batch_size
             bend = min(bstart + eval_batch_size, num_eval_examples)
@@ -454,9 +460,9 @@ if __name__ == '__main__':
                     x_batch_adv = impenet.pgd.perturb(x_batch_imp, y_batch, sess,
                                                       proj=True, reverse=False, rand=True)
 
-                    corr_mask = sess.run(impenet.model.correct_prediction,
+                    corr_mask = sess.run(impenet.model.correct_prediction2,
                                                    feed_dict={impenet.model.x_input: x_batch_adv,
-                                                              impenet.model.y_input: y_batch})
+                                                              impenet.model.y_input2: y_batch})
 
                     success_mask *= corr_mask
                     num_survived = np.sum(success_mask) / len(success_mask)
