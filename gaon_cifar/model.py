@@ -35,6 +35,8 @@ class Model(object):
         shape=[None, 32, 32, 3])
 
       self.y_input = tf.placeholder(tf.int64, shape=None)
+      self.y_input2 = tf.placeholder(tf.int64, shape=[None, 10])
+      self.y_input2_argmax = tf.argmax(self.y_input2, axis=0)
 
       input_standardized = tf.map_fn(lambda img: tf.image.per_image_standardization(img),
                                self.x_input)
@@ -88,14 +90,26 @@ class Model(object):
         tf.cast(self.correct_prediction, tf.int32))
     self.accuracy = tf.reduce_mean(
         tf.cast(self.correct_prediction, tf.float32))
-    
+    self.correct_prediction2 = tf.equal(self.predictions, self.y_input2_argmax)
+    self.num_correct2 = tf.reduce_sum(
+      tf.cast(self.correct_prediction2, tf.int32))
+    self.accuracy2 = tf.reduce_mean(
+      tf.cast(self.correct_prediction2, tf.float32))
+
     with tf.variable_scope('costs'):
       self.y_xent = tf.nn.sparse_softmax_cross_entropy_with_logits(
           logits=self.pre_softmax, labels=self.y_input)
       self.xent = tf.reduce_sum(self.y_xent, name='y_xent')
       self.mean_xent = tf.reduce_mean(self.y_xent)
       self.weight_decay_loss = self._decay()
-    
+
+    with tf.variable_scope('costs2'):
+      self.y_xent2 = tf.nn.softmax_cross_entropy_with_logits(
+        logits=self.pre_softmax, labels=self.y_input2)
+      self.xent2 = tf.reduce_sum(self.y_xent2, name='y_xent2')
+      self.mean_xent2 = tf.reduce_mean(self.y_xent2)
+      self.weight_decay_loss = self._decay()
+
     with tf.variable_scope('cw_loss'):
       label_mask = tf.one_hot(self.y_input,
                               10,
