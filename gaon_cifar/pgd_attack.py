@@ -45,6 +45,7 @@ class LinfPGDAttack:
 
         if loss_func == 'xent':
             self.loss = model.xent
+            self.loss2 = model.xent2
         elif loss_func == 'cw':
             label_mask = tf.one_hot(model.y_input,
                                     10,
@@ -59,6 +60,7 @@ class LinfPGDAttack:
             self.loss = model.xent
 
         self.grad = tf.gradients(self.loss, model.x_input)[0]
+        self.grad2 = tf.gradients(self.loss2, model.x_input)[0]
 
     def perturb(self, x_nat, y, sess, proj=True, reverse=False, rand=False, step_size=None, num_steps=None):
 
@@ -77,8 +79,12 @@ class LinfPGDAttack:
             x = np.copy(x_nat)
 
         for i in range(num_steps):
-            grad = sess.run(self.grad, feed_dict={self.model.x_input: x,
-                                                  self.model.y_input: y})
+            if len(y[0]) > 1:
+                grad = sess.run(self.grad2, feed_dict={self.model.x_input: x,
+                                                      self.model.y_input2: y})
+            else:
+                grad = sess.run(self.grad, feed_dict={self.model.x_input: x,
+                                                      self.model.y_input: y})
 
             if not reverse:
                 x += step_size * np.sign(grad)
