@@ -37,6 +37,7 @@ def merge(params):
         x_org_batch = np.load(org_full_name)
         x_imp_batch = np.load(imp_full_name)
         y_batch = np.load(y_full_name)
+        y_batch = np.argmax(y_batch, axis=1)
 
         x_org.append(x_org_batch)
         x_imp.append(x_imp_batch)
@@ -156,7 +157,6 @@ if __name__ == '__main__':
     import sys
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--model_dir', default='naturally_trained', type=str)
     parser.add_argument('--bstart', default=0, type=int)
     parser.add_argument('--batch_size', default=100, type=int)
     parser.add_argument('--sample_size', default=1000, type=int)
@@ -174,7 +174,15 @@ if __name__ == '__main__':
     with open('config.json') as config_file:
         config = json.load(config_file)
 
-    model_file = tf.train.latest_checkpoint('models/' + params.model_dir)
+
+    if params.file_name[:3]=='nat':
+        model_dir = 'naturally_trained'
+    elif params.file_name[:3]=='adv':
+        model_dir = 'adv_trained'
+    else:
+        raise Exception
+
+    model_file = tf.train.latest_checkpoint('models/' + model_dir)
     if model_file is None:
         print('No model found')
         sys.exit()

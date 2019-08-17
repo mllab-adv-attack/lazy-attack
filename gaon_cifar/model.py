@@ -35,8 +35,8 @@ class Model(object):
         shape=[None, 32, 32, 3])
 
       self.y_input = tf.placeholder(tf.int64, shape=None)
-      self.y_input2 = tf.placeholder(tf.int64, shape=[None, 10])
-      self.y_input2_argmax = tf.argmax(self.y_input2, axis=0)
+      self.y_input2 = tf.placeholder(tf.float32, shape=[None, 10])
+      self.y_input2_argmax = tf.argmax(self.y_input2, axis=1)
 
       input_standardized = tf.map_fn(lambda img: tf.image.per_image_standardization(img),
                                self.x_input)

@@ -28,6 +28,7 @@ class Impenetrable(object):
         self.imp_num_steps = args.imp_num_steps
         self.pgd_num_steps = args.pgd_num_steps
         self.pgd_step_size = args.pgd_step_size
+        self.pgd_random_start = args.pgd_random_start
         self.imp_step_size = args.imp_step_size
         self.save_dir_num = args.save_dir_num
         self.val_step = args.val_step
@@ -61,6 +62,9 @@ class Impenetrable(object):
         self.grad2 = tf.gradients(self.loss2, self.model.x_input)[0]
 
     def fortify(self, x_orig, y, ibatch, meta_name, sess):
+        
+        y_hard = np.argmax(y, axis=1)
+        y_hard = np.eye(10)[y_hard.reshape(-1)]
 
         img_dir = './img'+str(self.save_dir_num) + '/'
         arr_dir = './arr'+str(self.save_dir_num) + '/'
@@ -87,7 +91,6 @@ class Impenetrable(object):
                                        self.model.y_input2: y})
 
         print("original accuracy: {:.2f}%".format(orig_corr/num_images*100))
-        print()
         
         step = 0
         beta1 = 0.9
@@ -109,14 +112,16 @@ class Impenetrable(object):
                 assert val_iter % 100 == 0
 
                 x_val_batch = np.tile(x, (100, 1, 1, 1))
-                y_val_batch = np.tile(y, 100)
+                #y_val_batch = np.tile(y, (100, 1))
+                y_hard_val_batch = np.tile(y_hard, (100, 1))
 
                 self.pgd.epsilon = val_eps
                 self.pgd.step_size = self.pgd.epsilon//4
+                self.pgd.random_start = True
 
                 for i in range(val_iter//100):
 
-                    x_val = self.pgd.perturb(x_val_batch, y_val_batch, sess,
+                    x_val = self.pgd.perturb(x_val_batch, y_hard_val_batch, sess,
                                              proj=True, reverse=False, rand=True)
 
                     cur_corr = sess.run(self.model.num_correct2,
@@ -145,6 +150,7 @@ class Impenetrable(object):
             self.pgd.epsilon = self.eps
             self.pgd.step_size = self.pgd_step_size
             self.pgd.num_steps = self.pgd_num_steps
+            self.pgd.random_start = self.pgd_random_start
 
             np.save(arr_dir + filename, x)
             im = Image.fromarray(np.uint8(x).reshape((32, 32, 3)))
@@ -158,7 +164,7 @@ class Impenetrable(object):
             print("step:", step)
 
             # attack image
-            x_adv = self.pgd.perturb(x, y, sess,
+            x_adv = self.pgd.perturb(x, y_hard, sess,
                                      proj=True, reverse=False)
 
             adv_loss, adv_corr, grad = sess.run([self.loss2, self.model.num_correct2, self.grad2],
@@ -209,14 +215,16 @@ class Impenetrable(object):
                         assert val_iter%100 == 0
 
                         x_val_batch = np.tile(x, (100, 1, 1, 1))
-                        y_val_batch = np.tile(y, 100)
+                        #y_val_batch = np.tile(y, (100, 1))
+                        y_hard_val_batch = np.tile(y_hard, (100, 1))
 
                         self.pgd.epsilon = val_eps
                         self.pgd.step_size = self.pgd.epsilon//4
+                        self.pgd.random_start = True
 
                         for i in range(val_iter//100):
 
-                            x_val = self.pgd.perturb(x_val_batch, y_val_batch, sess,
+                            x_val = self.pgd.perturb(x_val_batch, y_hard_val_batch, sess,
                                                      proj=True, reverse=False, rand=True)
 
                             cur_corr = sess.run(self.model.num_correct2,
@@ -247,6 +255,7 @@ class Impenetrable(object):
                     self.pgd.epsilon = self.eps
                     self.pgd.step_size = self.pgd_step_size
                     self.pgd.num_steps = self.pgd_num_steps
+                    self.pgd.random_start = self.pgd_random_start
 
                 np.save(arr_dir + filename, x)
                 im = Image.fromarray(np.uint8(x).reshape((32, 32, 3)))
@@ -266,6 +275,10 @@ def result(x_imp, x_adv, model, sess, x_full_batch, y_full_batch):
     num_eval_examples = x_imp.shape[0]
     eval_batch_size = min(num_eval_examples, 100)
     num_batches = int(math.ceil(num_eval_examples / eval_batch_size))
+
+    # change one-hot to labels
+    if y_full_batch.size > y_full_batch.shape[0]:
+        y_full_batch = np.argmax(y_full_batch, axis=1).reshape(-1, 1)
 
     total_corr = 0
     for ibatch in range(num_batches):
@@ -327,6 +340,7 @@ if __name__ == '__main__':
     parser.add_argument('--sample_size', default=1000, help='sample size', type=int)
     parser.add_argument('--bstart', default=0, type=int)
     parser.add_argument('--model_dir', default='naturally_trained', type=str)
+    parser.add_argument('--corr_only', action='store_false')
     parser.add_argument('--save_dir_num', default=10, type=int)
     parser.add_argument('--loss_func', default='xent', type=str)
     # PGD
@@ -339,11 +353,11 @@ if __name__ == '__main__':
     parser.add_argument('--imp_gray_start', action='store_true')
     parser.add_argument('--imp_num_steps', default=1000, help='0 for until convergence', type=int)
     parser.add_argument('--imp_step_size', default=1, type=float)
-    parser.add_argument('--imp_adam', action='store_false')
+    parser.add_argument('--imp_adam', action='store_true')
     parser.add_argument('--soft_label', default=0, help='0: hard gt, 1: hard inferred, 2: soft inferred', type=int)
     # evaluation
     parser.add_argument('--val_step', default=10, help="validation per val_step iterations. =< 0 means no evaluation", type=int)
-    parser.add_argument('--val_num', default=100, help="validation PGD numbers per eps", type=int)
+    parser.add_argument('--val_num', default=100, help="validation PGD restart numbers per eps", type=int)
     params = parser.parse_args()
     for key, val in vars(params).items():
         print('{}={}'.format(key, val))
@@ -355,6 +369,8 @@ if __name__ == '__main__':
     meta_name += '_imp' + '_' + str(params.imp_num_steps) + ('_rand' if params.imp_random_start else '') + ('_gray' if params.imp_gray_start else '')
     meta_name += '_res' + '_' + str(params.imp_step_size)
     meta_name += ('_adam' if params.imp_adam else '')
+    meta_name += ('_corr' if params.corr_only else '')
+    meta_name += '_' + str(params.soft_label)
 
     from model import Model
 
@@ -392,27 +408,36 @@ if __name__ == '__main__':
         x_imp = []  # imp accumulator
         x_adv = []  # adv accumulator
 
-        if params.model_dir == 'naturally_trained':
-            indices = np.load('/data/home/gaon/lazy-attack/cifar10_data/nat_indices_untargeted.npy')
+        if params.corr_only:
+            if params.model_dir == 'naturally_trained':
+                indices = np.load('/data/home/gaon/lazy-attack/cifar10_data/nat_indices_untargeted.npy')
+            else:
+                indices = np.load('/data/home/gaon/lazy-attack/cifar10_data/indices_untargeted.npy')
         else:
-            indices = np.load('/data/home/gaon/lazy-attack/cifar10_data/indices_untargeted.npy')
+            indices = [i for i in range(1000)]
 
         bstart = params.bstart
         while (True):
             x_candid = cifar.eval_data.xs[indices[bstart:bstart + 100]]
             y_candid = cifar.eval_data.ys[indices[bstart:bstart + 100]]
-            mask = sess.run(model.correct_prediction, feed_dict={model.x_input: x_candid,
-                                                                 model.y_input: y_candid})
+            mask,logits = sess.run([model.correct_prediction, model.pre_softmax],
+                                    feed_dict={model.x_input: x_candid,
+                                               model.y_input: y_candid})
+            if not params.corr_only:
+                mask = [True for i in range(len(mask))]
             x_masked = x_candid[mask]
             y_masked = y_candid[mask]
+            logit_masked = logits[mask]
             print(len(x_masked))
             if bstart == params.bstart:
                 x_full_batch = x_masked[:min(num_eval_examples, len(x_masked))]
                 y_full_batch = y_masked[:min(num_eval_examples, len(y_masked))]
+                logit_full_batch = logit_masked[:min(num_eval_examples, len(logit_masked))]
             else:
                 index = min(num_eval_examples - len(x_full_batch), len(x_masked))
                 x_full_batch = np.concatenate((x_full_batch, x_masked[:index]))
                 y_full_batch = np.concatenate((y_full_batch, y_masked[:index]))
+                logit_full_batch = np.concatenate((logit_full_batch, logit_masked[:index]))
             bstart += 100
             if len(x_full_batch) >= (num_eval_examples) or bstart >= 10000:
                 break
@@ -422,7 +447,14 @@ if __name__ == '__main__':
         x_full_batch = x_full_batch.astype(np.float32)
 
         # y to one-hot
-        y_full_batch = np.eye(10)[y_full_batch.reshape(-1)]
+        if params.soft_label==0:
+            y_full_batch_oh = np.eye(10)[y_full_batch.reshape(-1)]
+        elif params.soft_label==1:
+            y_full_batch_oh = np.argmax(logit_full_batch, axis=1)
+            y_full_batch_oh = np.eye(10)[y_full_batch_oh.reshape(-1)]
+        else:
+            y_full_batch_oh = logit_full_batch
+            y_full_batch_oh = np.exp(y_full_batch_oh) / np.sum(np.exp(y_full_batch_oh), axis=1).reshape(-1, 1)
 
         for ibatch in range(num_batches):
             bstart = ibatch * eval_batch_size
@@ -430,7 +462,7 @@ if __name__ == '__main__':
             print('batch size: {}'.format(bend - bstart))
 
             x_batch = x_full_batch[bstart:bend, :]
-            y_batch = y_full_batch[bstart:bend]
+            y_batch = y_full_batch_oh[bstart:bend, :]
 
             print('fortifying image ', bstart)
             x_batch_imp = impenet.fortify(x_batch, y_batch, ibatch, meta_name, sess)
@@ -454,6 +486,7 @@ if __name__ == '__main__':
 
                 impenet.pgd.epsilon = val_eps
                 impenet.pgd.step_size = impenet.pgd.epsilon//4
+                impenet.pgd.random_start = True
 
                 for i in range(val_iter):
 
@@ -487,6 +520,7 @@ if __name__ == '__main__':
             impenet.pgd.epsilon = impenet.eps
             impenet.pgd.step_size = impenet.pgd_step_size
             impenet.pgd.num_steps = impenet.pgd_num_steps
+            impenet.pgd.random_start = impenet.pgd_random_start
 
             x_imp.append(x_batch_imp)
             x_adv.append(x_batch_adv)

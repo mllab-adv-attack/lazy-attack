@@ -79,7 +79,7 @@ class LinfPGDAttack:
             x = np.copy(x_nat)
 
         for i in range(num_steps):
-            if len(y[0]) > 1:
+            if y.size > y.shape[0]:
                 grad = sess.run(self.grad2, feed_dict={self.model.x_input: x,
                                                       self.model.y_input2: y})
             else:
