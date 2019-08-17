@@ -104,7 +104,8 @@ def run_attack(x_adv, model, sess, x_full_batch, y_full_batch):
     num_eval_samples = x_adv.shape[0]
     eval_batch_size = min(num_eval_samples, 100)
     num_batches = int(math.ceil(num_eval_examples / eval_batch_size))
-    total_corr=0
+    total_corr = 0
+    accuracy = 0
 
     l_inf = np.amax(np.abs(x_full_batch-x_adv))
     if l_inf > params.eps+0.001:
@@ -190,7 +191,7 @@ if __name__ == '__main__':
         eval_batch_size = min(config['eval_batch_size'], num_eval_examples)
         num_batches = int(math.ceil(num_eval_examples / eval_batch_size))
 
-        x_adv = [] # adv accumulator
+        x_adv = []  # adv accumulator
         masks = []
 
         bstart = 0
