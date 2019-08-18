@@ -310,7 +310,8 @@ if __name__ == '__main__':
     parser.add_argument('--sample_size', default=1000, help='sample size', type=int)
     parser.add_argument('--bstart', default=0, type=int)
     parser.add_argument('--model_dir', default='naturally_trained', type=str)
-    parser.add_argument('--corr_only', action='store_false')
+    parser.add_argument('--corr_only', action='store_true')
+    parser.add_argument('--fail_only', action='store_true')
     parser.add_argument('--save_dir_num', default=10, type=int)
     parser.add_argument('--loss_func', default='xent', type=str)
     # PGD (training)
@@ -337,6 +338,7 @@ if __name__ == '__main__':
         print('{}={}'.format(key, val))
 
     assert not (params.imp_random_start and params.imp_gray_start)
+    assert not (params.corr_only and params.fail_only)
 
     meta_name = 'nat' if params.model_dir=='naturally_trained' else 'adv'
     meta_name += '_pgd' + '_' + str(params.pgd_eps) + '_' + str(params.pgd_num_steps) + '_' + str(params.pgd_step_size) + ('_rand' if params.pgd_random_start else '') + '_' + str(params.pgd_restarts)
@@ -386,19 +388,23 @@ if __name__ == '__main__':
                 indices = np.load('/data/home/gaon/lazy-attack/cifar10_data/nat_indices_untargeted.npy')
             else:
                 indices = np.load('/data/home/gaon/lazy-attack/cifar10_data/indices_untargeted.npy')
+        elif params.fail_only:
+            if params.model_dir == 'naturally_trained':
+                indices = np.load('/data/home/gaon/lazy-attack/cifar10_data/fail_nat_indices_untargeted.npy')
+            else:
+                indices = np.load('/data/home/gaon/lazy-attack/cifar10_data/fail_indices_untargeted.npy')
         else:
-            indices = [i for i in range(1000)]
+            indices = [i for i in range(10000)]
 
         # load data
         bstart = params.bstart
         while True:
+            '''
             x_candid = cifar.eval_data.xs[indices[bstart:bstart + 100]]
             y_candid = cifar.eval_data.ys[indices[bstart:bstart + 100]]
-            mask,logits = sess.run([model.correct_prediction, model.pre_softmax],
+            mask, logits = sess.run([model.correct_prediction, model.pre_softmax],
                                     feed_dict={model.x_input: x_candid,
                                                model.y_input: y_candid})
-            if not params.corr_only:
-                mask = [True for i in range(len(mask))]
             x_masked = x_candid[mask]
             y_masked = y_candid[mask]
             logit_masked = logits[mask]
@@ -412,6 +418,29 @@ if __name__ == '__main__':
                 x_full_batch = np.concatenate((x_full_batch, x_masked[:index]))
                 y_full_batch = np.concatenate((y_full_batch, y_masked[:index]))
                 logit_full_batch = np.concatenate((logit_full_batch, logit_masked[:index]))
+            bstart += 100
+            if (len(x_full_batch) >= num_eval_examples) or bstart >= 10000:
+                break
+            '''
+            x_candid = cifar.eval_data.xs[indices[bstart:bstart + 100]]
+            y_candid = cifar.eval_data.ys[indices[bstart:bstart + 100]]
+            mask, logits = sess.run([model.correct_prediction, model.pre_softmax],
+                                    feed_dict={model.x_input: x_candid,
+                                               model.y_input: y_candid})
+            print(sum(mask))
+            if params.corr_only and (np.mean(mask) < 1.0 - 1E-6):
+                raise Exception
+            if params.fail_only and (np.mean(mask) > 0.0 + 1E-6):
+                raise Exception
+            if bstart == params.bstart:
+                x_full_batch = x_candid[:min(num_eval_examples, len(x_candid))]
+                y_full_batch = y_candid[:min(num_eval_examples, len(y_candid))]
+                logit_full_batch = logits[:min(num_eval_examples, len(logits))]
+            else:
+                index = min(num_eval_examples - len(x_full_batch), len(x_candid))
+                x_full_batch = np.concatenate((x_full_batch, x_candid[:index]))
+                y_full_batch = np.concatenate((y_full_batch, y_candid[:index]))
+                logit_full_batch = np.concatenate((logit_full_batch, logits[:index]))
             bstart += 100
             if (len(x_full_batch) >= num_eval_examples) or bstart >= 10000:
                 break
