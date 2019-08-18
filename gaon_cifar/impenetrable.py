@@ -21,13 +21,15 @@ import os
 class Impenetrable(object):
     def __init__(self, model, args):
         self.model = model
-        self.eps = args.eps
         self.loss_func = args.loss_func
         self.imp_random_start = args.imp_random_start
         self.imp_gray_start = args.imp_gray_start
         self.imp_num_steps = args.imp_num_steps
+        self.imp_eps = args.imp_eps
+        self.pgd_eps = args.pgd_eps
         self.pgd_num_steps = args.pgd_num_steps
-        self.pgd_step_size = args.pgd_step_size
+        #self.pgd_step_size = args.pgd_step_size
+        self.pgd_step_size = self.pgd_eps/4.0
         self.pgd_restarts = args.pgd_restarts
         self.pgd_random_start = args.pgd_random_start or (self.pgd_restarts > 1)
         self.imp_step_size = args.imp_step_size
@@ -39,10 +41,10 @@ class Impenetrable(object):
         self.adam = args.imp_adam
 
         self.pgd = LinfPGDAttack(self.model,
-                                 self.eps,
-                                 args.pgd_num_steps,
-                                 args.pgd_step_size,
-                                 args.pgd_random_start,
+                                 self.pgd_eps,
+                                 self.pgd_num_steps,
+                                 self.pgd_step_size,
+                                 self.pgd_random_start,
                                  args.loss_func)
 
         if self.loss_func == 'xent':
@@ -126,21 +128,22 @@ class Impenetrable(object):
             print("step:", step)
 
             # attack image
-            attack_batch_size = 100
-            x_adv_batch = np.tile(x, (attack_batch_size, 1, 1, 1))
-            y_hard_val_batch = np.tile(y_hard, (attack_batch_size, 1))
+            x_adv_batch = np.tile(x, (self.pgd_restarts, 1, 1, 1))
+            y_hard_val_batch = np.tile(y_hard, (self.pgd_restarts, 1))
 
             x_adv_batch = self.pgd.perturb(x_adv_batch, y_hard_val_batch, sess,
                                      proj=True, reverse=False, rand=True)
 
-            adv_loss, adv_corr, grad = sess.run([self.loss, self.model.num_correct, self.grad],
-                                                feed_dict={self.model.x_input: x_adv_batch,
-                                                           self.model.y_input: y_hard_val_batch})
+            adv_loss, adv_corr, grad = sess.run([self.loss2, self.model.num_correct2, self.grad2],
+                                               feed_dict={self.model.x_input: x_adv_batch,
+                                                           self.model.y_input2: y_hard_val_batch})
+
+            grad = np.mean(grad, axis=0)
 
             #l1_dist = np.linalg.norm((x_adv - x).flatten(), 1) / x.size
-            print("attack accuracy: {:.2f}%".format(adv_corr/(num_images*attack_batch_size)*100))
+            print("attack accuracy: {:.2f}%".format(adv_corr/(num_images*self.pgd_restarts)*100))
             #print("l1 distance: {:.2f}".format(l1_dist))
-            print("adv loss: {:.20f}".format(adv_loss/(num_images*attack_batch_size)*100))
+            print("adv loss: {:.20f}".format(adv_loss/(num_images*self.pgd_restarts)*100))
 
             # restore image
             if self.adam:
@@ -152,6 +155,9 @@ class Impenetrable(object):
                 x_res = x - self.imp_step_size * np.sign(grad)
 
             x_res = np.clip(x_res, 0, 255)
+
+            if self.imp_eps > 0:
+                x_res = np.clip(x_res, x_orig-self.imp_eps, x_orig+self.imp_eps)
 
             res_loss, res_corr = sess.run([self.loss2, self.model.num_correct2],
                                           feed_dict={self.model.x_input: x_res,
@@ -169,7 +175,7 @@ class Impenetrable(object):
 
                 filename = "{}_img{}_step{}".format(meta_name, ibatch, step)
 
-                if adv_corr == num_images:
+                if adv_corr == num_images*self.pgd_restarts:
 
                     suc_flag = self.validation(x, y, y_hard)
 
@@ -192,7 +198,7 @@ class Impenetrable(object):
         return x
 
     def reset_pgd(self):
-        self.pgd.epsilon = self.eps
+        self.pgd.epsilon = self.pgd_eps
         self.pgd.step_size = self.pgd_step_size
         self.pgd.num_steps = self.pgd_num_steps
         self.pgd.random_start = self.pgd_random_start
@@ -270,7 +276,7 @@ def result(x_imp, model, sess, x_full_batch, y_full_batch):
         y_batch = y_full_batch[bstart:bend]
         dict_adv = {model.x_input: x_batch,
                     model.y_input: y_batch}
-        cur_corr, y_pred_batch = sess.run([model.num_correct2, model.predictions],
+        cur_corr, y_pred_batch = sess.run([model.num_correct, model.predictions],
                                           feed_dict=dict_adv)
         total_corr += cur_corr
     accuracy = total_corr / num_eval_examples
@@ -312,8 +318,9 @@ if __name__ == '__main__':
     parser.add_argument('--pgd_num_steps', default=100, type=int)
     parser.add_argument('--pgd_step_size', default=2, type=float)
     parser.add_argument('--pgd_random_start', action='store_true')
-    parser.add_argument('--pgd_restarts', default=100, help="training PGD restart numbers per eps", type=int)
+    parser.add_argument('--pgd_restarts', default=1, help="training PGD restart numbers per eps", type=int)
     # impenetrable
+    parser.add_argument('--imp_eps', default=0, help='<= 0 for no imp eps', type=float)
     parser.add_argument('--imp_random_start', action='store_true')
     parser.add_argument('--imp_gray_start', action='store_true')
     parser.add_argument('--imp_num_steps', default=1000, help='0 for until convergence', type=int)
@@ -332,8 +339,8 @@ if __name__ == '__main__':
     assert not (params.imp_random_start and params.imp_gray_start)
 
     meta_name = 'nat' if params.model_dir=='naturally_trained' else 'adv'
-    meta_name += '_pgd' + '_' + str(params.eps) + '_' + str(params.pgd_num_steps) + '_' + str(params.pgd_step_size) + ('_rand' if params.pgd_random_start else '')
-    meta_name += '_imp' + '_' + str(params.imp_num_steps) + ('_rand' if params.imp_random_start else '') + ('_gray' if params.imp_gray_start else '')
+    meta_name += '_pgd' + '_' + str(params.pgd_eps) + '_' + str(params.pgd_num_steps) + '_' + str(params.pgd_step_size) + ('_rand' if params.pgd_random_start else '') + '_' + str(params.pgd_restarts)
+    meta_name += '_imp' + '_' + str(params.imp_num_steps) + ('_rand' if params.imp_random_start else '') + ('_gray' if params.imp_gray_start else '') + '_' + str(params.imp_eps)
     meta_name += '_res' + '_' + str(params.imp_step_size)
     meta_name += ('_adam' if params.imp_adam else '')
     meta_name += ('_corr' if params.corr_only else '')
@@ -365,7 +372,7 @@ if __name__ == '__main__':
 
         # Iterate over the samples batch-by-batch
         num_eval_examples = params.sample_size
-        if params.val_step > 0:
+        if params.val_step_per > 0:
             eval_batch_size = 1
         else:
             eval_batch_size = min(config['eval_batch_size'], num_eval_examples)
