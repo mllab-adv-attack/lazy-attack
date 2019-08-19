@@ -292,11 +292,10 @@ def result(x_imp, model, sess, x_full_batch, y_full_batch):
         y_batch = y_full_batch[bstart:bend]
         dict_adv = {model.x_input: x_batch,
                     model.y_input: y_batch}
-        cur_corr, y_pred_batch, correct_prediction, losses = \
-            sess.run([model.num_correct2, model.predictions, model.correct_prediction2, model.y_xent2],
-                     feed_dict=dict_adv)
+        cur_corr, y_pred_batch = sess.run([model.num_correct, model.predictions],
+                                          feed_dict=dict_adv)
         total_corr += cur_corr
-        accuracy = total_corr / num_eval_examples
+    accuracy = total_corr / num_eval_examples
 
     print('imp Accuracy: {:.2f}%'.format(100.0 * accuracy))
 
@@ -310,7 +309,7 @@ if __name__ == '__main__':
     parser.add_argument('--sample_size', default=1000, help='sample size', type=int)
     parser.add_argument('--bstart', default=0, type=int)
     parser.add_argument('--model_dir', default='naturally_trained', type=str)
-    parser.add_argument('--corr_only', action='store_true')
+    parser.add_argument('--corr_only', action='store_false')
     parser.add_argument('--fail_only', action='store_true')
     parser.add_argument('--save_dir_num', default=10, type=int)
     parser.add_argument('--loss_func', default='xent', type=str)
@@ -394,7 +393,7 @@ if __name__ == '__main__':
             else:
                 indices = np.load('/data/home/gaon/lazy-attack/cifar10_data/fail_indices_untargeted.npy')
         else:
-            indices = [i for i in range(10000)]
+            indices = [i for i in range(params.sample_size)]
 
         # load data
         bstart = params.bstart

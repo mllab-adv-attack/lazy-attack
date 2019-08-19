@@ -37,7 +37,7 @@ def merge(params):
         x_org_batch = np.load(org_full_name)
         x_imp_batch = np.load(imp_full_name)
         y_batch = np.load(y_full_name)
-        y_batch = np.argmax(y_batch, axis=1)
+        #y_batch = np.argmax(y_batch, axis=1)
 
         x_org.append(x_org_batch)
         x_imp.append(x_imp_batch)
