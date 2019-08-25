@@ -71,6 +71,7 @@ class Impenetrable(object):
         self.grad2 = tf.gradients(self.loss2, self.model.x_input)[0]
 
     def fortify(self, x_orig, y, sess, y_gt=None):
+        num_classes = 10
 
         # y_hard: soft label to hard label (batch, 10)
         y_hard = np.argmax(y, axis=1)
@@ -123,7 +124,6 @@ class Impenetrable(object):
                 x_adv_batch = np.tile(x, (self.pgd_restarts, 1, 1, 1))
                 y_hard_val_batch = np.tile(y_hard, (self.pgd_restarts, 1))
             else:
-                num_classes = 10
                 if self.soft_label == 1:
                     x_adv_batch = np.tile(x, (num_classes*self.pgd_restarts, 1, 1, 1))
                     y_hard_val_batch = np.array([i for i in range(num_classes)]).flatten()
@@ -144,6 +144,10 @@ class Impenetrable(object):
             # soft label test
             if self.soft_label == 1:
                 grad_full = np.linalg.norm(grad.reshape(len(x_adv_batch), -1), axis=1)
+                grad_full2 = []
+                for idx in range(num_classes):
+                    grad_full2.append(np.mean(grad_full[idx * self.pgd_restarts: (idx+1) * self.pgd_restarts]))
+                grad_full = np.array(grad_full2)
                 print('grad l2 norm:', grad_full)
                 print('max grad class:', np.argmax(grad_full))
                 print('min grad class:', np.argmin(grad_full))
@@ -151,10 +155,9 @@ class Impenetrable(object):
                 print('max loss class:', np.argmax(adv_loss_full))
                 print('min loss class:', np.argmin(adv_loss_full))
                 
-                if np.argmin(grad_full)==np.argmin(adv_loss_full):
+                if np.argmin(grad_full) == np.argmin(adv_loss_full):
                     print('setting gt class to:', np.argmin(adv_loss_full))
                     pred_class = np.argmax(adv_loss_full)
-
 
                 y_hard_val_batch = np.array([pred_class for _ in range(len(x_adv_batch))])
                 y_hard_val_batch = np.eye(10)[y_hard_val_batch.reshape(-1)]
