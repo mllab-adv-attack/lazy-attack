@@ -78,6 +78,9 @@ class Impenetrable(object):
 
         print('gt class:', np.nonzero(y_gt == 1)[1][0])
 
+        pred_class = np.nonzero(y_hard == 1)[1][0]
+        print('pred class:', pred_class)
+
         suc_flag = False
 
         num_images = len(x_orig)
@@ -137,9 +140,7 @@ class Impenetrable(object):
                                                                 self.model.num_correct2, self.grad2],
                                                                feed_dict={self.model.x_input: x_adv_batch,
                                                                           self.model.y_input2: y_hard_val_batch})
-
-            grad = np.mean(grad, axis=0)
-
+            
             # soft label test
             if self.soft_label == 1:
                 grad_full = np.linalg.norm(grad.reshape(len(x_adv_batch), -1), axis=1)
@@ -149,8 +150,21 @@ class Impenetrable(object):
                 print('loss_full:', adv_loss_full)
                 print('max loss class:', np.argmax(adv_loss_full))
                 print('min loss class:', np.argmin(adv_loss_full))
+                
+                if np.argmin(grad_full)==np.argmin(adv_loss_full):
+                    print('setting gt class to:', np.argmin(adv_loss_full))
+                    pred_class = np.argmax(adv_loss_full)
 
 
+                y_hard_val_batch = np.array([pred_class for _ in range(len(x_adv_batch))])
+                y_hard_val_batch = np.eye(10)[y_hard_val_batch.reshape(-1)]
+            
+                adv_loss, adv_loss_full, adv_corr, grad = sess.run([self.loss2, self.loss2_full,
+                                                                    self.model.num_correct2, self.grad2],
+                                                                   feed_dict={self.model.x_input: x_adv_batch,
+                                                                              self.model.y_input2: y_hard_val_batch})
+
+            grad = np.mean(grad, axis=0)
 
             # l1_dist = np.linalg.norm((x_adv - x).flatten(), 1) / x.size
             print("attack accuracy: {:.2f}%".format(adv_corr/len(x_adv_batch)*100))
