@@ -71,6 +71,7 @@ class Impenetrable(object):
         self.grad2 = tf.gradients(self.loss2, self.model.x_input)[0]
 
     def fortify(self, x_orig, y, sess, y_gt=None):
+        num_classes = 10
 
         # y_hard: soft label to hard label (batch, 10)
         y_hard = np.argmax(y, axis=1)
@@ -120,14 +121,14 @@ class Impenetrable(object):
                 x_adv_batch = np.tile(x, (self.pgd_restarts, 1, 1, 1))
                 y_hard_val_batch = np.tile(y_hard, (self.pgd_restarts, 1))
             else:
-                num_classes = 10
                 if self.soft_label == 1:
                     x_adv_batch = np.tile(x, (num_classes*self.pgd_restarts, 1, 1, 1))
-                    y_hard_val_batch = np.array([i for i in range(num_classes)]).flatten()
+                    y_hard_val_batch = np.array([i//self.pgd_restarts for i in range(num_classes*self.pgd_restarts)]).flatten()
                 else:
                     x_adv_batch = np.tile(x, (self.pgd_restarts, 1, 1, 1))
                     y_hard_val_batch = np.array([step % num_classes])
-                y_hard_val_batch = np.tile(y_hard_val_batch, self.pgd_restarts)
+                    y_hard_val_batch = np.tile(y_hard_val_batch, self.pgd_restarts)
+
                 y_hard_val_batch = np.eye(10)[y_hard_val_batch.reshape(-1)]
 
             x_adv_batch = self.pgd.perturb(x_adv_batch, y_hard_val_batch, sess,
@@ -143,6 +144,10 @@ class Impenetrable(object):
             # soft label test
             if self.soft_label == 1:
                 grad_full = np.linalg.norm(grad.reshape(len(x_adv_batch), -1), axis=1)
+                grad_full_new = []
+                for class_idx in range(num_classes):
+                    grad_full_new.append(np.mean(grad_full[class_idx * self.pgd_restarts: (class_idx+1) * self.pgd_restarts]))
+                grad_full = np.array(grad_full_new)
                 print('grad l2 norm:', grad_full)
                 print('max grad class:', np.argmax(grad_full))
                 print('min grad class:', np.argmin(grad_full))
