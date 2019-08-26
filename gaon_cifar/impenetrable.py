@@ -124,13 +124,8 @@ class Impenetrable(object):
                 x_adv_batch = np.tile(x, (self.pgd_restarts, 1, 1, 1))
                 y_hard_val_batch = np.tile(y_hard, (self.pgd_restarts, 1))
             else:
-                if self.soft_label == 1:
-                    x_adv_batch = np.tile(x, (num_classes*self.pgd_restarts, 1, 1, 1))
-                    y_hard_val_batch = np.array([i for i in range(num_classes)]).flatten()
-                else:
-                    x_adv_batch = np.tile(x, (self.pgd_restarts, 1, 1, 1))
-                    y_hard_val_batch = np.array([step % num_classes])
-                y_hard_val_batch = np.tile(y_hard_val_batch, self.pgd_restarts)
+                x_adv_batch = np.tile(x, (num_classes*self.pgd_restarts, 1, 1, 1))
+                y_hard_val_batch = np.array([i//self.pgd_restarts for i in range(num_classes*self.pgd_restarts)]).flatten()
                 y_hard_val_batch = np.eye(10)[y_hard_val_batch.reshape(-1)]
 
             x_adv_batch = self.pgd.perturb(x_adv_batch, y_hard_val_batch, sess,
@@ -142,12 +137,17 @@ class Impenetrable(object):
                                                                           self.model.y_input2: y_hard_val_batch})
             
             # soft label test
-            if self.soft_label == 1:
+            if self.soft_label >= 1:
                 grad_full = np.linalg.norm(grad.reshape(len(x_adv_batch), -1), axis=1)
+                print('grad l2 norm(full):', grad_full.reshape(num_classes, -1))
+                print('adv loss(full):', adv_loss_full.reshape(num_classes, -1))
                 grad_full2 = []
+                adv_loss_full2 = []
                 for idx in range(num_classes):
                     grad_full2.append(np.mean(grad_full[idx * self.pgd_restarts: (idx+1) * self.pgd_restarts]))
+                    adv_loss_full2.append(np.mean(adv_loss_full[idx * self.pgd_restarts: (idx+1) * self.pgd_restarts]))
                 grad_full = np.array(grad_full2)
+                adv_loss_full = np.array(adv_loss_full2)
                 print('grad l2 norm:', grad_full)
                 print('max grad class:', np.argmax(grad_full))
                 print('min grad class:', np.argmin(grad_full))
@@ -155,17 +155,29 @@ class Impenetrable(object):
                 print('max loss class:', np.argmax(adv_loss_full))
                 print('min loss class:', np.argmin(adv_loss_full))
                 
-                if np.argmin(grad_full) == np.argmin(adv_loss_full):
+                if self.soft_label == 1 and np.argmin(grad_full) == np.argmin(adv_loss_full):
                     print('setting gt class to:', np.argmin(adv_loss_full))
+                    pred_class = np.argmin(adv_loss_full)
+                
+                if self.soft_label == 2:
+                    print('setting gt class to:', np.argmax(adv_loss_full))
                     pred_class = np.argmax(adv_loss_full)
+                
+                if self.soft_label == 3:
+                    print('setting gt class to:', np.argmax(grad_full))
+                    pred_class = np.argmax(grad_full)
 
-                y_hard_val_batch = np.array([pred_class for _ in range(len(x_adv_batch))])
-                y_hard_val_batch = np.eye(10)[y_hard_val_batch.reshape(-1)]
+                if self.soft_label in [1, 2, 3]:
+
+                    x_adv_batch = x_adv_batch[pred_class * self.pgd_restarts: (pred_class+1) * self.pgd_restarts]
+                    
+                    y_hard_val_batch = np.array([pred_class for _ in range(len(x_adv_batch))]).flatten()
+                    y_hard_val_batch = np.eye(10)[y_hard_val_batch.reshape(-1)]
             
-                adv_loss, adv_loss_full, adv_corr, grad = sess.run([self.loss2, self.loss2_full,
-                                                                    self.model.num_correct2, self.grad2],
-                                                                   feed_dict={self.model.x_input: x_adv_batch,
-                                                                              self.model.y_input2: y_hard_val_batch})
+                    adv_loss, adv_loss_full, adv_corr, grad = sess.run([self.loss2, self.loss2_full,
+                                                                        self.model.num_correct2, self.grad2],
+                                                                       feed_dict={self.model.x_input: x_adv_batch,
+                                                                                  self.model.y_input2: y_hard_val_batch})
 
             grad = np.mean(grad, axis=0)
 
@@ -345,8 +357,8 @@ if __name__ == '__main__':
     parser.add_argument('--sample_size', default=1000, help='sample size', type=int)
     parser.add_argument('--bstart', default=0, type=int)
     parser.add_argument('--model_dir', default='naturally_trained', type=str)
-    parser.add_argument('--corr_only', action='store_false')
-    parser.add_argument('--fail_only', action='store_true')
+    parser.add_argument('--corr_only', action='store_true')
+    parser.add_argument('--fail_only', action='store_false')
     parser.add_argument('--save_dir_num', default=10, type=int)
     parser.add_argument('--loss_func', default='xent', type=str)
     # PGD (training)
