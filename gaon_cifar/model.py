@@ -83,6 +83,7 @@ class Model(object):
    
     with tf.variable_scope('logit'):
       self.pre_softmax = self._fully_connected(x, 10)
+      self.softmax = tf.nn.softmax(self.pre_softmax)
    
     self.predictions = tf.argmax(self.pre_softmax, 1)
     self.correct_prediction = tf.equal(self.predictions, self.y_input)

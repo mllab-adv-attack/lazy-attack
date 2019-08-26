@@ -69,6 +69,7 @@ class Impenetrable(object):
 
         self.grad = tf.gradients(self.loss, self.model.x_input)[0]
         self.grad2 = tf.gradients(self.loss2, self.model.x_input)[0]
+        self.softmax = self.model.softmax
 
     def fortify(self, x_orig, y, sess, y_gt=None):
         num_classes = 10
@@ -94,12 +95,14 @@ class Impenetrable(object):
         else:
             x = np.copy(x_orig)
 
-        orig_loss, orig_corr = sess.run([self.loss2, self.model.num_correct2],
-                                        feed_dict={self.model.x_input: x,
-                                                   self.model.y_input2: y})
+        orig_loss, orig_corr, orig_soft = sess.run([self.loss2, self.model.num_correct2, self.softmax],
+                                                   feed_dict={self.model.x_input: x,
+                                                              self.model.y_input2: y_gt})
 
         print("original accuracy: {:.2f}%".format(orig_corr/num_images*100))
         print("original loss: {:.20f}".format(orig_loss/num_images))
+        if self.soft_label >= 1:
+            print("original softmax: ".format(orig_soft))
 
         # adam parameters
         beta1 = 0.9
@@ -203,14 +206,16 @@ class Impenetrable(object):
             if self.imp_eps > 0:
                 x_res = np.clip(x_res, x_orig-self.imp_eps, x_orig+self.imp_eps)
 
-            res_loss, res_corr = sess.run([self.loss2, self.model.num_correct2],
-                                          feed_dict={self.model.x_input: x_res,
-                                                     self.model.y_input2: y})
+            res_loss, res_corr, res_soft = sess.run([self.loss2, self.model.num_correct2, self.softmax],
+                                                    feed_dict={self.model.x_input: x_res,
+                                                               self.model.y_input2: y_gt})
 
             l2_dist = np.linalg.norm((x_res - x_orig).flatten()) / 255.0
             print("restored accuracy: {:.2f}%".format(res_corr/num_images*100))
             print("l2 distance: {:.2f}".format(l2_dist))
             print("res loss: {:.20f}".format(res_loss/num_images))
+            if self.soft_label >= 1:
+                print("res softmax: ".format(res_soft))
 
             x = x_res
 
@@ -219,7 +224,7 @@ class Impenetrable(object):
 
                 if adv_corr == len(x_adv_batch):
 
-                    suc_flag = self.validation(x, y_hard)
+                    suc_flag = self.validation(x, y_gt)
 
             print()
 
@@ -357,8 +362,8 @@ if __name__ == '__main__':
     parser.add_argument('--sample_size', default=1000, help='sample size', type=int)
     parser.add_argument('--bstart', default=0, type=int)
     parser.add_argument('--model_dir', default='naturally_trained', type=str)
-    parser.add_argument('--corr_only', action='store_true')
-    parser.add_argument('--fail_only', action='store_false')
+    parser.add_argument('--corr_only', action='store_false')
+    parser.add_argument('--fail_only', action='store_true')
     parser.add_argument('--save_dir_num', default=10, type=int)
     parser.add_argument('--loss_func', default='xent', type=str)
     # PGD (training)
