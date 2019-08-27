@@ -74,6 +74,9 @@ class Impenetrable(object):
     def fortify(self, x_orig, y, sess, y_gt=None):
         num_classes = 10
 
+        np.set_printoptions(precision=6, suppress=True)
+        soft_label_tmp = self.soft_label
+
         # y_hard: soft label to hard label (batch, 10)
         y_hard = np.argmax(y, axis=1)
         y_hard = np.eye(10)[y_hard.reshape(-1)]
@@ -102,7 +105,8 @@ class Impenetrable(object):
         print("original accuracy: {:.2f}%".format(orig_corr/num_images*100))
         print("original loss: {:.20f}".format(orig_loss/num_images))
         if self.soft_label >= 1:
-            print("original softmax: ".format(orig_soft))
+            print("original softmax: ", orig_soft)
+        print()
 
         # adam parameters
         beta1 = 0.9
@@ -111,12 +115,14 @@ class Impenetrable(object):
         v = np.zeros_like(x)
 
         # validation (original image)
+        '''
         if self.val_step_per > 0 and orig_corr > 0:
 
             suc_flag = self.validation(x, y_hard)
 
         if suc_flag:
             return x
+        '''
 
         step = 1
         while self.imp_num_steps <= 0 or step <= self.imp_num_steps:
@@ -140,10 +146,10 @@ class Impenetrable(object):
                                                                           self.model.y_input2: y_hard_val_batch})
             
             # soft label test
-            if self.soft_label >= 1:
+            if self.soft_label >= 1 and self.soft_label < 5:
                 grad_full = np.linalg.norm(grad.reshape(len(x_adv_batch), -1), axis=1)
-                print('grad l2 norm(full):', grad_full.reshape(num_classes, -1))
-                print('adv loss(full):', adv_loss_full.reshape(num_classes, -1))
+                #print('grad l2 norm(full):', grad_full.reshape(num_classes, -1))
+                #print('adv loss(full):', adv_loss_full.reshape(num_classes, -1))
                 grad_full2 = []
                 adv_loss_full2 = []
                 for idx in range(num_classes):
@@ -215,7 +221,19 @@ class Impenetrable(object):
             print("l2 distance: {:.2f}".format(l2_dist))
             print("res loss: {:.20f}".format(res_loss/num_images))
             if self.soft_label >= 1:
-                print("res softmax: ".format(res_soft))
+                res_pred = np.argmax(res_soft)
+                print("res softmax:", res_soft)
+                print("res pred:", np.argmax(res_soft))
+
+                if self.soft_label >= 5:
+                    if step <= 8 and res_pred != pred_class:
+                        print('setting gt class to:', res_pred)
+                        y_hard = np.argmax(res_soft, axis=1)
+                        y_hard = np.eye(10)[y_hard.reshape(-1)]
+                        self.soft_label = 0
+                    elif step >= 8:
+                        print('no change to class')
+                        self.soft_label = 0
 
             x = x_res
 
@@ -224,7 +242,7 @@ class Impenetrable(object):
 
                 if adv_corr == len(x_adv_batch):
 
-                    suc_flag = self.validation(x, y_gt)
+                    suc_flag = self.validation(x, y_hard)
 
             print()
 
@@ -233,6 +251,8 @@ class Impenetrable(object):
             # early stop
             if suc_flag:
                 break
+
+        self.soft_label = soft_label_tmp
 
         return x
 
@@ -362,8 +382,8 @@ if __name__ == '__main__':
     parser.add_argument('--sample_size', default=1000, help='sample size', type=int)
     parser.add_argument('--bstart', default=0, type=int)
     parser.add_argument('--model_dir', default='naturally_trained', type=str)
-    parser.add_argument('--corr_only', action='store_false')
-    parser.add_argument('--fail_only', action='store_true')
+    parser.add_argument('--corr_only', action='store_true')
+    parser.add_argument('--fail_only', action='store_false')
     parser.add_argument('--save_dir_num', default=10, type=int)
     parser.add_argument('--loss_func', default='xent', type=str)
     # PGD (training)
