@@ -100,7 +100,8 @@ class Impenetrable(object):
 
         orig_loss, orig_corr, orig_soft = sess.run([self.loss2, self.model.num_correct2, self.softmax],
                                                    feed_dict={self.model.x_input: x,
-                                                              self.model.y_input2: y_gt})
+                                                              self.model.y_input2: y_gt if self.soft_label > 0
+                                                              else y_hard})
 
         print("original accuracy: {:.2f}%".format(orig_corr/num_images*100))
         print("original loss: {:.20f}".format(orig_loss/num_images))
@@ -146,7 +147,7 @@ class Impenetrable(object):
                                                                           self.model.y_input2: y_hard_val_batch})
             
             # soft label test
-            if self.soft_label >= 1 and self.soft_label < 5:
+            if 1 <= self.soft_label < 5:
                 grad_full = np.linalg.norm(grad.reshape(len(x_adv_batch), -1), axis=1)
                 #print('grad l2 norm(full):', grad_full.reshape(num_classes, -1))
                 #print('adv loss(full):', adv_loss_full.reshape(num_classes, -1))
@@ -214,7 +215,8 @@ class Impenetrable(object):
 
             res_loss, res_corr, res_soft = sess.run([self.loss2, self.model.num_correct2, self.softmax],
                                                     feed_dict={self.model.x_input: x_res,
-                                                               self.model.y_input2: y_gt})
+                                                               self.model.y_input2: y_gt if self.soft_label > 0
+                                                               else y_hard})
 
             l2_dist = np.linalg.norm((x_res - x_orig).flatten()) / 255.0
             print("restored accuracy: {:.2f}%".format(res_corr/num_images*100))
@@ -246,15 +248,15 @@ class Impenetrable(object):
 
             print()
 
-            step += 1
-
             # early stop
             if suc_flag:
                 break
 
+            step += 1
+
         self.soft_label = soft_label_tmp
 
-        return x
+        return x, step
 
     def reset_pgd(self):
         self.pgd.epsilon = self.pgd_eps
@@ -400,7 +402,7 @@ if __name__ == '__main__':
     parser.add_argument('--imp_step_size', default=1, type=float)
     parser.add_argument('--imp_adam', action='store_true')
     parser.add_argument('--imp_no_sign', action='store_true')
-    parser.add_argument('--soft_label', default=0, help='0: hard gt, 1: hard inferred, 2: soft inferred', type=int)
+    parser.add_argument('--soft_label', default=0, help='0: hard gt, +:soft inferred, -: -(target label+1)', type=int)
     # PGD (evaluation)
     parser.add_argument('--val_step_per', default=10, help="validation per val_step. =< 0 means no eval", type=int)
     parser.add_argument('--val_eps', default=8, help='Evaluation eps', type=int)
@@ -454,16 +456,8 @@ if __name__ == '__main__':
         # Restore the checkpoint
         saver.restore(sess, model_file)
 
-        # Iterate over the samples batch-by-batch
+        # Set number of examples to evaluate
         num_eval_examples = params.sample_size
-        if params.val_step_per > 0:
-            eval_batch_size = 1
-        else:
-            eval_batch_size = min(config['eval_batch_size'], num_eval_examples)
-
-        num_batches = int(math.ceil(num_eval_examples / eval_batch_size))
-
-        x_imp = []  # imp accumulator
 
         if params.corr_only:
             if params.model_dir == 'naturally_trained':
@@ -527,19 +521,37 @@ if __name__ == '__main__':
             if (len(x_full_batch) >= num_eval_examples) or bstart >= len(indices):
                 break
 
+        # Adjust num_eval_examples. Iterate over the samples batch-by-batch
+        num_eval_examples = len(x_full_batch)
+
+        if params.val_step_per > 0:
+            eval_batch_size = 1
+        else:
+            eval_batch_size = min(config['eval_batch_size'], num_eval_examples)
+
+        num_batches = int(math.ceil(num_eval_examples / eval_batch_size))
+
         print('Iterating over {} batches'.format(num_batches))
 
         x_full_batch = x_full_batch.astype(np.float32)
+
+        x_imp = []  # imp accumulator
+        step_imp = []  # num steps accumulator
 
         # y to one-hot
         # y_full_batch: (batch, 1)
         if params.soft_label == 0:
             # y_full_batch_oh: ground truth label (batch, 10)
             y_full_batch_oh = np.eye(10)[y_full_batch.reshape(-1)]
-        else:
+        elif params.soft_label > 0:
             # y_full_batch_oh: softmax layer output (batch, 10)
             y_full_batch_oh = logit_full_batch
             y_full_batch_oh = np.exp(y_full_batch_oh) / np.sum(np.exp(y_full_batch_oh), axis=1).reshape(-1, 1)
+        else:
+            # y_full_batch_oh: target label (batch, 10)
+            print('target label:', -params.soft_label-1)
+            target_batch = np.array([(-params.soft_label - 1) for _ in range(len(x_full_batch))])
+            y_full_batch_oh = np.eye(10)[target_batch.reshape(-1)]
 
         for ibatch in range(num_batches):
             bstart = ibatch * eval_batch_size
@@ -549,12 +561,12 @@ if __name__ == '__main__':
             x_batch = x_full_batch[bstart:bend, :]
             y_batch = y_full_batch_oh[bstart:bend, :]
             y_batch_gt = y_full_batch[bstart:bend]
-            # y_batch_gt: ground truth label (batch, 10)
+            # y_batch_gt: ground truth label in one-hot (batch, 10)
             y_batch_gt = np.eye(10)[y_batch_gt.reshape(-1)]
 
             # run our algorithm
             print('fortifying image ', bstart)
-            x_batch_imp = impenet.fortify(x_batch, y_batch, sess, y_batch_gt)
+            x_batch_imp, step_batch_imp = impenet.fortify(x_batch, y_batch, sess, y_batch_gt)
             print()
 
             # evaluation
@@ -564,8 +576,10 @@ if __name__ == '__main__':
             # suc_flag = impenet.validation(x_batch_imp, y_batch, y_batch_hard)
 
             x_imp.append(x_batch_imp)
+            step_imp.append(step_batch_imp)
 
         x_imp = np.concatenate(x_imp)
+        step_imp = np.concatenate(step_imp)
 
         # save image
         folder_name = './arr' + '_main' + '/'
@@ -574,6 +588,7 @@ if __name__ == '__main__':
         
         np.save(common_name + '_x_org', x_full_batch)
         np.save(common_name + '_x_imp', x_imp)
+        np.save(common_name + '_step_imp', step_imp)
         np.save(common_name + '_y', y_full_batch)
 
         # sanity check
