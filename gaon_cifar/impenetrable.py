@@ -245,6 +245,10 @@ class Impenetrable(object):
                 if adv_corr == len(x_adv_batch):
 
                     suc_flag = self.validation(x, y_hard)
+                    
+                    # special early stop for soft_label 4
+                    if self.soft_label == 4:
+                        suc_flag = True
 
             print()
 
@@ -425,7 +429,7 @@ if __name__ == '__main__':
                  + ('_' + str(params.imp_num_steps)) \
                  + ('_' + str(params.imp_step_size))
     meta_name += ('_adam' if params.imp_adam else '') + ('_nosign' if params.imp_no_sign else '')
-    meta_name += ('_corr' if params.corr_only else '')
+    meta_name += ('_corr' if params.corr_only else '') + ('_fail' if params.fail_only else '')
     meta_name += '_val' + ('_' + str(params.val_step_per)) \
                  + ('_' + str(params.val_eps)) \
                  + ('_' + str(params.val_num_steps)) \
@@ -576,7 +580,7 @@ if __name__ == '__main__':
             # suc_flag = impenet.validation(x_batch_imp, y_batch, y_batch_hard)
 
             x_imp.append(x_batch_imp)
-            step_imp.append(step_batch_imp)
+            step_imp.append(np.array([step_batch_imp]))
 
         x_imp = np.concatenate(x_imp)
         step_imp = np.concatenate(step_imp)
