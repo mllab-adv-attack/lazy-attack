@@ -39,6 +39,7 @@ class Impenetrable(object):
         self.val_num_steps = args.val_num_steps
         self.val_eps = args.val_eps
         self.adam = args.imp_adam
+        self.rep = args.imp_rep
         self.soft_label = args.soft_label
         self.imp_no_sign = args.imp_no_sign
 
@@ -189,7 +190,13 @@ class Impenetrable(object):
                                                                        feed_dict={self.model.x_input: x_adv_batch,
                                                                                   self.model.y_input2: y_hard_val_batch})
 
-            grad = np.mean(grad, axis=0)
+            if self.rep:
+                # use reptile (x_adv - x as gd direction)
+                grad = np.mean(x_adv_batch - x, axis=0)
+            else:
+                # use MAML
+                grad = np.mean(grad, axis=0)
+
 
             # l1_dist = np.linalg.norm((x_adv - x).flatten(), 1) / x.size
             print("attack accuracy: {:.2f}%".format(adv_corr/len(x_adv_batch)*100))
@@ -388,8 +395,8 @@ if __name__ == '__main__':
     parser.add_argument('--sample_size', default=1000, help='sample size', type=int)
     parser.add_argument('--bstart', default=0, type=int)
     parser.add_argument('--model_dir', default='naturally_trained', type=str)
-    parser.add_argument('--corr_only', action='store_true')
-    parser.add_argument('--fail_only', action='store_false')
+    parser.add_argument('--corr_only', action='store_false')
+    parser.add_argument('--fail_only', action='store_true')
     parser.add_argument('--save_dir_num', default=10, type=int)
     parser.add_argument('--loss_func', default='xent', type=str)
     # PGD (training)
@@ -404,11 +411,12 @@ if __name__ == '__main__':
     parser.add_argument('--imp_gray_start', action='store_true')
     parser.add_argument('--imp_num_steps', default=1000, help='0 for until convergence', type=int)
     parser.add_argument('--imp_step_size', default=1, type=float)
+    parser.add_argument('--imp_rep', action='store_true', help='use reptile instead of MAML')
     parser.add_argument('--imp_adam', action='store_true')
     parser.add_argument('--imp_no_sign', action='store_true')
     parser.add_argument('--soft_label', default=0, help='0: hard gt, +:soft inferred, -: -(target label+1)', type=int)
     # PGD (evaluation)
-    parser.add_argument('--val_step_per', default=10, help="validation per val_step. =< 0 means no eval", type=int)
+    parser.add_argument('--val_step_per', default=1, help="validation per val_step. =< 0 means no eval", type=int)
     parser.add_argument('--val_eps', default=8, help='Evaluation eps', type=int)
     parser.add_argument('--val_num_steps', default=20, help="validation PGD number of steps per PGD", type=int)
     parser.add_argument('--val_restarts', default=20, help="validation PGD restart numbers per eps", type=int)
@@ -428,6 +436,7 @@ if __name__ == '__main__':
     meta_name += '_imp' + ('_' + str(params.imp_eps)) \
                  + ('_' + str(params.imp_num_steps)) \
                  + ('_' + str(params.imp_step_size))
+    meta_name += ('_adam' if params.imp_rep else '')
     meta_name += ('_adam' if params.imp_adam else '') + ('_nosign' if params.imp_no_sign else '')
     meta_name += ('_corr' if params.corr_only else '') + ('_fail' if params.fail_only else '')
     meta_name += '_val' + ('_' + str(params.val_step_per)) \
