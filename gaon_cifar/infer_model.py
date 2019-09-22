@@ -2,7 +2,6 @@
 # https://github.com/tensorflow/models/blob/master/official/resnet/resnet_model.py
 
 import tensorflow as tf
-from tensorflow.contrib import slim
 import logging
 
 logger = logging.getLogger(__name__)
@@ -296,6 +295,7 @@ class Model(object):
 
     def _build_model(self):
         assert self.mode == 'train' or self.mode == 'eval'
+        is_training = True if self.model == 'train' else False
 
         with tf.variable_scope('infer_input', reuse=tf.AUTO_REUSE):
             self.x_input = tf.placeholder(
@@ -303,21 +303,51 @@ class Model(object):
                 shape=[None, 32, 32, 3])
             self.y_input = tf.placeholder(tf.int64, shape=None)
 
-        safe_generator = tf.make_template('generator', generator, f_dim=64, output_size=32, c_dim=3)
+        safe_generator = tf.make_template('generator', generator, f_dim=64, output_size=32, c_dim=3, is_training=is_training)
 
         with tf.variable_scope('gen', reuse=tf.AUTO_REUSE):
             self.G_out = safe_generator(self.x_input)
 
-            self.x_safe = self.x_input + self.imp_eps * self.G_out
+            self.x_safe = tf.clip_by_value(self.x_input + self.imp_eps * self.G_out, 0, 255)
+            
 
-        with tf.variable_scope('pgd', reuse=tf.AUTO_REUSE):
-            x_tiled = tf.tile(self.x_safe, [20, 1, 1, 1])
-            y_tiled = tf.tile(self.y_input, [20])
+        with tf.variable_scope('', reuse=tf.AUTO_REUSE):
 
-            x_attacked = generate_pgd(x_tiled, y_tiled, self.bounds, self.model.fprop, self.attack_params)
+            self.x_attacked = generate_pgd(self.x_safe, self.y_input, self.bounds, self.model.fprop, self.attack_params)
+        with tf.variable_scope('orig_loss', reuse=tf.AUTO_REUSE):
+            self.orig_pre_softmax = self.model.fprop(self.x_input)
+            self.orig_softmax = tf.nn.softmax(self.orig_pre_softmax)
 
-        with tf.variable_scope('loss', reuse=tf.AUTO_REUSE):
-            self.pre_softmax = self.model.fprop(x_attacked)
+            self.orig_predictions = tf.argmax(self.orig_pre_softmax, 1)
+            self.orig_correct_prediction = tf.equal(self.orig_predictions, self.y_input)
+            self.orig_num_correct = tf.reduce_sum(
+                tf.cast(self.orig_correct_prediction, tf.int32))
+            self.orig_accuracy = tf.reduce_mean(
+                tf.cast(self.orig_correct_prediction, tf.float32))
+
+            self.orig_y_xent = tf.nn.sparse_softmax_cross_entropy_with_logits(
+                logits=self.orig_pre_softmax, labels=self.y_input)
+            self.orig_xent = tf.reduce_sum(self.orig_y_xent, name='orig_y_xent')
+            self.orig_mean_xent = tf.reduce_mean(self.orig_y_xent)
+        
+        with tf.variable_scope('gen_loss', reuse=tf.AUTO_REUSE):
+            self.gen_pre_softmax = self.model.fprop(self.x_safe)
+            self.gen_softmax = tf.nn.softmax(self.gen_pre_softmax)
+
+            self.gen_predictions = tf.argmax(self.gen_pre_softmax, 1)
+            self.gen_correct_prediction = tf.equal(self.gen_predictions, self.y_input)
+            self.gen_num_correct = tf.reduce_sum(
+                tf.cast(self.gen_correct_prediction, tf.int32))
+            self.gen_accuracy = tf.reduce_mean(
+                tf.cast(self.gen_correct_prediction, tf.float32))
+
+            self.gen_y_xent = tf.nn.sparse_softmax_cross_entropy_with_logits(
+                logits=self.gen_pre_softmax, labels=self.y_input)
+            self.gen_xent = tf.reduce_sum(self.gen_y_xent, name='gen_y_xent')
+            self.gen_mean_xent = tf.reduce_mean(self.gen_y_xent)
+
+        with tf.variable_scope('safe_loss', reuse=tf.AUTO_REUSE):
+            self.pre_softmax = self.model.fprop(self.x_attacked)
             self.softmax = tf.nn.softmax(self.pre_softmax)
 
             self.predictions = tf.argmax(self.pre_softmax, 1)
@@ -331,3 +361,4 @@ class Model(object):
                 logits=self.pre_softmax, labels=self.y_input)
             self.xent = tf.reduce_sum(self.y_xent, name='y_xent')
             self.mean_xent = tf.reduce_mean(self.y_xent)
+        

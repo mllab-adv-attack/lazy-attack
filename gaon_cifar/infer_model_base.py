@@ -9,14 +9,13 @@ import tensorflow as tf
 class Model(object):
   """ResNet model."""
 
-  def __init__(self, mode, x_input=None, y_input=None):
+  def __init__(self, mode):
     """ResNet constructor.
 
     Args:
       mode: One of 'train' and 'eval'.
     """
     self.mode = mode
-    #self.fprop(x_input, y_input)
 
   def add_internal_summaries(self):
     pass

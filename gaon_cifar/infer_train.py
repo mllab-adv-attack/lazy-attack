@@ -10,11 +10,12 @@ import os
 import sys
 import shutil
 from timeit import default_timer as timer
+import cleverhans
 
 import tensorflow as tf
 import numpy as np
 
-from model import Model
+from infer_model_base import Model
 import cifar10_input
 
 from infer_model import Model as Safe_model
@@ -55,15 +56,16 @@ learning_rate = tf.train.piecewise_constant(
 #total_loss = model.mean_xent + weight_decay * model.weight_decay_loss
 total_loss = full_model.mean_xent
 total_acc = full_model.accuracy
-train_step = tf.train.AdamOptimizer(learning_rate).minimize(
-    total_loss,
-    global_step=global_step)
+orig_acc = full_model.orig_accuracy
+gen_acc = full_model.gen_accuracy
 
 # Setting up the Tensorboard and checkpoint outputs
 model_dir = config['model_dir']
 infer_model_dir = config['infer_model_dir']
 if not os.path.exists(model_dir):
     os.makedirs(model_dir)
+if not os.path.exists(infer_model_dir):
+    os.makedirs(infer_model_dir)
 
 # We add accuracy and xent twice so we can easily make three types of
 # comparisons in Tensorboard:
@@ -72,17 +74,17 @@ if not os.path.exists(model_dir):
 # - eval of different runs
 
 saver = tf.train.Saver()
-tf.summary.scalar('accuracy adv train', model.accuracy)
-tf.summary.scalar('accuracy adv', model.accuracy)
-tf.summary.scalar('xent adv train', model.xent / batch_size)
-tf.summary.scalar('xent adv', model.xent / batch_size)
-tf.summary.image('images adv train', model.x_input)
-merged_summaries = tf.summary.merge_all()
+#tf.summary.scalar('accuracy adv train', model.accuracy)
+#tf.summary.scalar('accuracy adv', model.accuracy)
+#tf.summary.scalar('xent adv train', model.xent / batch_size)
+#tf.summary.scalar('xent adv', model.xent / batch_size)
+#tf.summary.image('images adv train', model.x_input)
+#merged_summaries = tf.summary.merge_all()
 
 # keep the configuration file with the model for reproducibility
 shutil.copy('config.json', model_dir)
 
-model_file = tf.train.latest_checkpoint('models/' + model_dir)
+model_file = tf.train.latest_checkpoint(model_dir)
 if model_file is None:
     print('No model found')
     sys.exit()
@@ -93,18 +95,46 @@ with tf.Session() as sess:
     cifar = cifar10_input.AugmentedCIFAR10Data(raw_cifar, sess, model)
 
     # Initialize the summary writer, global variables, and our time counter.
-    summary_writer = tf.summary.FileWriter(model_dir, sess.graph)
-    sess.run(tf.global_variables_initializer())
+    summary_writer = tf.summary.FileWriter(infer_model_dir, sess.graph)
 
     # restore (partial)
-    variables_can_be_restored = list(
-        set(tf.get_collection_ref(tf.GraphKeys.GLOBAL_VARIABLES)).intersection(tf.train.list_variables(model_file)))
-
-    temp_saver = tf.train.Saver(variables_can_be_restored)
-    ckpt_state = tf.train.get_checkpoint_state(model_file)
-    print('Loading checkpoint %s' % ckpt_state.model_checkpoint_path)
-    temp_saver.restore(sess, ckpt_state.model_checkpoint_path)
+    #tf.train.list_variables(model_file)
+    #print(tf.train.list_variables(model_file))
+    #tf.get_collection_ref(tf.GraphKeys.GLOBAL_VARIABLES)
+    #print(tf.get_collection_ref(tf.GraphKeys.GLOBAL_VARIABLES))
+    #print(set(tf.get_collection_ref(tf.GraphKeys.GLOBAL_VARIABLES)))
+    #print(set(tf.train.list_variables(model_file)))
+    #set(tf.get_collection_ref(tf.GraphKeys.GLOBAL_VARIABLES)).intersection(set(tf.train.list_variables(model_file)))
+    #variables_can_be_restored = list(
+    #    set(tf.get_collection_ref(tf.GraphKeys.GLOBAL_VARIABLES)).intersection(set(tf.train.list_variables(model_file))))
+    variables_can_be_restored = tf.train.list_variables(model_file)
+    include = [name for (name, shape) in variables_can_be_restored]
+    trainable_variables = tf.trainable_variables()
+    variables_to_train = [var for var in trainable_variables if var.name not in include]
+    print(len(variables_to_train))
+    
+    train_step = tf.train.AdamOptimizer(learning_rate).minimize(
+        total_loss,
+        global_step=global_step,
+        var_list=variables_to_train)
     training_time = 0.0
+    
+    sess.run(tf.global_variables_initializer())
+    
+    reader = tf.train.NewCheckpointReader(model_file)
+    saved_shapes = reader.get_variable_to_shape_map()
+    var_names = sorted([(var.name, var.name.split(':')[0]) for var in tf.global_variables()
+                        if var.name.split(':')[0] in saved_shapes])
+    restore_vars = []
+    for var_name, saved_var_name in var_names:
+        curr_var = tf.get_default_graph().get_tensor_by_name(var_name)
+        var_shape = curr_var.get_shape().as_list()
+        if var_shape == saved_shapes[saved_var_name]:
+            restore_vars.append(curr_var)
+    print(len(restore_vars))
+    opt_saver = tf.train.Saver(restore_vars)
+    opt_saver.restore(sess, model_file)
+    print('restore success!')
 
     # Main training loop
     for ii in range(max_num_training_steps):
@@ -116,9 +146,17 @@ with tf.Session() as sess:
         nat_dict = {full_model.x_input: x_batch,
                     full_model.y_input: y_batch}
 
+        assert 0 <= np.amin(x_batch) and np.amax(x_batch) <= 255.0
+
         start = timer()
-        _, loss, acc = \
-            sess.run([train_step, total_loss, total_acc], feed_dict=nat_dict)
+        _, loss, safe_acc_batch, orig_acc_batch, gen_acc_batch, x_safe, x_attacked, orig_preds = \
+            sess.run([train_step, total_loss, total_acc, orig_acc, gen_acc,
+                      full_model.x_safe, full_model.x_attacked, full_model.orig_predictions], feed_dict=nat_dict)
+        assert 0 <= np.amin(x_safe) and np.amax(x_safe) <= 255.0
+        assert 0 <= np.amin(x_attacked) and np.amax(x_attacked) <= 255.0
+        print(orig_preds)
+        print(y_batch)
+        
         end = timer()
 
         training_time += end - start
@@ -126,7 +164,9 @@ with tf.Session() as sess:
         # Output to stdout
         if ii % num_output_steps == 0:
             print('Step {}:    ({})'.format(ii, datetime.now()))
-            print('    training accuracy {:.4}%'.format(acc * 100))
+            print('    orig accuracy {:.4}%'.format(orig_acc_batch * 100))
+            print('    gen accuracy {:.4}%'.format(gen_acc_batch * 100))
+            print('    safe accuracy {:.4}%'.format(safe_acc_batch * 100))
             if ii != 0:
                 print('    {} examples per second'.format(
                     num_output_steps * batch_size / training_time))
