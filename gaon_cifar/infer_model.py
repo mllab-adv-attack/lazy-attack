@@ -313,9 +313,9 @@ class Model(object):
 
         with tf.variable_scope('', reuse=tf.AUTO_REUSE):
 
-            self.x_attacked = generate_pgd(self.x_safe, self.y_input, self.bounds, self.model.fprop, self.attack_params)
+            self.x_attacked = generate_pgd(self.x_safe, self.y_input, self.bounds, self.model, self.attack_params)
         with tf.variable_scope('orig_loss', reuse=tf.AUTO_REUSE):
-            self.orig_pre_softmax = self.model.fprop(self.x_input)
+            self.orig_pre_softmax = self.model(self.x_input)
             self.orig_softmax = tf.nn.softmax(self.orig_pre_softmax)
 
             self.orig_predictions = tf.argmax(self.orig_pre_softmax, 1)
@@ -331,7 +331,7 @@ class Model(object):
             self.orig_mean_xent = tf.reduce_mean(self.orig_y_xent)
         
         with tf.variable_scope('gen_loss', reuse=tf.AUTO_REUSE):
-            self.gen_pre_softmax = self.model.fprop(self.x_safe)
+            self.gen_pre_softmax = self.model(self.x_safe)
             self.gen_softmax = tf.nn.softmax(self.gen_pre_softmax)
 
             self.gen_predictions = tf.argmax(self.gen_pre_softmax, 1)
@@ -347,7 +347,7 @@ class Model(object):
             self.gen_mean_xent = tf.reduce_mean(self.gen_y_xent)
 
         with tf.variable_scope('safe_loss', reuse=tf.AUTO_REUSE):
-            self.pre_softmax = self.model.fprop(self.x_attacked)
+            self.pre_softmax = self.model(self.x_attacked)
             self.softmax = tf.nn.softmax(self.pre_softmax)
 
             self.predictions = tf.argmax(self.pre_softmax, 1)

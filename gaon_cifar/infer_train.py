@@ -10,12 +10,11 @@ import os
 import sys
 import shutil
 from timeit import default_timer as timer
-import cleverhans
 
 import tensorflow as tf
 import numpy as np
 
-from infer_model_base import Model
+from cleverhans.model_zoo.madry_lab_challenges.cifar10_model import make_wresnet
 import cifar10_input
 
 from infer_model import Model as Safe_model
@@ -42,7 +41,7 @@ batch_size = config['training_batch_size']
 raw_cifar = cifar10_input.CIFAR10Data(data_path)
 global_step = tf.contrib.framework.get_or_create_global_step()
 
-model = Model(mode='eval')
+model = make_wresnet()
 full_model = Safe_model('train', model, eps=40)
 
 # Setting up the optimizer
