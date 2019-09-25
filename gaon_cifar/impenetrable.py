@@ -40,6 +40,7 @@ class Impenetrable(object):
         self.val_eps = args.val_eps
         self.adam = args.imp_adam
         self.rep = args.imp_rep
+        self.pp = args.imp_pp
         self.soft_label = args.soft_label
         self.imp_no_sign = args.imp_no_sign
 
@@ -75,7 +76,6 @@ class Impenetrable(object):
     def fortify(self, x_orig, y, sess, y_gt=None):
         num_classes = 10
 
-        np.set_printoptions(precision=6, suppress=True)
         soft_label_tmp = self.soft_label
 
         # y_hard: soft label to hard label (batch, 10)
@@ -92,8 +92,9 @@ class Impenetrable(object):
         num_images = len(x_orig)
 
         # initialize image
-        if self.imp_random_start:
-            x = np.random.randint(0, 256, x_orig.shape, dtype='int32').astype('float32')
+        if self.imp_random_start > 0:
+            x = x_orig + np.random.uniform(-self.imp_random_start, self.imp_random_start, x_orig.shape)
+            x = np.clip(x, 0, 255)
         elif self.imp_gray_start:
             x = np.ones_like(x_orig).astype('float32') * 128
         else:
@@ -139,9 +140,17 @@ class Impenetrable(object):
                 y_hard_val_batch = np.array([i//self.pgd_restarts for i in range(num_classes*self.pgd_restarts)]).flatten()
                 y_hard_val_batch = np.eye(10)[y_hard_val_batch.reshape(-1)]
 
-            x_adv_batch = self.pgd.perturb(x_adv_batch, y_hard_val_batch, sess,
-                                           proj=True, reverse=False)
+            x_adv_batch, x_adv_batch_full = self.pgd.perturb(x_adv_batch, y_hard_val_batch, sess,
+                                           proj=True, reverse=False, pp=self.pp)
 
+            #print(self.pgd_restarts, self.pgd_num_steps, self.pp)
+            #print(x_adv_batch_full.shape)
+
+            if self.pp > 0:
+                x_adv_batch = x_adv_batch_full
+                #print(x_adv_batch.shape)
+                y_hard_val_batch = np.tile(y_hard, (len(x_adv_batch), 1))
+            
             adv_loss, adv_loss_full, adv_corr, grad = sess.run([self.loss2, self.loss2_full,
                                                                 self.model.num_correct2, self.grad2],
                                                                feed_dict={self.model.x_input: x_adv_batch,
@@ -306,7 +315,7 @@ class Impenetrable(object):
 
             for i in range(val_iter//100):
 
-                x_val = self.pgd.perturb(x_val_batch, y_hard_val_batch, sess,
+                x_val, _ = self.pgd.perturb(x_val_batch, y_hard_val_batch, sess,
                                          proj=True, reverse=False, rand=True)
 
                 cur_corr = sess.run(self.model.num_correct2,
@@ -319,7 +328,7 @@ class Impenetrable(object):
             # y_val_batch = np.tile(y, (100, 1))
             y_hard_val_batch = np.tile(y_hard, (val_iter, 1))
 
-            x_val = self.pgd.perturb(x_val_batch, y_hard_val_batch, sess,
+            x_val, _ = self.pgd.perturb(x_val_batch, y_hard_val_batch, sess,
                                      proj=True, reverse=False, rand=True)
 
             cur_corr = sess.run(self.model.num_correct2,
@@ -407,11 +416,13 @@ if __name__ == '__main__':
     parser.add_argument('--pgd_restarts', default=20, help="training PGD restart numbers per eps", type=int)
     # impenetrable
     parser.add_argument('--imp_eps', default=0, help='<= 0 for no imp eps', type=float)
-    parser.add_argument('--imp_random_start', action='store_true')
+    parser.add_argument('--imp_random_start', default=0, help='eps for random start of image', type=float)
+    parser.add_argument('--imp_random_seed', default=0, help='random seed for random start of image', type=int)
     parser.add_argument('--imp_gray_start', action='store_true')
     parser.add_argument('--imp_num_steps', default=1000, help='0 for until convergence', type=int)
     parser.add_argument('--imp_step_size', default=1, type=float)
     parser.add_argument('--imp_rep', action='store_true', help='use reptile instead of MAML')
+    parser.add_argument('--imp_pp', default=0, help='step intervals to sum PGD gradients. <= 0 for pure MAML', type=int)
     parser.add_argument('--imp_adam', action='store_true')
     parser.add_argument('--imp_no_sign', action='store_true')
     parser.add_argument('--soft_label', default=0, help='0: hard gt, +:soft inferred, -: -(target label+1)', type=int)
@@ -424,8 +435,15 @@ if __name__ == '__main__':
     for key, val in vars(params).items():
         print('{}={}'.format(key, val))
 
-    assert not (params.imp_random_start and params.imp_gray_start)
     assert not (params.corr_only and params.fail_only)
+    assert not (params.imp_rep and params.imp_pp)
+
+    # numpy options
+    np.set_printoptions(precision=6, suppress=True)
+    
+    if params.imp_random_start > 0:
+        np.random.seed(params.imp_random_seed)
+        print('random seed set to:', params.imp_random_seed)
 
     meta_name = 'nat' if params.model_dir == 'naturally_trained' else 'adv'
     meta_name += '_pgd' + '_' + str(params.pgd_eps) \
@@ -435,8 +453,11 @@ if __name__ == '__main__':
                  + '_' + str(params.pgd_restarts)
     meta_name += '_imp' + ('_' + str(params.imp_eps)) \
                  + ('_' + str(params.imp_num_steps)) \
-                 + ('_' + str(params.imp_step_size))
-    meta_name += ('_adam' if params.imp_rep else '')
+                 + ('_' + str(params.imp_step_size)) \
+                 + ('_' + str(params.imp_random_start)) \
+                 + ('_' + str(params.imp_random_seed)) \
+                 + ('_' + str(params.imp_pp))
+    meta_name += ('_rep' if params.imp_rep else '')
     meta_name += ('_adam' if params.imp_adam else '') + ('_nosign' if params.imp_no_sign else '')
     meta_name += ('_corr' if params.corr_only else '') + ('_fail' if params.fail_only else '')
     meta_name += '_val' + ('_' + str(params.val_step_per)) \
@@ -550,6 +571,7 @@ if __name__ == '__main__':
 
         x_imp = []  # imp accumulator
         step_imp = []  # num steps accumulator
+        l2_li = [] # l2 distance accumulator
 
         # y to one-hot
         # y_full_batch: (batch, 1)
@@ -590,6 +612,12 @@ if __name__ == '__main__':
 
             x_imp.append(x_batch_imp)
             step_imp.append(np.array([step_batch_imp]))
+            l2_li.append(np.linalg.norm((x_batch_imp - x_batch)/255))
+            print('l2 distance (curr):', np.linalg.norm(x_batch_imp - x_batch)/255)
+            print('l2 distance (total):', np.mean(l2_li))
+            print()
+            print('------------------------------------------------------------------------------')
+            print('------------------------------------------------------------------------------')
 
         x_imp = np.concatenate(x_imp)
         step_imp = np.concatenate(step_imp)

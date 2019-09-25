@@ -76,7 +76,7 @@ def safe_validation(x, y, model, sess, start_eps=8, end_eps=8, val_num=20):
         pgd = LinfPGDAttack(model, cur_eps, num_steps=20, step_size=cur_eps/4, random_start=True, loss_func='xent')
 
         for i in range(val_num):
-            x_adv = pgd.perturb(x, y, sess, rand=True)
+            x_adv, _ = pgd.perturb(x, y, sess, rand=True)
 
             corr_mask, loss = sess.run([model.correct_prediction, model.y_xent],
                                 feed_dict={model.x_input: x_adv,
@@ -120,6 +120,7 @@ def result(x_imp, model, sess, x_full_batch, y_full_batch, final_name, params):
     print('nat Accuracy: {:.2f}%'.format(100.0 * accuracy))
 
     total_corr = 0
+    '''
     for ibatch in range(num_batches):
         bstart = ibatch * eval_batch_size
         bend = min(bstart + eval_batch_size, num_eval_examples)
@@ -130,8 +131,9 @@ def result(x_imp, model, sess, x_full_batch, y_full_batch, final_name, params):
         total_corr += cur_corr
 
     accuracy = total_corr / num_eval_examples
-
-    #accuracy = 0
+    '''
+    
+    accuracy = 0
     print('nat(PGD) Accuracy: {:.2f}%'.format(100.0 * accuracy))
 
     total_corr = 0
@@ -172,8 +174,9 @@ def result(x_imp, model, sess, x_full_batch, y_full_batch, final_name, params):
     print('linf_dist:', linf_dist)
 
     imp_loss = np.concatenate(imp_loss_li)
-    if params.target_y >= 0:
-        np.save(final_name + '_loss' + str(params.target_y) + '.npy', imp_loss)
+    #if params.target_y >= 0:
+    #    np.save(final_name + '_loss' + str(params.target_y) + '.npy', imp_loss)
+    np.save(final_name + '_loss.npy', imp_loss)
 
 if __name__ == '__main__':
     import argparse
@@ -232,6 +235,9 @@ if __name__ == '__main__':
             print('Invalid pixel range in x_imp. Expected [0,255], fount[{},{}]'.format(np.amin(x_imp),
                                                                                         np.amax(x_imp)))
         else:
-            result(x_imp, model, sess, x_org, y, final_name, params)
+            num_tests = 1
+            for _ in range(num_tests):
+                result(x_imp, model, sess, x_org, y, final_name, params)
+                print()
 
 

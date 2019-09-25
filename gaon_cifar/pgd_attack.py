@@ -62,7 +62,7 @@ class LinfPGDAttack:
         self.grad = tf.gradients(self.loss, model.x_input)[0]
         self.grad2 = tf.gradients(self.loss2, model.x_input)[0]
 
-    def perturb(self, x_nat, y, sess, proj=True, reverse=False, rand=False, step_size=None, num_steps=None):
+    def perturb(self, x_nat, y, sess, proj=True, reverse=False, rand=False, step_size=None, num_steps=None, pp=0):
 
         """Given a set of examples (x_nat, y), returns a set of adversarial
         examples within epsilon of x_nat in l_infinity norm."""
@@ -77,6 +77,8 @@ class LinfPGDAttack:
             x = np.clip(x, 0, 255)
         else:
             x = np.copy(x_nat)
+
+        full_li = []
 
         for i in range(num_steps):
             if y.size > y.shape[0]:
@@ -96,7 +98,13 @@ class LinfPGDAttack:
 
             x = np.clip(x, 0, 255) # ensure valid pixel range
 
-        return x
+            if pp > 0 and (i+1)%pp==0:
+                full_li.append(np.copy(x))
+
+        if pp > 0:
+            full_li = np.concatenate(full_li, axis=0)
+
+        return x, full_li
 
 
 def run_attack(x_adv, model, sess, x_full_batch, y_full_batch):

@@ -86,8 +86,8 @@ learning_rate = tf.train.piecewise_constant(
     boundaries,
     values)
 #total_loss = model.mean_xent + weight_decay * model.weight_decay_loss
-#total_loss = full_model.safe_pgd_mean_xent + full_model.safe_mean_xent
-total_loss = full_model.safe_pgd_mean_xent
+total_loss = full_model.safe_pgd_mean_xent + full_model.safe_mean_xent
+#total_loss = full_model.safe_pgd_mean_xent
 safe_pgd_acc = full_model.safe_pgd_accuracy
 orig_acc = full_model.orig_accuracy
 safe_acc = full_model.safe_accuracy
@@ -214,5 +214,3 @@ with tf.Session() as sess:
             saver.save(sess,
                        os.path.join(save_dir, 'checkpoint'),
                        global_step=global_step)
-
-        training_time += end - start
