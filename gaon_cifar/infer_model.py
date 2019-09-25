@@ -150,7 +150,7 @@ def block_layer(inputs, filters, bottleneck, block_fn, blocks, strides,
 def generator(x, f_dim, output_size, c_dim, is_training=True):
     ngf = f_dim
     inputs = x
-    data_format='channels_first'
+    data_format='channels_last'
 
     # for GPU; channels_first
     if data_format=='channels_first':
@@ -253,7 +253,7 @@ def generate_pgd_common(x,
             loop_cond,
             loop_body,
             loop_vars,
-            back_prop=False,
+            back_prop=True,
             parallel_iterations=1)
         return result
 
@@ -276,26 +276,52 @@ def generate_pgd(x, y, bounds, model_fn, attack_params):
                                one_hot_labels=one_hot_labels,
                                perturbation_multiplier=1.0)
 
+def PGD(x, y, bounds, model_fn, attack_params):
+    eps = attack_params['eps']
+    step_size = attack_params['step_size']
+    num_steps = attack_params['num_steps']
+    bounds = attack_params['bounds']
+    random_start = attack_params['random_start']
+    
+    lower_bound = tf.maximum(x-eps, bounds[0])
+    upper_bound = tf.minimum(x+eps, bounds[1])
+
+    if random_start:
+        x += tf.random_uniform(tf.shape(x), -eps, eps)
+        x = tf.clip_by_value(x, lower_bound, upper_bound)
+
+    for i in range(num_steps):
+        logits = model_fn(x)
+        y_xent = tf.nn.sparse_softmax_cross_entropy_with_logits(
+            logits=logits, labels=y)
+        grad = tf.gradients(y_xent, x)[0]
+        x += step_size * tf.sign(grad)
+        x = tf.clip_by_value(x, lower_bound, upper_bound)
+
+    return x
+        
 
 class Model(object):
 
-    def __init__(self, mode, model, eps):
+    def __init__(self, mode, model, args):
 
         self.mode = mode
         self.model = model
-        self.imp_eps = eps
-        self.attack_params = {
-            'eps': 8,
-            'step_size': 2,
-            'num_steps': 20,
-        }
+        self.delta = args.delta
         self.bounds = (0, 255)
+        self.attack_params = {
+            'eps': args.eps,
+            'step_size': args.step_size,
+            'num_steps': args.num_steps,
+            'random_start': args.random_start,
+            'bounds': self.bounds,
+        }
 
         self._build_model()
 
     def _build_model(self):
         assert self.mode == 'train' or self.mode == 'eval'
-        is_training = True if self.model == 'train' else False
+        is_train = True if self.mode == 'train' else False
 
         with tf.variable_scope('infer_input', reuse=tf.AUTO_REUSE):
             self.x_input = tf.placeholder(
@@ -303,62 +329,51 @@ class Model(object):
                 shape=[None, 32, 32, 3])
             self.y_input = tf.placeholder(tf.int64, shape=None)
 
-        safe_generator = tf.make_template('generator', generator, f_dim=64, output_size=32, c_dim=3, is_training=is_training)
-
-        with tf.variable_scope('gen', reuse=tf.AUTO_REUSE):
-            self.G_out = safe_generator(self.x_input)
-
-            self.x_safe = tf.clip_by_value(self.x_input + self.imp_eps * self.G_out, 0, 255)
-            
+        with tf.variable_scope('', reuse=tf.AUTO_REUSE):
+            safe_generator = tf.make_template('generator', generator, f_dim=64, output_size=32, c_dim=3, is_training=is_train)
+            self.x_safe = self.x_input + self.delta * safe_generator(self.x_input)
+            self.x_safe = tf.clip_by_value(self.x_safe, self.bounds[0], self.bounds[1])
 
         with tf.variable_scope('', reuse=tf.AUTO_REUSE):
+            #self.x_safe_pgd = generate_pgd(self.x_safe, self.y_input, self.bounds, self.model.fprop, self.attack_params)
+            self.x_safe_pgd = PGD(self.x_safe, self.y_input, self.bounds, self.model.fprop, self.attack_params)
+            diff = self.x_safe_pgd - self.x_safe
+            diff = tf.stop_gradient(diff)
+            x_safe_pgd_fo = self.x_safe + diff
 
-            self.x_attacked = generate_pgd(self.x_safe, self.y_input, self.bounds, self.model, self.attack_params)
-        with tf.variable_scope('orig_loss', reuse=tf.AUTO_REUSE):
-            self.orig_pre_softmax = self.model(self.x_input)
-            self.orig_softmax = tf.nn.softmax(self.orig_pre_softmax)
+            # eval original image
+            orig_pre_softmax = self.model.fprop(self.x_input)
 
-            self.orig_predictions = tf.argmax(self.orig_pre_softmax, 1)
-            self.orig_correct_prediction = tf.equal(self.orig_predictions, self.y_input)
-            self.orig_num_correct = tf.reduce_sum(
-                tf.cast(self.orig_correct_prediction, tf.int32))
+            orig_predictions = tf.argmax(orig_pre_softmax, 1)
+            orig_correct_prediction = tf.equal(orig_predictions, self.y_input)
             self.orig_accuracy = tf.reduce_mean(
-                tf.cast(self.orig_correct_prediction, tf.float32))
+                tf.cast(orig_correct_prediction, tf.float32))
 
-            self.orig_y_xent = tf.nn.sparse_softmax_cross_entropy_with_logits(
-                logits=self.orig_pre_softmax, labels=self.y_input)
-            self.orig_xent = tf.reduce_sum(self.orig_y_xent, name='orig_y_xent')
-            self.orig_mean_xent = tf.reduce_mean(self.orig_y_xent)
-        
-        with tf.variable_scope('gen_loss', reuse=tf.AUTO_REUSE):
-            self.gen_pre_softmax = self.model(self.x_safe)
-            self.gen_softmax = tf.nn.softmax(self.gen_pre_softmax)
+            orig_y_xent = tf.nn.sparse_softmax_cross_entropy_with_logits(
+                logits=orig_pre_softmax, labels=self.y_input)
+            self.orig_mean_xent = tf.reduce_mean(orig_y_xent)
+ 
+            # eval safe image
+            safe_pre_softmax = self.model.fprop(self.x_safe)
 
-            self.gen_predictions = tf.argmax(self.gen_pre_softmax, 1)
-            self.gen_correct_prediction = tf.equal(self.gen_predictions, self.y_input)
-            self.gen_num_correct = tf.reduce_sum(
-                tf.cast(self.gen_correct_prediction, tf.int32))
-            self.gen_accuracy = tf.reduce_mean(
-                tf.cast(self.gen_correct_prediction, tf.float32))
+            safe_predictions = tf.argmax(safe_pre_softmax, 1)
+            safe_correct_prediction = tf.equal(safe_predictions, self.y_input)
+            self.safe_accuracy = tf.reduce_mean(
+                tf.cast(safe_correct_prediction, tf.float32))
 
-            self.gen_y_xent = tf.nn.sparse_softmax_cross_entropy_with_logits(
-                logits=self.gen_pre_softmax, labels=self.y_input)
-            self.gen_xent = tf.reduce_sum(self.gen_y_xent, name='gen_y_xent')
-            self.gen_mean_xent = tf.reduce_mean(self.gen_y_xent)
+            safe_y_xent = tf.nn.sparse_softmax_cross_entropy_with_logits(
+                logits=safe_pre_softmax, labels=self.y_input)
+            self.safe_mean_xent = tf.reduce_mean(safe_y_xent)
 
-        with tf.variable_scope('safe_loss', reuse=tf.AUTO_REUSE):
-            self.pre_softmax = self.model(self.x_attacked)
-            self.softmax = tf.nn.softmax(self.pre_softmax)
+            # eval attacked safe image
+            safe_pgd_pre_softmax = self.model.fprop(x_safe_pgd_fo)
 
-            self.predictions = tf.argmax(self.pre_softmax, 1)
-            self.correct_prediction = tf.equal(self.predictions, self.y_input)
-            self.num_correct = tf.reduce_sum(
-                tf.cast(self.correct_prediction, tf.int32))
-            self.accuracy = tf.reduce_mean(
-                tf.cast(self.correct_prediction, tf.float32))
+            safe_pgd_predictions = tf.argmax(safe_pgd_pre_softmax, 1)
+            safe_pgd_correct_prediction = tf.equal(safe_pgd_predictions, self.y_input)
+            self.safe_pgd_accuracy = tf.reduce_mean(
+                tf.cast(safe_pgd_correct_prediction, tf.float32))
 
-            self.y_xent = tf.nn.sparse_softmax_cross_entropy_with_logits(
-                logits=self.pre_softmax, labels=self.y_input)
-            self.xent = tf.reduce_sum(self.y_xent, name='y_xent')
-            self.mean_xent = tf.reduce_mean(self.y_xent)
+            safe_pgd_y_xent = tf.nn.sparse_softmax_cross_entropy_with_logits(
+                logits=safe_pgd_pre_softmax, labels=self.y_input)
+            self.safe_pgd_mean_xent = tf.reduce_mean(safe_pgd_y_xent)
         
