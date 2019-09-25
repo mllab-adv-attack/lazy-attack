@@ -276,7 +276,8 @@ def generate_pgd(x, y, bounds, model_fn, attack_params):
                                one_hot_labels=one_hot_labels,
                                perturbation_multiplier=1.0)
 
-def PGD(x, y, bounds, model_fn, attack_params):
+
+def PGD(x, y, model_fn, attack_params):
     eps = attack_params['eps']
     step_size = attack_params['step_size']
     num_steps = attack_params['num_steps']
@@ -336,7 +337,7 @@ class Model(object):
 
         with tf.variable_scope('', reuse=tf.AUTO_REUSE):
             #self.x_safe_pgd = generate_pgd(self.x_safe, self.y_input, self.bounds, self.model.fprop, self.attack_params)
-            self.x_safe_pgd = PGD(self.x_safe, self.y_input, self.bounds, self.model.fprop, self.attack_params)
+            self.x_safe_pgd = PGD(self.x_safe, self.y_input, self.model.fprop, self.attack_params)
             diff = self.x_safe_pgd - self.x_safe
             diff = tf.stop_gradient(diff)
             x_safe_pgd_fo = self.x_safe + diff
