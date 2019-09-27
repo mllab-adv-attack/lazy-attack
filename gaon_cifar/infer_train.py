@@ -30,6 +30,7 @@ if __name__ == '__main__':
     parser.add_argument('--data_path', default='../cifar10_data', type=str)
     parser.add_argument('--model_dir', default='naturally_trained', type=str)
     parser.add_argument('--save_dir', default='safe_net', type=str)
+    parser.add_argument('--no_overwrite', action='store_true')
 
     # training parameters
     parser.add_argument('--tf_random_seed', default=451760341, type=int)
@@ -87,6 +88,7 @@ learning_rate = tf.train.piecewise_constant(
     boundaries,
     values)
 
+# set up metrics
 total_loss = full_model.safe_pgd_mean_xent
 safe_pgd_acc = full_model.safe_pgd_accuracy
 orig_acc = full_model.orig_accuracy
@@ -102,6 +104,13 @@ if not os.path.exists(model_dir):
     os.makedirs(model_dir)
 if not os.path.exists(save_dir):
     os.makedirs(save_dir)
+else:
+    if args.no_overwrite:
+        print('folder already exists!')
+        sys.exit()
+    else:
+        shutil.rmtree(save_dir)
+        os.makedirs(save_dir)
 
 # We add accuracy and xent twice so we can easily make three types of
 # comparisons in Tensorboard:
@@ -110,12 +119,24 @@ if not os.path.exists(save_dir):
 # - eval of different runs
 
 saver = tf.train.Saver()
-tf.summary.scalar('acc orig', full_model.orig_accuracy)
-tf.summary.scalar('acc safe', full_model.safe_accuracy)
-tf.summary.scalar('acc safe_pgd', full_model.safe_pgd_accuracy)
-tf.summary.scalar('loss', total_loss)
-tf.summary.scalar('l2 dist', l2_dist)
-merged_summaries = tf.summary.merge_all()
+train_summaries = [
+    tf.summary.scalar('acc orig', full_model.orig_accuracy),
+    tf.summary.scalar('acc safe', full_model.safe_accuracy),
+    tf.summary.scalar('acc safe_pgd', full_model.safe_pgd_accuracy),
+    tf.summary.scalar('loss', total_loss),
+    tf.summary.scalar('l2 dist', l2_dist),
+    tf.summary.scalar('image', full_model.x_safe),
+]
+train_merged_summaries = tf.summary.merge(train_summaries)
+eval_summaries = [
+    tf.summary.scalar('acc orig (eval)', full_model.orig_accuracy),
+    tf.summary.scalar('acc safe (eval)', full_model.safe_accuracy),
+    tf.summary.scalar('acc safe_pgd (eval)', full_model.safe_pgd_accuracy),
+    tf.summary.scalar('loss (eval)', total_loss),
+    tf.summary.scalar('l2 dist (eval)', l2_dist),
+    tf.summary.scalar('image (eval)', full_model.x_safe),
+]
+eval_merged_summaries = tf.summary.merge(eval_summaries)
 
 # keep the configuration file with the model for reproducibility
 shutil.copy('config.json', model_dir)
@@ -129,6 +150,10 @@ with tf.Session() as sess:
 
     # initialize data augmentation
     cifar = cifar10_input.AugmentedCIFAR10Data(raw_cifar, sess, model)
+
+    # set index for evaluation data
+    eval_indice = np.array([i for i in range(len(raw_cifar.eval_data.ys))])
+    np.randon.shuffle(eval_indice)
 
     # Initialize the summary writer, global variables, and our time counter.
     summary_writer = tf.summary.FileWriter(save_dir, sess.graph)
@@ -175,9 +200,9 @@ with tf.Session() as sess:
 
         start = timer()
         _, total_loss_batch, safe_pgd_acc_batch, orig_acc_batch, safe_acc_batch, \
-        x_safe, x_safe_pgd, l2_dist_batch, merged_summaries_batch = \
+        x_safe, x_safe_pgd, l2_dist_batch, train_merged_summaries_batch = \
             sess.run([train_step, total_loss, safe_pgd_acc, orig_acc, safe_acc,
-                      full_model.x_safe, full_model.x_safe_pgd, l2_dist, merged_summaries], feed_dict=nat_dict)
+                      full_model.x_safe, full_model.x_safe_pgd, l2_dist, train_merged_summaries], feed_dict=nat_dict)
         end = timer()
 
         assert 0 <= np.amin(x_safe) and np.amax(x_safe) <= 255.0
@@ -200,7 +225,28 @@ with tf.Session() as sess:
 
         # Tensorboard summaries
         if ii % num_summary_steps == 0:
-            summary_writer.add_summary(merged_summaries_batch, global_step.eval(sess))
+            summary_writer.add_summary(train_merged_summaries_batch, global_step.eval(sess))
+            # evaluate on test set
+            eval_bstart = (ii//num_summary_steps)*eval_batch_size
+            eval_bend = (ii//num_summary_steps+1)*eval_batch_size
+
+            eval_x_batch = raw_cifar.eval_data.xs[eval_indice[eval_bstart:eval_bend]]
+            eval_y_batch = raw_cifar.eval_data.ys[eval_indice[eval_bstart:eval_bend]]
+            eval_dict = {full_model.x_input: eval_x_batch,
+                         full_model.y_input: eval_y_batch}
+            total_loss_batch, safe_pgd_acc_batch, orig_acc_batch, safe_acc_batch, \
+                x_safe, x_safe_pgd, l2_dist_batch, eval_merged_summaries_batch = \
+                sess.run([total_loss, safe_pgd_acc, orig_acc, safe_acc,
+                          full_model.x_safe, full_model.x_safe_pgd, l2_dist, eval_merged_summaries], feed_dict=eval_dict)
+            
+            print('    orig accuracy (eval) {:.4}%'.format(orig_acc_batch * 100))
+            print('    safe accuracy (eval) {:.4}%'.format(safe_acc_batch * 100))
+            print('    safe_pgd accuracy (eval) {:.4}%'.format(safe_pgd_acc_batch * 100))
+            print('    l2 dist (eval) {:.4}'.format(l2_dist_batch))
+            print('    total loss (eval) {:.6}'.format(total_loss_batch))
+            
+            summary_writer.add_summary(eval_merged_summaries_batch, global_step.eval(sess))
+
 
         # Write a checkpoint
         if ii % num_checkpoint_steps == 0:
