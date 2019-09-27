@@ -5,66 +5,103 @@ from __future__ import division
 from __future__ import print_function
 
 from datetime import datetime
-import json
 import os
+import sys
 import shutil
 from timeit import default_timer as timer
 
 import tensorflow as tf
 import numpy as np
 
-from model import Model
 import cifar10_input
-from pgd_attack import LinfPGDAttack
 
-with open('config.json') as config_file:
-    config = json.load(config_file)
+from infer_model import Model as Safe_model
+from infer_target import Model as Target_model
+
+from utils import infer_file_name
+
+import argparse
+
+MODEL_PATH = './models/'
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    # save & load path
+    parser.add_argument('--data_path', default='../cifar10_data', type=str)
+    parser.add_argument('--model_dir', default='naturally_trained', type=str)
+    parser.add_argument('--save_dir', default='safe_net', type=str)
+
+    # training parameters
+    parser.add_argument('--tf_random_seed', default=451760341, type=int)
+    parser.add_argument('--np_random_seed', default=216105420, type=int)
+    parser.add_argument('--max_num_training_steps', default=80000, type=int)
+    parser.add_argument('--num_output_steps', default=1, type=int)
+    parser.add_argument('--num_summary_steps', default=100, type=int)
+    parser.add_argument('--num_checkpoint_steps', default=1000, type=int)
+    parser.add_argument('--lr', default=1e-2, type=float)
+    parser.add_argument('--num_eval_examples', default=10000, type=int)
+    parser.add_argument('--training_batch_size', default=128, type=int)
+    parser.add_argument('--eval_batch_size', default=100, type=int)
+    parser.add_argument('--eval_on_cpu', action='store_true')
+    parser.add_argument('--delta', default=40, type=int)
+
+    # pgd settings
+    parser.add_argument('--eps', default=8.0, type=float)
+    parser.add_argument('--num_steps', default=10, type=int)
+    parser.add_argument('--step_size', default=2.0, type=float)
+    parser.add_argument('--random_start', action='store_false')
+
+    args = parser.parse_args()
+
+    for key, val in vars(args).items():
+        print('{}={}'.format(key, val))
 
 # seeding randomness
-tf.set_random_seed(config['tf_random_seed'])
-np.random.seed(config['np_random_seed'])
+tf.set_random_seed(args.tf_random_seed)
+np.random.seed(args.np_random_seed)
 
 # Setting up training parameters
-max_num_training_steps = config['max_num_training_steps']
-num_output_steps = config['num_output_steps']
-num_summary_steps = config['num_summary_steps']
-num_checkpoint_steps = config['num_checkpoint_steps']
-step_size_schedule = config['step_size_schedule']
-weight_decay = config['weight_decay']
-data_path = config['data_path']
-momentum = config['momentum']
-batch_size = config['training_batch_size']
+max_num_training_steps = args.max_num_training_steps
+num_output_steps = args.num_output_steps
+num_summary_steps = args.num_summary_steps
+num_checkpoint_steps = args.num_checkpoint_steps
+lr = args.lr
+data_path = args.data_path
+training_batch_size = args.training_batch_size
+eval_batch_size = args.eval_batch_size
+
 
 # Setting up the data and the model
 raw_cifar = cifar10_input.CIFAR10Data(data_path)
-global_step = tf.contrib.framework.get_or_create_global_step()
-model = Model(mode='train')
+global_step = tf.train.get_or_create_global_step()
+
+model = Target_model('eval')
+full_model = Safe_model('train', model, args)
 
 # Setting up the optimizer
-boundaries = [int(sss[0]) for sss in step_size_schedule]
+boundaries = [0, 40000, 60000]
+values = [lr, lr/10, lr/100]
 boundaries = boundaries[1:]
-values = [sss[1] for sss in step_size_schedule]
 learning_rate = tf.train.piecewise_constant(
     tf.cast(global_step, tf.int32),
     boundaries,
     values)
-total_loss = model.mean_xent + weight_decay * model.weight_decay_loss
-train_step = tf.train.MomentumOptimizer(learning_rate, momentum).minimize(
-    total_loss,
-    global_step=global_step)
 
-# Set up adversary
-attack = LinfPGDAttack(model,
-                       config['epsilon'],
-                       config['num_steps'],
-                       config['step_size'],
-                       config['random_start'],
-                       config['loss_func'])
+total_loss = full_model.safe_pgd_mean_xent
+safe_pgd_acc = full_model.safe_pgd_accuracy
+orig_acc = full_model.orig_accuracy
+safe_acc = full_model.safe_accuracy
+l2_dist = tf.reduce_mean(tf.norm((full_model.x_safe-full_model.x_input)/255, axis=0))
 
 # Setting up the Tensorboard and checkpoint outputs
-model_dir = config['model_dir']
+meta_name = infer_file_name(args)
+
+model_dir = MODEL_PATH + args.model_dir
+save_dir = MODEL_PATH + args.save_dir + meta_name
 if not os.path.exists(model_dir):
-  os.makedirs(model_dir)
+    os.makedirs(model_dir)
+if not os.path.exists(save_dir):
+    os.makedirs(save_dir)
 
 # We add accuracy and xent twice so we can easily make three types of
 # comparisons in Tensorboard:
@@ -72,68 +109,101 @@ if not os.path.exists(model_dir):
 # - train of different runs
 # - eval of different runs
 
-saver = tf.train.Saver(max_to_keep=3)
-tf.summary.scalar('accuracy adv train', model.accuracy)
-tf.summary.scalar('accuracy adv', model.accuracy)
-tf.summary.scalar('xent adv train', model.xent / batch_size)
-tf.summary.scalar('xent adv', model.xent / batch_size)
-tf.summary.image('images adv train', model.x_input)
+saver = tf.train.Saver()
+tf.summary.scalar('acc orig', full_model.orig_accuracy)
+tf.summary.scalar('acc safe', full_model.safe_accuracy)
+tf.summary.scalar('acc safe_pgd', full_model.safe_pgd_accuracy)
+tf.summary.scalar('loss', total_loss)
+tf.summary.scalar('l2 dist', l2_dist)
 merged_summaries = tf.summary.merge_all()
 
 # keep the configuration file with the model for reproducibility
 shutil.copy('config.json', model_dir)
 
+model_file = tf.train.latest_checkpoint(model_dir)
+if model_file is None:
+    print('No model found')
+    sys.exit()
+
 with tf.Session() as sess:
 
-  # initialize data augmentation
-  cifar = cifar10_input.AugmentedCIFAR10Data(raw_cifar, sess, model)
+    # initialize data augmentation
+    cifar = cifar10_input.AugmentedCIFAR10Data(raw_cifar, sess, model)
 
-  # Initialize the summary writer, global variables, and our time counter.
-  summary_writer = tf.summary.FileWriter(model_dir, sess.graph)
-  sess.run(tf.global_variables_initializer())
-  training_time = 0.0
+    # Initialize the summary writer, global variables, and our time counter.
+    summary_writer = tf.summary.FileWriter(save_dir, sess.graph)
 
-  # Main training loop
-  for ii in range(max_num_training_steps):
-    x_batch, y_batch = cifar.train_data.get_next_batch(batch_size,
-                                                       multiple_passes=True)
+    # Restore variables if can, set optimizer
+    reader = tf.train.NewCheckpointReader(model_file)
+    saved_shapes = reader.get_variable_to_shape_map()
+    var_names = sorted([(var.name, var.name.split(':')[0]) for var in tf.global_variables()
+                        if var.name.split(':')[0] in saved_shapes])
+    restore_vars = []
+    restore_vars_name_list = []
+    for var_name, saved_var_name in var_names:
+        curr_var = tf.get_default_graph().get_tensor_by_name(var_name)
+        var_shape = curr_var.get_shape().as_list()
+        if var_shape == saved_shapes[saved_var_name] and 'global_step' not in saved_var_name:
+            restore_vars.append(curr_var)
+            restore_vars_name_list.append(saved_var_name + ':0')
 
-    # Compute Adversarial Perturbations
-    start = timer()
-    x_batch_adv = attack.perturb(x_batch, y_batch, sess)
-    end = timer()
-    training_time += end - start
+    trainable_variables = tf.trainable_variables()
+    variables_to_train = [var for var in trainable_variables if var.name not in restore_vars_name_list]
 
-    nat_dict = {model.x_input: x_batch,
-                model.y_input: y_batch}
+    train_step = tf.train.AdamOptimizer(learning_rate).minimize(
+        total_loss,
+        global_step=global_step,
+        var_list=variables_to_train)
 
-    adv_dict = {model.x_input: x_batch_adv,
-                model.y_input: y_batch}
+    sess.run(tf.global_variables_initializer())
+    opt_saver = tf.train.Saver(restore_vars)
+    opt_saver.restore(sess, model_file)
+    print('restore success!')
 
-    # Output to stdout
-    if ii % num_output_steps == 0:
-      nat_acc = sess.run(model.accuracy, feed_dict=nat_dict)
-      adv_acc = sess.run(model.accuracy, feed_dict=adv_dict)
-      print('Step {}:    ({})'.format(ii, datetime.now()))
-      print('    training nat accuracy {:.4}%'.format(nat_acc * 100))
-      print('    training adv accuracy {:.4}%'.format(adv_acc * 100))
-      if ii != 0:
-        print('    {} examples per second'.format(
-            num_output_steps * batch_size / training_time))
-        training_time = 0.0
-    # Tensorboard summaries
-    if ii % num_summary_steps == 0:
-      summary = sess.run(merged_summaries, feed_dict=adv_dict)
-      summary_writer.add_summary(summary, global_step.eval(sess))
+    training_time = 0.0
 
-    # Write a checkpoint
-    if ii % num_checkpoint_steps == 0:
-      saver.save(sess,
-                 os.path.join(model_dir, 'checkpoint'),
-                 global_step=global_step)
+    # Main training loop
+    for ii in range(max_num_training_steps):
+        x_batch, y_batch = cifar.train_data.get_next_batch(training_batch_size,
+                                                           multiple_passes=True)
 
-    # Actual training step
-    start = timer()
-    sess.run(train_step, feed_dict=adv_dict)
-    end = timer()
-    training_time += end - start
+        # Actual training step
+        nat_dict = {full_model.x_input: x_batch,
+                    full_model.y_input: y_batch}
+
+        assert 0 <= np.amin(x_batch) and np.amax(x_batch) <= 255.0
+
+        start = timer()
+        _, total_loss_batch, safe_pgd_acc_batch, orig_acc_batch, safe_acc_batch, \
+        x_safe, x_safe_pgd, l2_dist_batch, merged_summaries_batch = \
+            sess.run([train_step, total_loss, safe_pgd_acc, orig_acc, safe_acc,
+                      full_model.x_safe, full_model.x_safe_pgd, l2_dist, merged_summaries], feed_dict=nat_dict)
+        end = timer()
+
+        assert 0 <= np.amin(x_safe) and np.amax(x_safe) <= 255.0
+        assert 0 <= np.amin(x_safe_pgd) and np.amax(x_safe_pgd) <= 255.0
+
+        training_time += end - start
+
+        # Output to stdout
+        if ii % num_output_steps == 0:
+            print('Step {}:    ({})'.format(ii, datetime.now()))
+            print('    orig accuracy {:.4}%'.format(orig_acc_batch * 100))
+            print('    safe accuracy {:.4}%'.format(safe_acc_batch * 100))
+            print('    safe_pgd accuracy {:.4}%'.format(safe_pgd_acc_batch * 100))
+            print('    l2 dist {:.4}'.format(l2_dist_batch))
+            print('    total loss {:.6}'.format(total_loss_batch))
+            if ii != 0:
+                print('    {} examples per second'.format(
+                    num_output_steps * training_batch_size / training_time))
+                training_time = 0.0
+
+        # Tensorboard summaries
+        if ii % num_summary_steps == 0:
+            summary_writer.add_summary(merged_summaries_batch, global_step.eval(sess))
+
+        # Write a checkpoint
+        if ii % num_checkpoint_steps == 0:
+            saver.save(sess,
+                       os.path.join(save_dir, 'checkpoint'),
+                       global_step=global_step)
