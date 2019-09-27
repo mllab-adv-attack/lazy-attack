@@ -101,7 +101,7 @@ meta_name = infer_file_name(args)
 
 model_dir = MODEL_PATH + args.model_dir
 if not args.no_save:
-    save_dir = MODEL_PATH + args.save_dir + meta_name
+    save_dir = MODEL_PATH + args.save_dir + '/' + meta_name
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
     else:

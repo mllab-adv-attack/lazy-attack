@@ -4,11 +4,9 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from datetime import datetime
 import os
 import sys
 import math
-from timeit import default_timer as timer
 
 import tensorflow as tf
 import numpy as np
@@ -41,10 +39,12 @@ if __name__ == '__main__':
     parser.add_argument('--eval_batch_size', default=100, type=int)
     parser.add_argument('--eval_on_cpu', action='store_true')
     parser.add_argument('--delta', default=40, type=int)
+    parser.add_argument('--lr', default=1e-3, type=float)
+    parser.add_argument('--sample_size', default=1000, type=int)
 
     # pgd settings
     parser.add_argument('--eps', default=8.0, type=float)
-    parser.add_argument('--num_steps', default=20, type=int)
+    parser.add_argument('--num_steps', default=10, type=int)
     parser.add_argument('--step_size', default=2.0, type=float)
     parser.add_argument('--restarts', default=20, type=int)
 
@@ -58,13 +58,8 @@ tf.set_random_seed(args.tf_random_seed)
 np.random.seed(args.np_random_seed)
 
 # Setting up training parameters
-max_num_training_steps = args.max_num_training_steps
-num_output_steps = args.num_output_steps
-num_summary_steps = args.num_summary_steps
-num_checkpoint_steps = args.num_checkpoint_steps
 lr = args.lr
 data_path = args.data_path
-training_batch_size = args.training_batch_size
 eval_batch_size = args.eval_batch_size
 
 
@@ -103,8 +98,9 @@ learning_rate = tf.train.piecewise_constant(
 # Setting up the Tensorboard and checkpoint outputs
 meta_name = infer_file_name(args)
 
-model_dir = MODEL_PATH + args.save_dir + meta_name
+model_dir = MODEL_PATH + args.save_dir + '/' + meta_name
 if not os.path.exists(model_dir):
+    print(model_dir)
     print("incorrect path!")
     sys.exit()
 
@@ -114,7 +110,7 @@ if not os.path.exists(model_dir):
 # - train of different runs
 # - eval of different runs
 
-saver = tf.train.saver()
+saver = tf.train.Saver()
 cifar = cifar10_input.CIFAR10Data(data_path)
 
 model_file = tf.train.latest_checkpoint(model_dir)
@@ -171,10 +167,10 @@ with tf.Session() as sess:
         # Adjust num_eval_examples. Iterate over the samples batch-by-batch
         num_eval_examples = len(x_full_batch)
 
-        if args.val_step_per > 0:
-            eval_batch_size = 100
+        if num_eval_examples > args.batch_size :
+            eval_batch_size = args.eval_batch_size
         else:
-            eval_batch_size = min(100, num_eval_examples)
+            eval_batch_size = min(args.eval_batch_size, num_eval_examples)
 
         num_batches = int(math.ceil(num_eval_examples / eval_batch_size))
 
