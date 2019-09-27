@@ -30,6 +30,7 @@ if __name__ == '__main__':
     parser.add_argument('--data_path', default='../cifar10_data', type=str)
     parser.add_argument('--model_dir', default='naturally_trained', type=str)
     parser.add_argument('--save_dir', default='safe_net', type=str)
+    parser.add_argumetn('--no_save', action='store_true')
     parser.add_argument('--no_overwrite', action='store_true')
 
     # training parameters
@@ -39,7 +40,7 @@ if __name__ == '__main__':
     parser.add_argument('--num_output_steps', default=1, type=int)
     parser.add_argument('--num_summary_steps', default=100, type=int)
     parser.add_argument('--num_checkpoint_steps', default=1000, type=int)
-    parser.add_argument('--lr', default=1e-2, type=float)
+    parser.add_argument('--lr', default=1e-3, type=float)
     parser.add_argument('--num_eval_examples', default=10000, type=int)
     parser.add_argument('--training_batch_size', default=128, type=int)
     parser.add_argument('--eval_batch_size', default=100, type=int)
@@ -99,18 +100,17 @@ l2_dist = tf.reduce_mean(tf.norm((full_model.x_safe-full_model.x_input)/255, axi
 meta_name = infer_file_name(args)
 
 model_dir = MODEL_PATH + args.model_dir
-save_dir = MODEL_PATH + args.save_dir + meta_name
-if not os.path.exists(model_dir):
-    os.makedirs(model_dir)
-if not os.path.exists(save_dir):
-    os.makedirs(save_dir)
-else:
-    if args.no_overwrite:
-        print('folder already exists!')
-        sys.exit()
-    else:
-        shutil.rmtree(save_dir)
+if not args.no_save:
+    save_dir = MODEL_PATH + args.save_dir + meta_name
+    if not os.path.exists(save_dir):
         os.makedirs(save_dir)
+    else:
+        if args.no_overwrite:
+            print('folder already exists!')
+            sys.exit()
+        else:
+            shutil.rmtree(save_dir)
+            os.makedirs(save_dir)
 
 # We add accuracy and xent twice so we can easily make three types of
 # comparisons in Tensorboard:
@@ -156,7 +156,8 @@ with tf.Session() as sess:
     np.randon.shuffle(eval_indice)
 
     # Initialize the summary writer, global variables, and our time counter.
-    summary_writer = tf.summary.FileWriter(save_dir, sess.graph)
+    if not args.no_save:
+        summary_writer = tf.summary.FileWriter(save_dir, sess.graph)
 
     # Restore variables if can, set optimizer
     reader = tf.train.NewCheckpointReader(model_file)
@@ -225,7 +226,8 @@ with tf.Session() as sess:
 
         # Tensorboard summaries
         if ii % num_summary_steps == 0:
-            summary_writer.add_summary(train_merged_summaries_batch, global_step.eval(sess))
+            if not args.no_save:
+                summary_writer.add_summary(train_merged_summaries_batch, global_step.eval(sess))
             # evaluate on test set
             eval_bstart = (ii//num_summary_steps)*eval_batch_size
             eval_bend = (ii//num_summary_steps+1)*eval_batch_size
@@ -245,11 +247,12 @@ with tf.Session() as sess:
             print('    l2 dist (eval) {:.4}'.format(l2_dist_batch))
             print('    total loss (eval) {:.6}'.format(total_loss_batch))
             
-            summary_writer.add_summary(eval_merged_summaries_batch, global_step.eval(sess))
+            if not args.no_save:
+                summary_writer.add_summary(eval_merged_summaries_batch, global_step.eval(sess))
 
 
         # Write a checkpoint
-        if ii % num_checkpoint_steps == 0:
+        if ii % num_checkpoint_steps == 0 and not args.no_save:
             saver.save(sess,
                        os.path.join(save_dir, 'checkpoint'),
                        global_step=global_step)
