@@ -4,11 +4,11 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from datetime import datetime
+import time
+
 import json
 import os
 import shutil
-from timeit import default_timer as timer
 
 import tensorflow as tf
 import numpy as np
@@ -23,9 +23,9 @@ with open('config.json') as config_file:
 # seeding randomness
 tf.set_random_seed(config['tf_random_seed'])
 np.random.seed(config['np_random_seed'])
-
+ 
 # Setting up training parameters
-max_num_training_steps = config['max_num_training_steps']
+max_num_training_steps = 80000
 num_output_steps = config['num_output_steps']
 num_summary_steps = config['num_summary_steps']
 num_checkpoint_steps = config['num_checkpoint_steps']
@@ -93,47 +93,33 @@ with tf.Session() as sess:
   sess.run(tf.global_variables_initializer())
   training_time = 0.0
 
+  x_full_batch = []
+  y_full_batch = []
+
+  start = time.time()
+
   # Main training loop
   for ii in range(max_num_training_steps):
     x_batch, y_batch = cifar.train_data.get_next_batch(batch_size,
                                                        multiple_passes=True)
 
-    # Compute Adversarial Perturbations
-    start = timer()
-    x_batch_adv = attack.perturb(x_batch, y_batch, sess)
-    end = timer()
-    training_time += end - start
+    x_full_batch.append(x_batch.astype('uint8'))
+    y_full_batch.append(y_batch)
 
-    nat_dict = {model.x_input: x_batch,
-                model.y_input: y_batch}
+    if ((ii+1)%100==0):
+      end = time.time()
+      saving_time = end-start
+      print('{} th batch saved'.format(ii+1))
+      print('time took: {:.4}'.format(saving_time))
+      start = time.time()
 
-    adv_dict = {model.x_input: x_batch_adv,
-                model.y_input: y_batch}
+    if ((ii+1)%100==0):
 
-    # Output to stdout
-    if ii % num_output_steps == 0:
-      nat_acc = sess.run(model.accuracy, feed_dict=nat_dict)
-      adv_acc = sess.run(model.accuracy, feed_dict=adv_dict)
-      print('Step {}:    ({})'.format(ii, datetime.now()))
-      print('    training nat accuracy {:.4}%'.format(nat_acc * 100))
-      print('    training adv accuracy {:.4}%'.format(adv_acc * 100))
-      if ii != 0:
-        print('    {} examples per second'.format(
-            num_output_steps * batch_size / training_time))
-        training_time = 0.0
-    # Tensorboard summaries
-    if ii % num_summary_steps == 0:
-      summary = sess.run(merged_summaries, feed_dict=adv_dict)
-      summary_writer.add_summary(summary, global_step.eval(sess))
+      x_full_batch = np.concatenate(x_full_batch)
+      y_full_batch = np.concatenate(y_full_batch)
 
-    # Write a checkpoint
-    if ii % num_checkpoint_steps == 0:
-      saver.save(sess,
-                 os.path.join(model_dir, 'checkpoint'),
-                 global_step=global_step)
+      np.save('../cifar10_data/train_fixed/x_train_fixed_{}.npy'.format(ii+1), x_full_batch)
+      np.save('../cifar10_data/train_fixed/y_train_fixed_{}.npy'.format(ii+1), y_full_batch)
 
-    # Actual training step
-    start = timer()
-    sess.run(train_step, feed_dict=adv_dict)
-    end = timer()
-    training_time += end - start
+      x_full_batch = []
+      y_full_batch = []

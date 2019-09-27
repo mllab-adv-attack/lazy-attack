@@ -14,6 +14,7 @@ import tensorflow as tf
 import numpy as np
 import cifar10_input
 from pgd_attack import LinfPGDAttack
+from utils import imp_file_name
 
 # import os
 
@@ -260,7 +261,7 @@ class Impenetrable(object):
 
                 if adv_corr == len(x_adv_batch):
 
-                    suc_flag = self.validation(x, y_hard)
+                    suc_flag = self.validation(x, y_hard, sess)
                     
                     # special early stop for soft_label 4
                     if self.soft_label == 4:
@@ -293,7 +294,7 @@ class Impenetrable(object):
     def set_pgd_val(self):
         self.set_pgd(self.val_eps, self.val_eps/4.0, self.val_num_steps, True)
 
-    def validation(self, x, y_hard):
+    def validation(self, x, y_hard, sess):
         
         print()
 
@@ -409,7 +410,7 @@ if __name__ == '__main__':
     parser.add_argument('--save_dir_num', default=10, type=int)
     parser.add_argument('--loss_func', default='xent', type=str)
     # PGD (training)
-    parser.add_argument('--pgd_eps', default=8, help='Attack eps', type=int)
+    parser.add_argument('--pgd_eps', default=8, help='Attack eps', type=float)
     parser.add_argument('--pgd_num_steps', default=20, type=int)
     parser.add_argument('--pgd_step_size', default=2, type=float)
     parser.add_argument('--pgd_random_start', action='store_true')
@@ -428,7 +429,7 @@ if __name__ == '__main__':
     parser.add_argument('--soft_label', default=0, help='0: hard gt, +:soft inferred, -: -(target label+1)', type=int)
     # PGD (evaluation)
     parser.add_argument('--val_step_per', default=1, help="validation per val_step. =< 0 means no eval", type=int)
-    parser.add_argument('--val_eps', default=8, help='Evaluation eps', type=int)
+    parser.add_argument('--val_eps', default=8, help='Evaluation eps', type=float)
     parser.add_argument('--val_num_steps', default=20, help="validation PGD number of steps per PGD", type=int)
     parser.add_argument('--val_restarts', default=20, help="validation PGD restart numbers per eps", type=int)
     params = parser.parse_args()
@@ -445,26 +446,8 @@ if __name__ == '__main__':
         np.random.seed(params.imp_random_seed)
         print('random seed set to:', params.imp_random_seed)
 
-    meta_name = 'nat' if params.model_dir == 'naturally_trained' else 'adv'
-    meta_name += '_pgd' + '_' + str(params.pgd_eps) \
-                 + '_' + str(params.pgd_num_steps) \
-                 + '_' + str(params.pgd_step_size) \
-                 + ('_rand' if params.pgd_random_start else '') \
-                 + '_' + str(params.pgd_restarts)
-    meta_name += '_imp' + ('_' + str(params.imp_eps)) \
-                 + ('_' + str(params.imp_num_steps)) \
-                 + ('_' + str(params.imp_step_size)) \
-                 + ('_' + str(params.imp_random_start)) \
-                 + ('_' + str(params.imp_random_seed)) \
-                 + ('_' + str(params.imp_pp))
-    meta_name += ('_rep' if params.imp_rep else '')
-    meta_name += ('_adam' if params.imp_adam else '') + ('_nosign' if params.imp_no_sign else '')
-    meta_name += ('_corr' if params.corr_only else '') + ('_fail' if params.fail_only else '')
-    meta_name += '_val' + ('_' + str(params.val_step_per)) \
-                 + ('_' + str(params.val_eps)) \
-                 + ('_' + str(params.val_num_steps)) \
-                 + ('_' + str(params.val_restarts))
-    meta_name += '_' + str(params.soft_label)
+    # make file name
+    meta_name = imp_file_name(params)
 
     from model import Model
 
@@ -504,7 +487,7 @@ if __name__ == '__main__':
             else:
                 indices = np.load('/data/home/gaon/lazy-attack/cifar10_data/fail_indices_untargeted.npy')
         else:
-            indices = [i for i in range(params.sample_size)]
+            indices = [i for i in range(params.sample_size + params.bstart)]
 
         # load data
         bstart = params.bstart
