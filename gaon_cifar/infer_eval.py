@@ -41,12 +41,18 @@ if __name__ == '__main__':
     parser.add_argument('--delta', default=40, type=int)
     parser.add_argument('--lr', default=1e-3, type=float)
     parser.add_argument('--sample_size', default=1000, type=int)
+    parser.add_argument('--bstart', default=0, type=int)
 
-    # pgd settings
+    # pgd (filename) settings
     parser.add_argument('--eps', default=8.0, type=float)
     parser.add_argument('--num_steps', default=10, type=int)
     parser.add_argument('--step_size', default=2.0, type=float)
-    parser.add_argument('--restarts', default=20, type=int)
+    
+    # pgd (eval) settings
+    parser.add_argument('--val_eps', default=8.0, type=float)
+    parser.add_argument('--val_num_steps', default=20, type=int)
+    parser.add_argument('--val_step_size', default=2.0, type=float)
+    parser.add_argument('--val_restarts', default=20, type=int)
 
     args = parser.parse_args()
 
@@ -77,12 +83,17 @@ y_input = tf.placeholder(
     tf.int64,
     shape=None
 )
+
 generator = tf.make_template('generator', Generator, f_dim=64, output_size=32, c_dim=3, is_training=False)
 
+noise = generator(x_input)
+x_safe = x_input + args.delta * noise
+x_safe_clipped = tf.clip_by_value(x_safe, 0, 255)
+
 pgd = LinfPGDAttack(model,
-                    args.eps,
-                    args.num_steps,
-                    args.step_size,
+                    args.val_eps,
+                    args.val_num_steps,
+                    args.val_step_size,
                     True,
                     'xent')
 
@@ -137,11 +148,6 @@ with tf.Session() as sess:
     trainable_variables = tf.trainable_variables()
     variables_to_train = [var for var in trainable_variables if var.name not in restore_vars_name_list]
 
-    train_step = tf.train.AdamOptimizer(learning_rate).minimize(
-        total_loss,
-        global_step=global_step,
-        var_list=variables_to_train)
-
     sess.run(tf.global_variables_initializer())
     opt_saver = tf.train.Saver(restore_vars)
     opt_saver.restore(sess, model_file)
@@ -188,48 +194,67 @@ with tf.Session() as sess:
         if (len(x_full_batch) >= num_eval_examples) or bstart >= len(indices):
             break
 
-        # Adjust num_eval_examples. Iterate over the samples batch-by-batch
-        num_eval_examples = len(x_full_batch)
+    # Adjust num_eval_examples. Iterate over the samples batch-by-batch
+    num_eval_examples = len(x_full_batch)
 
-        if num_eval_examples > args.batch_size :
-            eval_batch_size = args.eval_batch_size
-        else:
-            eval_batch_size = min(args.eval_batch_size, num_eval_examples)
+    if num_eval_examples > args.eval_batch_size :
+        eval_batch_size = args.eval_batch_size
+    else:
+        eval_batch_size = min(args.eval_batch_size, num_eval_examples)
 
-        num_batches = int(math.ceil(num_eval_examples / eval_batch_size))
+    num_batches = int(math.ceil(num_eval_examples / eval_batch_size))
 
-        print('Iterating over {} batches'.format(num_batches))
+    print('Iterating over {} batches'.format(num_batches))
 
-        x_full_batch = x_full_batch.astype(np.float32)
+    x_full_batch = x_full_batch.astype(np.float32)
 
-        full_mask = []
+    full_mask = []
 
-        for ibatch in range(num_batches):
-            bstart = ibatch * eval_batch_size
-            bend = min(bstart + eval_batch_size, num_eval_examples)
-            print('batch {} - {}'.format(bstart, bend-1))
+    for ibatch in range(num_batches):
+        bstart = ibatch * eval_batch_size
+        bend = min(bstart + eval_batch_size, num_eval_examples)
+        print('batch {}-{}'.format(bstart, bend-1))
 
-            x_batch = x_full_batch[bstart:bend, :]
-            y_batch = y_full_batch[bstart:bend]
+        x_batch = x_full_batch[bstart:bend, :]
+        y_batch = y_full_batch[bstart:bend]
+        
+        correct_prediction = sess.run(model.correct_prediction,
+                                       feed_dict={model.x_input: x_batch,
+                                                  model.y_input: y_batch})
 
-            mask = np.array([True for _ in range(len(y_batch))])
+        print('original acc: {}'.format(np.sum(correct_prediction)))
 
-            for _ in range(args.restarts):
-                
-                x_batch_attacked = pgd.perturb(x_batch, y_batch, sess,
-                                       proj=True, reverse=False, rand=True)
+        [x_batch_safe, noise_batch] = sess.run([x_safe_clipped, noise],
+                                feed_dict={x_input: x_batch})
 
-                correct_prediction = sess.sun(model.correct_prediction,
-                                               feed_dict={model.x_input: x_batch_attacked,
-                                                          model.y_input: y_batch})
+        print(np.amax(np.abs(noise_batch)))
+        print(np.amin(x_batch_safe), np.amax(x_batch_safe))
+        print(np.amax(np.abs(x_batch_safe-x_batch)), args.delta)
 
-                mask *= correct_prediction
+        assert np.amin(x_batch_safe) >= (0-1e-3) and np.amax(x_batch_safe) <= (255.0+1e-3)
+        assert np.amax(np.abs(x_batch_safe-x_batch)) <= args.delta+1e-3
 
-            full_mask.append(mask)
+        mask = np.array([True for _ in range(len(y_batch))])
 
-            print('{}/{} safe'.format(np.sum(mask), np.size(mask)))
+        for _ in range(args.val_restarts):
+            
+            x_batch_attacked, _ = pgd.perturb(x_batch_safe, y_batch, sess,
+                                   proj=True, reverse=False, rand=True)
 
-        full_mask = np.concatenate(full_mask)
+            correct_prediction = sess.run(model.correct_prediction,
+                                           feed_dict={model.x_input: x_batch_attacked,
+                                                      model.y_input: y_batch})
 
-        print("evaluation accuracy: {:.2f}".format(np.mean(full_mask)*100))
+            mask *= correct_prediction
+
+            if np.sum(mask)==0:
+                break
+
+        full_mask.append(mask)
+
+        print('{}/{} safe'.format(np.sum(mask), np.size(mask)))
+
+    full_mask = np.concatenate(full_mask)
+
+    print("evaluation accuracy: {:.2f}".format(np.mean(full_mask)*100))
 

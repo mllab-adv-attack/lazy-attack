@@ -29,7 +29,7 @@ if __name__ == '__main__':
     # save & load path
     parser.add_argument('--data_path', default='../cifar10_data', type=str)
     parser.add_argument('--model_dir', default='naturally_trained', type=str)
-    parser.add_argument('--save_dir', default='safe_net', type=str)
+    parser.add_argument('--save_dir', default='safe_net_no_aug', type=str)
     parser.add_argument('--no_save', action='store_true')
     parser.add_argument('--no_overwrite', action='store_true')
 
@@ -149,7 +149,8 @@ if model_file is None:
 with tf.Session() as sess:
 
     # initialize data augmentation
-    cifar = cifar10_input.AugmentedCIFAR10Data(raw_cifar, sess, model)
+    #cifar = cifar10_input.AugmentedCIFAR10Data(raw_cifar, sess, model)
+    cifar = raw_cifar
 
     # set index for evaluation data
     eval_indice = np.array([i for i in range(len(raw_cifar.eval_data.ys))])
