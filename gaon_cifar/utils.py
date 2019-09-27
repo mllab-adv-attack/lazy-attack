@@ -38,7 +38,6 @@ def infer_file_name(args):
     meta_name = 'nat' if args.model_dir == 'naturally_trained' else 'adv'
     meta_name += '_lr' + str(args.lr)
     meta_name += '_delta' + str(args.delta)
-    meta_name += '_natloss' if args.nat_loss else ''
     meta_name += '_pgd' + '_' + str(args.eps) \
         + '_' + str(args.num_steps) \
         + '_' + str(args.step_size)

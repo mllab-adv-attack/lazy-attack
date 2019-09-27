@@ -30,7 +30,7 @@ if __name__ == '__main__':
     parser.add_argument('--data_path', default='../cifar10_data', type=str)
     parser.add_argument('--model_dir', default='naturally_trained', type=str)
     parser.add_argument('--save_dir', default='safe_net', type=str)
-    parser.add_argumetn('--no_save', action='store_true')
+    parser.add_argument('--no_save', action='store_true')
     parser.add_argument('--no_overwrite', action='store_true')
 
     # training parameters
@@ -125,7 +125,7 @@ train_summaries = [
     tf.summary.scalar('acc safe_pgd', full_model.safe_pgd_accuracy),
     tf.summary.scalar('loss', total_loss),
     tf.summary.scalar('l2 dist', l2_dist),
-    tf.summary.scalar('image', full_model.x_safe),
+    tf.summary.image('image', full_model.x_safe),
 ]
 train_merged_summaries = tf.summary.merge(train_summaries)
 eval_summaries = [
@@ -134,7 +134,7 @@ eval_summaries = [
     tf.summary.scalar('acc safe_pgd (eval)', full_model.safe_pgd_accuracy),
     tf.summary.scalar('loss (eval)', total_loss),
     tf.summary.scalar('l2 dist (eval)', l2_dist),
-    tf.summary.scalar('image (eval)', full_model.x_safe),
+    tf.summary.image('image (eval)', full_model.x_safe),
 ]
 eval_merged_summaries = tf.summary.merge(eval_summaries)
 
@@ -153,7 +153,7 @@ with tf.Session() as sess:
 
     # set index for evaluation data
     eval_indice = np.array([i for i in range(len(raw_cifar.eval_data.ys))])
-    np.randon.shuffle(eval_indice)
+    np.random.shuffle(eval_indice)
 
     # Initialize the summary writer, global variables, and our time counter.
     if not args.no_save:
