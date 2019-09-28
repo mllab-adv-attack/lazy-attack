@@ -230,11 +230,10 @@ with tf.Session() as sess:
             if not args.no_save:
                 summary_writer.add_summary(train_merged_summaries_batch, global_step.eval(sess))
             # evaluate on test set
-            eval_bstart = (ii//num_summary_steps)*eval_batch_size
-            eval_bend = (ii//num_summary_steps+1)*eval_batch_size
+            #eval_bstart = (ii//num_summary_steps)*eval_batch_size
+            #eval_bend = (ii//num_summary_steps+1)*eval_batch_size
 
-            eval_x_batch = raw_cifar.eval_data.xs[eval_indice[eval_bstart:eval_bend]]
-            eval_y_batch = raw_cifar.eval_data.ys[eval_indice[eval_bstart:eval_bend]]
+            eval_x_batch, eval_y_batch = raw_cifar.eval_data.get_next_batch(eval_batch_size, multiple_passes=True)
             eval_dict = {full_model.x_input: eval_x_batch,
                          full_model.y_input: eval_y_batch}
             total_loss_batch, safe_pgd_acc_batch, orig_acc_batch, safe_acc_batch, \
