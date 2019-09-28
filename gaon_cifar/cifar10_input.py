@@ -119,7 +119,7 @@ class DataSubset(object):
         self.batch_start = 0
         self.cur_order = np.random.permutation(self.n)
 
-    def get_next_batch(self, batch_size, multiple_passes=False, reshuffle_after_pass=True):
+    def get_next_batch(self, batch_size, multiple_passes=False, reshuffle_after_pass=True, get_indices=False):
         if self.n < batch_size:
             raise ValueError('Batch size can be at most the dataset size')
         if not multiple_passes:
@@ -127,8 +127,9 @@ class DataSubset(object):
             if actual_batch_size <= 0:
                 raise ValueError('Pass through the dataset is complete.')
             batch_end = self.batch_start + actual_batch_size
-            batch_xs = self.xs[self.cur_order[self.batch_start : batch_end], ...]
-            batch_ys = self.ys[self.cur_order[self.batch_start : batch_end], ...]
+            indice = self.cur_order[self.batch_start:batch_end]
+            batch_xs = self.xs[indice, ...]
+            batch_ys = self.ys[indice, ...]
             self.batch_start += actual_batch_size
             return batch_xs, batch_ys
         actual_batch_size = min(batch_size, self.n - self.batch_start)
@@ -137,10 +138,17 @@ class DataSubset(object):
                 self.cur_order = np.random.permutation(self.n)
             self.batch_start = 0
         batch_end = self.batch_start + batch_size
-        batch_xs = self.xs[self.cur_order[self.batch_start : batch_end], ...]
-        batch_ys = self.ys[self.cur_order[self.batch_start : batch_end], ...]
+        indice = self.cur_order[self.batch_start:batch_end]
+        batch_xs = self.xs[indice, ...]
+        batch_ys = self.ys[indice, ...]
         self.batch_start += actual_batch_size
-        return batch_xs, batch_ys
+        if get_indices:
+            return batch_xs, batch_ys, indice
+        else:
+            return batch_xs, batch_ys
+
+    def get_full_order(self):
+        return self.cur_order
 
 
 class AugmentedDataSubset(object):

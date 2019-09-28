@@ -18,7 +18,7 @@ import cifar10_input
 from infer_model import Model as Safe_model
 from infer_target import Model as Target_model
 
-from utils import infer_file_name
+from utils import infer_file_name, load_imp_data
 
 import argparse
 
@@ -80,6 +80,8 @@ eval_batch_size = args.eval_batch_size
 
 # Setting up the data and the model
 raw_cifar = cifar10_input.CIFAR10Data(data_path)
+imp_cifar = load_imp_data(args)
+
 global_step = tf.train.get_or_create_global_step()
 
 model = Target_model('eval')
@@ -213,14 +215,26 @@ with tf.Session() as sess:
 
     # Main training loop
     for ii in range(max_num_training_steps):
-        x_batch, y_batch = cifar.train_data.get_next_batch(training_batch_size,
-                                                           multiple_passes=True)
+        x_batch, y_batch, indices = cifar.train_data.get_next_batch(training_batch_size,
+                                                           multiple_passes=True,
+                                                           get_indices=True)
+
 
         # Actual training step
-        nat_dict = {full_model.x_input: x_batch,
-                    full_model.y_input: y_batch}
+
+        if args.use_d:
+            imp_batch = imp_cifar[indices, ...]
+
+            nat_dict = {full_model.x_input: x_batch,
+                        full_model.y_input: y_batch,
+                        full_model.x_input_alg: imp_batch}
+        else:
+            nat_dict = {full_model.x_input: x_batch,
+                        full_model.y_input: y_batch}
 
         assert 0 <= np.amin(x_batch) and np.amax(x_batch) <= 255.0
+        assert 0 <= np.amin(imp_batch) and np.amax(imp_batch) <= 255.0
+        assert np.amax(np.abs(imp_batch-x_batch)) <= 40
 
         start = timer()
         if args.use_d:

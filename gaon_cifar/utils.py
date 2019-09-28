@@ -1,4 +1,9 @@
 import tensorflow as tf
+import numpy as np
+
+LOAD_DATA_DIR = '/data/home/gaon/lazy-attack/cifar10_data/'
+CIFAR10_TRAIN_DATA_SIZE = 50000
+FILE_BATCH_SIZE = 1000
 
 
 def imp_file_name(args):
@@ -35,3 +40,16 @@ def infer_file_name(args):
     if args.use_d:
         meta_name += '_dlr' + str(args.d_lr)
     return meta_name
+
+
+def load_imp_data(args):
+    final_dir = 'imp_nat_fixed/' if args.model_dir == 'naturally_trained' else 'imp_adv_fixed/'
+
+    data_dir = LOAD_DATA_DIR + final_dir
+
+    posfix_li = [('imp_train_fixed_'+str(idx)) for idx in range(0, CIFAR10_TRAIN_DATA_SIZE, FILE_BATCH_SIZE)]
+    filename_li = [(str_idx + '_' + str(FILE_BATCH_SIZE) + '.npy') for str_idx in posfix_li]
+    fullname_li = [(data_dir + filename) for filename in filename_li]
+    data_li = [np.load(fullname) for fullname in fullname_li]
+    data = np.concatenate(data_li)
+    return data
