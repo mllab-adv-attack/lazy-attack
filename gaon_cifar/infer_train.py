@@ -29,7 +29,7 @@ if __name__ == '__main__':
     # save & load path
     parser.add_argument('--data_path', default='../cifar10_data', type=str)
     parser.add_argument('--model_dir', default='naturally_trained', type=str)
-    parser.add_argument('--save_dir', default='safe_net_no_aug', type=str)
+    parser.add_argument('--save_dir', default='safe_net_no_aug_d', type=str)
     parser.add_argument('--no_save', action='store_true')
     parser.add_argument('--no_overwrite', action='store_true')
 
@@ -40,12 +40,16 @@ if __name__ == '__main__':
     parser.add_argument('--num_output_steps', default=1, type=int)
     parser.add_argument('--num_summary_steps', default=100, type=int)
     parser.add_argument('--num_checkpoint_steps', default=1000, type=int)
-    parser.add_argument('--lr', default=1e-3, type=float)
+    parser.add_argument('--g_lr', default=1e-3, type=float)
     parser.add_argument('--num_eval_examples', default=10000, type=int)
     parser.add_argument('--training_batch_size', default=128, type=int)
     parser.add_argument('--eval_batch_size', default=100, type=int)
     parser.add_argument('--eval_on_cpu', action='store_true')
     parser.add_argument('--delta', default=40, type=int)
+
+    # discriminator settings
+    parser.add_argument('--use_d', action='store_true')
+    parser.add_argument('--d_lr', default=1e-3, type=float)
 
     # pgd settings
     parser.add_argument('--eps', default=8.0, type=float)
@@ -67,7 +71,8 @@ max_num_training_steps = args.max_num_training_steps
 num_output_steps = args.num_output_steps
 num_summary_steps = args.num_summary_steps
 num_checkpoint_steps = args.num_checkpoint_steps
-lr = args.lr
+g_lr = args.g_lr
+d_lr = args.d_lr
 data_path = args.data_path
 training_batch_size = args.training_batch_size
 eval_batch_size = args.eval_batch_size
@@ -82,15 +87,26 @@ full_model = Safe_model('train', model, args)
 
 # Setting up the optimizer
 boundaries = [0, 40000, 60000]
-values = [lr, lr/10, lr/100]
 boundaries = boundaries[1:]
-learning_rate = tf.train.piecewise_constant(
+g_values = [g_lr, g_lr/10, g_lr/100]
+g_learning_rate = tf.train.piecewise_constant(
     tf.cast(global_step, tf.int32),
     boundaries,
-    values)
+    g_values)
+d_values = [d_lr, d_lr/10, d_lr/100]
+d_learning_rate = tf.train.piecewise_constant(
+    tf.cast(global_step, tf.int32),
+    boundaries,
+    d_values)
 
 # set up metrics
-total_loss = full_model.safe_pgd_mean_xent
+safe_pgd_loss = full_model.safe_pgd_mean_xent
+total_loss = safe_pgd_loss
+if args.use_d:
+    d_loss = full_model.d_loss
+    g_loss = full_model.g_loss
+    total_loss += d_loss
+    total_loss += g_loss
 safe_pgd_acc = full_model.safe_pgd_accuracy
 orig_acc = full_model.orig_accuracy
 safe_acc = full_model.safe_accuracy
@@ -119,23 +135,33 @@ if not args.no_save:
 # - eval of different runs
 
 saver = tf.train.Saver()
+
 train_summaries = [
     tf.summary.scalar('acc orig', full_model.orig_accuracy),
     tf.summary.scalar('acc safe', full_model.safe_accuracy),
     tf.summary.scalar('acc safe_pgd', full_model.safe_pgd_accuracy),
-    tf.summary.scalar('loss', total_loss),
+    tf.summary.scalar('safe loss', safe_pgd_loss),
     tf.summary.scalar('l2 dist', l2_dist),
     tf.summary.image('image', full_model.x_safe),
 ]
+if args.use_d:
+    train_summaries.append(tf.summary.scalar('d loss', d_loss))
+    train_summaries.append(tf.summary.scalar('g loss', g_loss))
+    train_summaries.append(tf.summary.scalar('total loss', total_loss))
 train_merged_summaries = tf.summary.merge(train_summaries)
+
 eval_summaries = [
     tf.summary.scalar('acc orig (eval)', full_model.orig_accuracy),
     tf.summary.scalar('acc safe (eval)', full_model.safe_accuracy),
     tf.summary.scalar('acc safe_pgd (eval)', full_model.safe_pgd_accuracy),
-    tf.summary.scalar('loss (eval)', total_loss),
+    tf.summary.scalar('safe loss (eval)', safe_pgd_loss),
     tf.summary.scalar('l2 dist (eval)', l2_dist),
     tf.summary.image('image (eval)', full_model.x_safe),
 ]
+if args.use_d:
+    eval_summaries.append(tf.summary.scalar('d loss (eval)', d_loss))
+    eval_summaries.append(tf.summary.scalar('g loss (eval)', g_loss))
+    eval_summaries.append(tf.summary.scalar('total loss (eval)', total_loss))
 eval_merged_summaries = tf.summary.merge(eval_summaries)
 
 # keep the configuration file with the model for reproducibility
@@ -148,13 +174,9 @@ if model_file is None:
 
 with tf.Session() as sess:
 
-    # initialize data augmentation
+    # no data augmentation
     #cifar = cifar10_input.AugmentedCIFAR10Data(raw_cifar, sess, model)
     cifar = raw_cifar
-
-    # set index for evaluation data
-    eval_indice = np.array([i for i in range(len(raw_cifar.eval_data.ys))])
-    np.random.shuffle(eval_indice)
 
     # Initialize the summary writer, global variables, and our time counter.
     if not args.no_save:
@@ -177,8 +199,8 @@ with tf.Session() as sess:
     trainable_variables = tf.trainable_variables()
     variables_to_train = [var for var in trainable_variables if var.name not in restore_vars_name_list]
 
-    train_step = tf.train.AdamOptimizer(learning_rate).minimize(
-        total_loss,
+    train_step = tf.train.AdamOptimizer(g_learning_rate).minimize(
+        safe_pgd_loss,
         global_step=global_step,
         var_list=variables_to_train)
 
@@ -201,10 +223,20 @@ with tf.Session() as sess:
         assert 0 <= np.amin(x_batch) and np.amax(x_batch) <= 255.0
 
         start = timer()
-        _, total_loss_batch, safe_pgd_acc_batch, orig_acc_batch, safe_acc_batch, \
-        x_safe, x_safe_pgd, l2_dist_batch, train_merged_summaries_batch = \
-            sess.run([train_step, total_loss, safe_pgd_acc, orig_acc, safe_acc,
-                      full_model.x_safe, full_model.x_safe_pgd, l2_dist, train_merged_summaries], feed_dict=nat_dict)
+        if args.use_d:
+            _, safe_pgd_loss_batch, safe_pgd_acc_batch, orig_acc_batch, safe_acc_batch, \
+                x_safe, x_safe_pgd, l2_dist_batch, train_merged_summaries_batch, \
+                total_loss_batch, d_loss_batch, g_loss_batch = \
+                sess.run([train_step, safe_pgd_loss, safe_pgd_acc, orig_acc, safe_acc,
+                          full_model.x_safe, full_model.x_safe_pgd, l2_dist, train_merged_summaries,
+                          total_loss, d_loss, g_loss],
+                         feed_dict=nat_dict)
+        else:
+            _, safe_pgd_loss_batch, safe_pgd_acc_batch, orig_acc_batch, safe_acc_batch, \
+                x_safe, x_safe_pgd, l2_dist_batch, train_merged_summaries_batch = \
+                sess.run([train_step, safe_pgd_loss, safe_pgd_acc, orig_acc, safe_acc,
+                          full_model.x_safe, full_model.x_safe_pgd, l2_dist, train_merged_summaries],
+                         feed_dict=nat_dict)
         end = timer()
 
         assert 0 <= np.amin(x_safe) and np.amax(x_safe) <= 255.0
@@ -217,9 +249,13 @@ with tf.Session() as sess:
             print('Step {}:    ({})'.format(ii, datetime.now()))
             print('    orig accuracy {:.4}%'.format(orig_acc_batch * 100))
             print('    safe accuracy {:.4}%'.format(safe_acc_batch * 100))
-            print('    safe_pgd accuracy {:.4}%'.format(safe_pgd_acc_batch * 100))
+            print('    safe(pgd) accuracy {:.4}%'.format(safe_pgd_acc_batch * 100))
             print('    l2 dist {:.4}'.format(l2_dist_batch))
-            print('    total loss {:.6}'.format(total_loss_batch))
+            print('    safe(pgd) loss {:.6}'.format(safe_pgd_loss_batch))
+            if args.use_d:
+                print('    d loss {:.6}'.format(d_loss_batch))
+                print('    g loss {:.6}'.format(g_loss_batch))
+                print('    total loss {:.6}'.format(total_loss_batch))
             if ii != 0:
                 print('    {} examples per second'.format(
                     num_output_steps * training_batch_size / training_time))
@@ -236,17 +272,21 @@ with tf.Session() as sess:
             eval_x_batch, eval_y_batch = raw_cifar.eval_data.get_next_batch(eval_batch_size, multiple_passes=True)
             eval_dict = {full_model.x_input: eval_x_batch,
                          full_model.y_input: eval_y_batch}
-            total_loss_batch, safe_pgd_acc_batch, orig_acc_batch, safe_acc_batch, \
+            safe_pgd_loss_batch, safe_pgd_acc_batch, orig_acc_batch, safe_acc_batch, \
                 x_safe, x_safe_pgd, l2_dist_batch, eval_merged_summaries_batch = \
-                sess.run([total_loss, safe_pgd_acc, orig_acc, safe_acc,
+                sess.run([safe_pgd_loss, safe_pgd_acc, orig_acc, safe_acc,
                           full_model.x_safe, full_model.x_safe_pgd, l2_dist, eval_merged_summaries], feed_dict=eval_dict)
             
             print('    orig accuracy (eval) {:.4}%'.format(orig_acc_batch * 100))
             print('    safe accuracy (eval) {:.4}%'.format(safe_acc_batch * 100))
-            print('    safe_pgd accuracy (eval) {:.4}%'.format(safe_pgd_acc_batch * 100))
+            print('    safe(pgd) accuracy (eval) {:.4}%'.format(safe_pgd_acc_batch * 100))
             print('    l2 dist (eval) {:.4}'.format(l2_dist_batch))
-            print('    total loss (eval) {:.6}'.format(total_loss_batch))
-            
+            print('    safe(pgd) loss (eval) {:.6}'.format(safe_pgd_loss_batch))
+            if args.use_d:
+                print('    d loss (eval) {:.6}'.format(d_loss_batch))
+                print('    g loss (eval) {:.6}'.format(g_loss_batch))
+                print('    total loss (eval) {:.6}'.format(total_loss_batch))
+
             if not args.no_save:
                 summary_writer.add_summary(eval_merged_summaries_batch, global_step.eval(sess))
 

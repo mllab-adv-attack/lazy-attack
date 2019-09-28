@@ -1,15 +1,5 @@
 import tensorflow as tf
 
-def get_shape(tensor):
-    return tensor.get_shape().as_list()
-
-def batch_norm(*args, **kwargs):
-    with tf.name_scope('bn'):
-        bn = tf.layers.batch_normalization(*args, **kwargs)
-    return bn
-
-def lkrelu(x, slope=0.01):
-    return tf.maximum(slope * x, x)
 
 def imp_file_name(args):
     meta_name = 'nat' if args.model_dir == 'naturally_trained' else 'adv'
@@ -34,11 +24,14 @@ def imp_file_name(args):
     meta_name += '_' + str(args.soft_label)
     return meta_name
 
+
 def infer_file_name(args):
     meta_name = 'nat' if args.model_dir == 'naturally_trained' else 'adv'
-    meta_name += '_lr' + str(args.lr)
+    meta_name += '_lr' + str(args.g_lr)
     meta_name += '_delta' + str(args.delta)
     meta_name += '_pgd' + '_' + str(args.eps) \
         + '_' + str(args.num_steps) \
         + '_' + str(args.step_size)
+    if args.use_d:
+        meta_name += '_dlr' + str(args.d_lr)
     return meta_name
