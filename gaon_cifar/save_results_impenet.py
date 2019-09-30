@@ -29,7 +29,6 @@ if __name__ == '__main__':
     parser.add_argument('--model_dir', default='naturally_trained', type=str)
     parser.add_argument('--corr_only', action='store_true')
     parser.add_argument('--fail_only', action='store_true')
-    parser.add_argument('--save_dir_num', default=10, type=int)
     parser.add_argument('--loss_func', default='xent', type=str)
     # PGD (training)
     parser.add_argument('--pgd_eps', default=8, help='Attack eps', type=float)
@@ -38,19 +37,19 @@ if __name__ == '__main__':
     parser.add_argument('--pgd_random_start', action='store_true')
     parser.add_argument('--pgd_restarts', default=20, help="training PGD restart numbers per eps", type=int)
     # impenetrable
-    parser.add_argument('--imp_eps', default=0, help='<= 0 for no imp eps', type=float)
+    parser.add_argument('--imp_delta', default=0, help='<= 0 for no imp eps', type=float)
     parser.add_argument('--imp_random_start', default=0, help='eps for random start of image', type=float)
     parser.add_argument('--imp_random_seed', default=0, help='random seed for random start of image', type=int)
     parser.add_argument('--imp_gray_start', action='store_true')
-    parser.add_argument('--imp_num_steps', default=1000, help='0 for until convergence', type=int)
-    parser.add_argument('--imp_step_size', default=1, type=float)
+    parser.add_argument('--imp_num_steps', default=500, help='0 for until convergence', type=int)
+    parser.add_argument('--imp_step_size', default=0.5, type=float)
     parser.add_argument('--imp_rep', action='store_true', help='use reptile instead of MAML')
     parser.add_argument('--imp_pp', default=0, help='step intervals to sum PGD gradients. <= 0 for pure MAML', type=int)
     parser.add_argument('--imp_adam', action='store_true')
     parser.add_argument('--imp_no_sign', action='store_true')
     parser.add_argument('--soft_label', default=0, help='0: hard gt, +:soft inferred, -: -(target label+1)', type=int)
     # PGD (evaluation)
-    parser.add_argument('--val_step_per', default=1, help="validation per val_step. =< 0 means no eval", type=int)
+    parser.add_argument('--val_step_per', default=0, help="validation per val_step. =< 0 means no eval", type=int)
     parser.add_argument('--val_eps', default=8, help='Evaluation eps', type=float)
     parser.add_argument('--val_num_steps', default=20, help="validation PGD number of steps per PGD", type=int)
     parser.add_argument('--val_restarts', default=20, help="validation PGD restart numbers per eps", type=int)
@@ -149,10 +148,7 @@ if __name__ == '__main__':
         # Adjust num_eval_examples. Iterate over the samples batch-by-batch
         num_eval_examples = len(x_full_batch)
 
-        if params.val_step_per > 0:
-            eval_batch_size = 1
-        else:
-            eval_batch_size = min(config['eval_batch_size'], num_eval_examples)
+        eval_batch_size = 10
 
         num_batches = int(math.ceil(num_eval_examples / eval_batch_size))
 

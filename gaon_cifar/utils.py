@@ -12,7 +12,7 @@ def imp_file_name(args):
         + '_' + str(args.pgd_step_size) \
         + ('_rand' if args.pgd_random_start else '') \
         + '_' + str(args.pgd_restarts)
-    meta_name += '_imp' + ('_' + str(args.imp_eps)) \
+    meta_name += '_imp' + ('_' + str(args.imp_delta)) \
         + ('_' + str(args.imp_num_steps)) \
         + ('_' + str(args.imp_step_size)) \
         + ('_' + str(args.imp_random_start)) \
