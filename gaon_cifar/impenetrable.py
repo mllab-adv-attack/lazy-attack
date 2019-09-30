@@ -70,7 +70,6 @@ class Impenetrable(object):
         self.softmax = self.model.softmax
 
     def fortify(self, x_orig, y, sess):
-        num_classes = 10
 
         suc_flag = False
 
@@ -122,10 +121,10 @@ class Impenetrable(object):
             if self.pp > 0:
                 x_adv_batch = x_adv_batch_full
                 #print(x_adv_batch.shape)
-                y_hard_val_batch = np.tile(y, (len(x_adv_batch), 1))
+                y_batch = np.tile(y, (len(x_adv_batch), 1))
             
-            adv_loss, adv_loss_full, adv_corr, grad = sess.run([self.loss2, self.loss2_full,
-                                                                self.model.num_correct2, self.grad2],
+            adv_loss, adv_loss_full, adv_corr, grad = sess.run([self.loss, self.loss_full,
+                                                                self.model.num_correct, self.grad],
                                                                feed_dict={self.model.x_input: x_adv_batch,
                                                                           self.model.y_input: y_batch})
             
@@ -159,7 +158,7 @@ class Impenetrable(object):
             if self.imp_delta > 0:
                 x_res = np.clip(x_res, x_orig-self.imp_delta, x_orig+self.imp_delta)
 
-            res_loss, res_corr, res_soft = sess.run([self.loss2, self.model.num_correct2, self.softmax],
+            res_loss, res_corr, res_soft = sess.run([self.loss, self.model.num_correct, self.softmax],
                                                     feed_dict={self.model.x_input: x_res,
                                                                self.model.y_input: y})
 
@@ -227,7 +226,7 @@ class Impenetrable(object):
                 x_val, _ = self.pgd.perturb(x_val_batch, y_hard_val_batch, sess,
                                          proj=True, reverse=False, rand=True)
 
-                cur_corr = sess.run(self.model.num_correct2,
+                cur_corr = sess.run(self.model.num_correct,
                                     feed_dict={self.model.x_input: x_val,
                                                self.model.y_input: y})
 
@@ -240,7 +239,7 @@ class Impenetrable(object):
             x_val, _ = self.pgd.perturb(x_val_batch, y_hard_val_batch, sess,
                                      proj=True, reverse=False, rand=True)
 
-            cur_corr = sess.run(self.model.num_correct2,
+            cur_corr = sess.run(self.model.num_correct,
                                 feed_dict={self.model.x_input: x_val,
                                            self.model.y_input: y})
 
