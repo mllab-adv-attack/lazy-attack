@@ -33,7 +33,7 @@ def PGD(x, y, model_fn, attack_params):
 
 class Model(object):
 
-    def __init__(self, mode, model, args, discriminator=None):
+    def __init__(self, mode, model, args):
 
         self.mode = mode
         self.model = model
@@ -47,9 +47,9 @@ class Model(object):
             'bounds': self.bounds,
         }
 
-        self._build_model()
+        self.use_d = args.use_d
 
-        self.discriminator = None
+        self._build_model()
 
     def _build_model(self):
         assert self.mode == 'train' or self.mode == 'eval'
@@ -108,7 +108,7 @@ class Model(object):
                 logits=safe_pgd_pre_softmax, labels=self.y_input)
             self.safe_pgd_mean_xent = tf.reduce_mean(safe_pgd_y_xent)
 
-        if self.discriminator:
+        if self.use_d:
             self.discriminator = Discriminator(is_train)
 
             self.x_input_alg = tf.placeholder(

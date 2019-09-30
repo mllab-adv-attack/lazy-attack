@@ -1,4 +1,3 @@
-import tensorflow as tf
 import numpy as np
 
 LOAD_DATA_DIR = '/data/home/gaon/lazy-attack/cifar10_data/'
@@ -39,6 +38,7 @@ def infer_file_name(args):
         + '_' + str(args.step_size)
     if args.use_d:
         meta_name += '_dlr' + str(args.d_lr)
+        meta_name += '_w' + str(args.gan_weight)
     return meta_name
 
 

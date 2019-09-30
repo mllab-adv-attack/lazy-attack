@@ -29,7 +29,7 @@ if __name__ == '__main__':
     # save & load path
     parser.add_argument('--data_path', default='../cifar10_data', type=str)
     parser.add_argument('--model_dir', default='naturally_trained', type=str)
-    parser.add_argument('--save_dir', default='safe_net_no_aug_d', type=str)
+    parser.add_argument('--save_dir', default='safe_net_d', type=str)
     parser.add_argument('--no_save', action='store_true')
     parser.add_argument('--no_overwrite', action='store_true')
 
@@ -49,6 +49,7 @@ if __name__ == '__main__':
 
     # discriminator settings
     parser.add_argument('--use_d', action='store_true')
+    parser.add_argument('--gan_weight', default=1, type=float)
     parser.add_argument('--d_lr', default=1e-3, type=float)
 
     # pgd settings
@@ -105,14 +106,14 @@ d_learning_rate = tf.train.piecewise_constant(
 safe_pgd_loss = full_model.safe_pgd_mean_xent
 total_loss = safe_pgd_loss
 if args.use_d:
-    d_loss = full_model.d_loss
-    g_loss = full_model.g_loss
+    d_loss = args.gan_weight * full_model.d_loss
+    g_loss = args.gan_weight * full_model.g_loss
     total_loss += d_loss
     total_loss += g_loss
 safe_pgd_acc = full_model.safe_pgd_accuracy
 orig_acc = full_model.orig_accuracy
 safe_acc = full_model.safe_accuracy
-l2_dist = tf.reduce_mean(tf.norm((full_model.x_safe-full_model.x_input)/255, axis=0))
+l2_dist = tf.reduce_mean(tf.norm(tf.reshape((full_model.x_safe-full_model.x_input)/255, shape=[-1, 32*32*3]), axis=1))
 
 # Setting up the Tensorboard and checkpoint outputs
 meta_name = infer_file_name(args)
@@ -160,10 +161,6 @@ eval_summaries = [
     tf.summary.scalar('l2 dist (eval)', l2_dist),
     tf.summary.image('image (eval)', full_model.x_safe),
 ]
-if args.use_d:
-    eval_summaries.append(tf.summary.scalar('d loss (eval)', d_loss))
-    eval_summaries.append(tf.summary.scalar('g loss (eval)', g_loss))
-    eval_summaries.append(tf.summary.scalar('total loss (eval)', total_loss))
 eval_merged_summaries = tf.summary.merge(eval_summaries)
 
 # keep the configuration file with the model for reproducibility
@@ -200,27 +197,39 @@ with tf.Session() as sess:
 
     trainable_variables = tf.trainable_variables()
     variables_to_train = [var for var in trainable_variables if var.name not in restore_vars_name_list]
+    
+    variables_to_train_g = [var for var in trainable_variables if (var.name not in restore_vars_name_list and
+                                                                 'generator' in var.name)]
+    variables_to_train_d = [var for var in trainable_variables if (var.name not in restore_vars_name_list and
+                                                                 'discriminator' in var.name)]
 
-    train_step = tf.train.AdamOptimizer(g_learning_rate).minimize(
-        safe_pgd_loss,
+    train_step_g = tf.train.AdamOptimizer(g_learning_rate).minimize(
+        total_loss,
         global_step=global_step,
-        var_list=variables_to_train)
+        var_list=variables_to_train_g)
+
+    if args.use_d:
+        train_step_d = tf.train.AdamOptimizer(d_learning_rate).minimize(
+            total_loss,
+            global_step=global_step,
+            var_list=variables_to_train_d)
 
     sess.run(tf.global_variables_initializer())
     opt_saver = tf.train.Saver(restore_vars)
     opt_saver.restore(sess, model_file)
     print('restore success!')
 
+    extra_update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+
     training_time = 0.0
 
     # Main training loop
     for ii in range(max_num_training_steps):
+
+        # Get data
         x_batch, y_batch, indices = cifar.train_data.get_next_batch(training_batch_size,
                                                            multiple_passes=True,
                                                            get_indices=True)
-
-
-        # Actual training step
 
         if args.use_d:
             imp_batch = imp_cifar[indices, ...]
@@ -232,23 +241,26 @@ with tf.Session() as sess:
             nat_dict = {full_model.x_input: x_batch,
                         full_model.y_input: y_batch}
 
+        # Sanity check
         assert 0 <= np.amin(x_batch) and np.amax(x_batch) <= 255.0
-        assert 0 <= np.amin(imp_batch) and np.amax(imp_batch) <= 255.0
-        assert np.amax(np.abs(imp_batch-x_batch)) <= 40
+        if args.use_d:
+            assert 0 <= np.amin(imp_batch) and np.amax(imp_batch) <= 255.0
+            assert np.amax(np.abs(imp_batch-x_batch)) <= 40
 
+        # Train
         start = timer()
         if args.use_d:
-            _, safe_pgd_loss_batch, safe_pgd_acc_batch, orig_acc_batch, safe_acc_batch, \
+            _, _, _, safe_pgd_loss_batch, safe_pgd_acc_batch, orig_acc_batch, safe_acc_batch, \
                 x_safe, x_safe_pgd, l2_dist_batch, train_merged_summaries_batch, \
                 total_loss_batch, d_loss_batch, g_loss_batch = \
-                sess.run([train_step, safe_pgd_loss, safe_pgd_acc, orig_acc, safe_acc,
+                sess.run([train_step_g, train_step_d, extra_update_ops, safe_pgd_loss, safe_pgd_acc, orig_acc, safe_acc,
                           full_model.x_safe, full_model.x_safe_pgd, l2_dist, train_merged_summaries,
                           total_loss, d_loss, g_loss],
                          feed_dict=nat_dict)
         else:
-            _, safe_pgd_loss_batch, safe_pgd_acc_batch, orig_acc_batch, safe_acc_batch, \
+            _, _, safe_pgd_loss_batch, safe_pgd_acc_batch, orig_acc_batch, safe_acc_batch, \
                 x_safe, x_safe_pgd, l2_dist_batch, train_merged_summaries_batch = \
-                sess.run([train_step, safe_pgd_loss, safe_pgd_acc, orig_acc, safe_acc,
+                sess.run([train_step_g, extra_update_ops, safe_pgd_loss, safe_pgd_acc, orig_acc, safe_acc,
                           full_model.x_safe, full_model.x_safe_pgd, l2_dist, train_merged_summaries],
                          feed_dict=nat_dict)
         end = timer()
@@ -275,6 +287,7 @@ with tf.Session() as sess:
                     num_output_steps * training_batch_size / training_time))
                 training_time = 0.0
 
+            #sys.exit()
         # Tensorboard summaries
         if ii % num_summary_steps == 0:
             if not args.no_save:
@@ -282,7 +295,7 @@ with tf.Session() as sess:
             # evaluate on test set
             #eval_bstart = (ii//num_summary_steps)*eval_batch_size
             #eval_bend = (ii//num_summary_steps+1)*eval_batch_size
-
+            
             eval_x_batch, eval_y_batch = raw_cifar.eval_data.get_next_batch(eval_batch_size, multiple_passes=True)
             eval_dict = {full_model.x_input: eval_x_batch,
                          full_model.y_input: eval_y_batch}
@@ -296,10 +309,12 @@ with tf.Session() as sess:
             print('    safe(pgd) accuracy (eval) {:.4}%'.format(safe_pgd_acc_batch * 100))
             print('    l2 dist (eval) {:.4}'.format(l2_dist_batch))
             print('    safe(pgd) loss (eval) {:.6}'.format(safe_pgd_loss_batch))
+            '''
             if args.use_d:
                 print('    d loss (eval) {:.6}'.format(d_loss_batch))
                 print('    g loss (eval) {:.6}'.format(g_loss_batch))
                 print('    total loss (eval) {:.6}'.format(total_loss_batch))
+            '''
 
             if not args.no_save:
                 summary_writer.add_summary(eval_merged_summaries_batch, global_step.eval(sess))

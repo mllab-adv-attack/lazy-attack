@@ -39,9 +39,15 @@ if __name__ == '__main__':
     parser.add_argument('--eval_batch_size', default=100, type=int)
     parser.add_argument('--eval_on_cpu', action='store_true')
     parser.add_argument('--delta', default=40, type=int)
-    parser.add_argument('--lr', default=1e-3, type=float)
+    parser.add_argument('--g_lr', default=1e-3, type=float)
     parser.add_argument('--sample_size', default=1000, type=int)
     parser.add_argument('--bstart', default=0, type=int)
+    parser.add_argument('--train', action='store_true')
+    
+    # discriminator settings
+    parser.add_argument('--use_d', action='store_true')
+    parser.add_argument('--gan_weight', default=1, type=float)
+    parser.add_argument('--d_lr', default=1e-3, type=float)
 
     # pgd (filename) settings
     parser.add_argument('--eps', default=8.0, type=float)
@@ -64,13 +70,10 @@ tf.set_random_seed(args.tf_random_seed)
 np.random.seed(args.np_random_seed)
 
 # Setting up training parameters
-lr = args.lr
 data_path = args.data_path
 eval_batch_size = args.eval_batch_size
 
-
 # Setting up the data and the model
-raw_cifar = cifar10_input.CIFAR10Data(data_path)
 global_step = tf.train.get_or_create_global_step()
 
 model = Model('eval')
@@ -84,7 +87,7 @@ y_input = tf.placeholder(
     shape=None
 )
 
-generator = tf.make_template('generator', Generator, f_dim=64, output_size=32, c_dim=3, is_training=False)
+generator = tf.make_template('generator', Generator, f_dim=64, output_size=32, c_dim=3, is_training=args.train)
 
 noise = generator(x_input)
 x_safe = x_input + args.delta * noise
@@ -97,17 +100,9 @@ pgd = LinfPGDAttack(model,
                     True,
                     'xent')
 
-# Setting up the optimizer
-boundaries = [0, 40000, 60000]
-values = [lr, lr/10, lr/100]
-boundaries = boundaries[1:]
-learning_rate = tf.train.piecewise_constant(
-    tf.cast(global_step, tf.int32),
-    boundaries,
-    values)
-
 # Setting up the Tensorboard and checkpoint outputs
 meta_name = infer_file_name(args)
+print(meta_name)
 
 model_dir = MODEL_PATH + args.save_dir + '/' + meta_name
 if not os.path.exists(model_dir):
@@ -141,7 +136,7 @@ with tf.Session() as sess:
     for var_name, saved_var_name in var_names:
         curr_var = tf.get_default_graph().get_tensor_by_name(var_name)
         var_shape = curr_var.get_shape().as_list()
-        if var_shape == saved_shapes[saved_var_name] and 'global_step' not in saved_var_name:
+        if var_shape == saved_shapes[saved_var_name]:
             restore_vars.append(curr_var)
             restore_vars_name_list.append(saved_var_name + ':0')
 
@@ -209,6 +204,8 @@ with tf.Session() as sess:
     x_full_batch = x_full_batch.astype(np.float32)
 
     full_mask = []
+    safe_correct_num = 0
+    l2_dist = []
 
     for ibatch in range(num_batches):
         bstart = ibatch * eval_batch_size
@@ -223,16 +220,23 @@ with tf.Session() as sess:
                                                   model.y_input: y_batch})
 
         print('original acc: {}'.format(np.sum(correct_prediction)))
-
+        
         [x_batch_safe, noise_batch] = sess.run([x_safe_clipped, noise],
                                 feed_dict={x_input: x_batch})
+        
+        correct_prediction = sess.run(model.correct_prediction,
+                                       feed_dict={model.x_input: x_batch_safe,
+                                                  model.y_input: y_batch})
 
-        print(np.amax(np.abs(noise_batch)))
-        print(np.amin(x_batch_safe), np.amax(x_batch_safe))
-        print(np.amax(np.abs(x_batch_safe-x_batch)), args.delta)
+        print('safe acc: {}'.format(np.sum(correct_prediction)))
+        safe_correct_num += np.sum(correct_prediction)
 
         assert np.amin(x_batch_safe) >= (0-1e-3) and np.amax(x_batch_safe) <= (255.0+1e-3)
         assert np.amax(np.abs(x_batch_safe-x_batch)) <= args.delta+1e-3
+
+        l2_dist_batch = np.mean(np.linalg.norm((x_batch_safe-x_batch).reshape(x_batch.shape[0], -1)/255, axis=1))
+        print('l2 dist: {:.4f}'.format(l2_dist_batch))
+
 
         mask = np.array([True for _ in range(len(y_batch))])
 
@@ -250,11 +254,14 @@ with tf.Session() as sess:
             if np.sum(mask)==0:
                 break
 
+        l2_dist.append(l2_dist_batch)
         full_mask.append(mask)
 
         print('{}/{} safe'.format(np.sum(mask), np.size(mask)))
 
     full_mask = np.concatenate(full_mask)
 
+    print("safe accuracy: {:.2f}".format(safe_correct_num/np.size(full_mask)*100))
     print("evaluation accuracy: {:.2f}".format(np.mean(full_mask)*100))
+    print("l2 dist: {:.4f}".format(np.mean(l2_dist)))
 
