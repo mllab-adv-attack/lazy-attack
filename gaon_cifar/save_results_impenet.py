@@ -16,7 +16,8 @@ import cifar10_input
 
 # import os
 
-from impenetrable import Impenetrable, result
+from impenetrable import Impenetrable
+from safe_maml import result
 
 if __name__ == '__main__':
     import argparse
@@ -47,7 +48,6 @@ if __name__ == '__main__':
     parser.add_argument('--imp_pp', default=0, help='step intervals to sum PGD gradients. <= 0 for pure MAML', type=int)
     parser.add_argument('--imp_adam', action='store_true')
     parser.add_argument('--imp_no_sign', action='store_true')
-    parser.add_argument('--soft_label', default=0, help='0: hard gt, +:soft inferred, -: -(target label+1)', type=int)
     # PGD (evaluation)
     parser.add_argument('--val_step_per', default=0, help="validation per val_step. =< 0 means no eval", type=int)
     parser.add_argument('--val_eps', default=8, help='Evaluation eps', type=float)
@@ -160,35 +160,17 @@ if __name__ == '__main__':
         step_imp = []  # num steps accumulator
         l2_li = [] # l2 distance accumulator
 
-        # y to one-hot
-        # y_full_batch: (batch, 1)
-        if params.soft_label == 0:
-            # y_full_batch_oh: ground truth label (batch, 10)
-            y_full_batch_oh = np.eye(10)[y_full_batch.reshape(-1)]
-        elif params.soft_label > 0:
-            # y_full_batch_oh: softmax layer output (batch, 10)
-            y_full_batch_oh = logit_full_batch
-            y_full_batch_oh = np.exp(y_full_batch_oh) / np.sum(np.exp(y_full_batch_oh), axis=1).reshape(-1, 1)
-        else:
-            # y_full_batch_oh: target label (batch, 10)
-            print('target label:', -params.soft_label-1)
-            target_batch = np.array([(-params.soft_label - 1) for _ in range(len(x_full_batch))])
-            y_full_batch_oh = np.eye(10)[target_batch.reshape(-1)]
-
         for ibatch in range(num_batches):
             bstart = ibatch * eval_batch_size
             bend = min(bstart + eval_batch_size, num_eval_examples)
             print('batch size: {}'.format(bend - bstart))
 
             x_batch = x_full_batch[bstart:bend, :]
-            y_batch = y_full_batch_oh[bstart:bend, :]
-            y_batch_gt = y_full_batch[bstart:bend]
-            # y_batch_gt: ground truth label in one-hot (batch, 10)
-            y_batch_gt = np.eye(10)[y_batch_gt.reshape(-1)]
+            y_batch = y_full_batch[bstart:bend]
 
             # run our algorithm
             print('fortifying image ', bstart)
-            x_batch_imp, step_batch_imp = impenet.fortify(x_batch, y_batch, sess, y_batch_gt)
+            x_batch_imp, step_batch_imp = impenet.fortify(x_batch, y_batch, sess)
             print()
 
             # evaluation

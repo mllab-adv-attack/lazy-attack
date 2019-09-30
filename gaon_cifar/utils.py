@@ -25,7 +25,6 @@ def imp_file_name(args):
         + ('_' + str(args.val_eps)) \
         + ('_' + str(args.val_num_steps)) \
         + ('_' + str(args.val_restarts))
-    meta_name += '_' + str(args.soft_label)
     return meta_name
 
 
