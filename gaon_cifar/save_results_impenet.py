@@ -16,8 +16,9 @@ import cifar10_input
 
 # import os
 
-from impenetrable import Impenetrable
+from impenetrable_batch import Impenetrable
 from safe_maml import result
+from model import Model
 
 if __name__ == '__main__':
     import argparse
@@ -42,7 +43,7 @@ if __name__ == '__main__':
     parser.add_argument('--imp_random_start', default=0, help='eps for random start of image', type=float)
     parser.add_argument('--imp_random_seed', default=0, help='random seed for random start of image', type=int)
     parser.add_argument('--imp_gray_start', action='store_true')
-    parser.add_argument('--imp_num_steps', default=500, help='0 for until convergence', type=int)
+    parser.add_argument('--imp_num_steps', default=100, help='0 for until convergence', type=int)
     parser.add_argument('--imp_step_size', default=0.5, type=float)
     parser.add_argument('--imp_rep', action='store_true', help='use reptile instead of MAML')
     parser.add_argument('--imp_pp', default=0, help='step intervals to sum PGD gradients. <= 0 for pure MAML', type=int)
@@ -66,8 +67,6 @@ if __name__ == '__main__':
     if params.imp_random_start > 0:
         np.random.seed(params.imp_random_seed)
         print('random seed set to:', params.imp_random_seed)
-
-    from model import Model
 
     with open('config.json') as config_file:
         config = json.load(config_file)
@@ -148,7 +147,8 @@ if __name__ == '__main__':
         # Adjust num_eval_examples. Iterate over the samples batch-by-batch
         num_eval_examples = len(x_full_batch)
 
-        eval_batch_size = 100
+        eval_batch_size = min(100, num_eval_examples)
+        assert num_eval_examples < 100 or num_eval_examples%100==0
 
         num_batches = int(math.ceil(num_eval_examples / eval_batch_size))
 
@@ -169,7 +169,7 @@ if __name__ == '__main__':
             y_batch = y_full_batch[bstart:bend]
 
             # run our algorithm
-            print('fortifying image ', bstart)
+            print('fortifying image {} - {}'.format(bstart, bend-1))
             x_batch_imp, step_batch_imp = impenet.fortify(x_batch, y_batch, sess)
             print()
 
@@ -194,7 +194,7 @@ if __name__ == '__main__':
         # save image
         folder_name = './../cifar10_data/imp_adv_fixed/' if params.model_dir == 'adv_trained' \
             else './../cifar10_data/imp_nat_fixed/'
-        file_name = 'imp_train_fixed'
+        file_name = 'imp_train_fixed' + '_' + str(params.imp_delta)
         batch_name = '_' + str(params.bstart) + '_' + str(params.sample_size)
         common_name = folder_name + file_name + batch_name
         

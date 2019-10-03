@@ -12,6 +12,7 @@ from __future__ import print_function
 import tensorflow as tf
 import numpy as np
 from pgd_attack import LinfPGDAttack
+#import time
 
 # import os
 
@@ -120,7 +121,7 @@ class Impenetrable(object):
 
                 adv_loss, adv_loss_full, \
                     correct_predictions, grad = sess.run([self.loss, self.loss_full,
-                                                          self.model.correct_predictions, self.grad],
+                                                          self.model.correct_prediction, self.grad],
                                                          feed_dict={self.model.x_input: x_adv_batch,
                                                                     self.model.y_input: y})
 
@@ -139,7 +140,7 @@ class Impenetrable(object):
             # l1_dist = np.linalg.norm((x_adv - x).flatten(), 1) / x.size
             print("attack accuracy: {:.2f}%".format(np.mean(mask)*100))
             # print("l1 distance: {:.2f}".format(l1_dist))
-            print("adv loss: {:.20f}".format(adv_loss))
+            print("adv loss: {:.20f}".format(adv_loss/num_images))
 
             # restore image
             if self.adam:

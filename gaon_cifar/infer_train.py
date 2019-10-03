@@ -29,9 +29,10 @@ if __name__ == '__main__':
     # save & load path
     parser.add_argument('--data_path', default='../cifar10_data', type=str)
     parser.add_argument('--model_dir', default='naturally_trained', type=str)
-    parser.add_argument('--save_dir', default='safe_net_d', type=str)
+    parser.add_argument('--save_dir', default='safe_net', type=str)
     parser.add_argument('--no_save', action='store_true')
     parser.add_argument('--no_overwrite', action='store_true')
+    parser.add_argument('--resume', action='store_true')
 
     # training parameters
     parser.add_argument('--tf_random_seed', default=451760341, type=int)
@@ -127,9 +128,10 @@ if not args.no_save:
         if args.no_overwrite:
             print('folder already exists!')
             sys.exit()
-        else:
+        elif not args.resume:
             shutil.rmtree(save_dir)
             os.makedirs(save_dir)
+
 
 # We add accuracy and xent twice so we can easily make three types of
 # comparisons in Tensorboard:
@@ -217,6 +219,12 @@ with tf.Session() as sess:
     sess.run(tf.global_variables_initializer())
     opt_saver = tf.train.Saver(restore_vars)
     opt_saver.restore(sess, model_file)
+    
+    if args.resume:
+        save_file = tf.train.latest_checkpoint(save_dir)
+        full_saver = tf.train.Saver(variables_to_train + [global_step])
+        full_saver.restore(sess, save_file)
+
     print('restore success!')
 
     extra_update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
@@ -225,6 +233,7 @@ with tf.Session() as sess:
 
     # Main training loop
     for ii in range(max_num_training_steps):
+        print(global_step.eval(sess))
 
         # Get data
         x_batch, y_batch, indices = cifar.train_data.get_next_batch(training_batch_size,
