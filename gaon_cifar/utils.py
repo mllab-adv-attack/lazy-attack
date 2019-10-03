@@ -37,7 +37,10 @@ def infer_file_name(args):
         + '_' + str(args.step_size)
     if args.use_d:
         meta_name += '_dlr' + str(args.d_lr)
-        meta_name += '_w' + str(args.gan_weight)
+        meta_name += '_g' + str(args.g_weight)
+        meta_name += '_d' + str(args.d_weight)
+        meta_name += '_patch' if args.patch else ''
+        meta_name += ('_lo' + str(args.l1_weight)) if args.l1_loss else ''
     return meta_name
 
 

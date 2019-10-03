@@ -30,8 +30,8 @@ if __name__ == '__main__':
     parser.add_argument('--data_path', default='../cifar10_data', type=str)
     parser.add_argument('--model_dir', default='naturally_trained', type=str)
     parser.add_argument('--save_dir', default='safe_net', type=str)
-    parser.add_argument('--no_save', action='store_true')
-    parser.add_argument('--no_overwrite', action='store_true')
+    parser.add_argument('--save', action='store_true')
+    parser.add_argument('--overwrite', action='store_true')
     parser.add_argument('--resume', action='store_true')
 
     # training parameters
@@ -50,8 +50,12 @@ if __name__ == '__main__':
 
     # discriminator settings
     parser.add_argument('--use_d', action='store_true')
-    parser.add_argument('--gan_weight', default=1, type=float)
     parser.add_argument('--d_lr', default=1e-3, type=float)
+    parser.add_argument('--patch', action='store_true', help='use patch discriminator, (2x2)')
+    parser.add_argument('--l1_loss', action='store_true', help='use l1 loss on infer(x) and maml(x)')
+    parser.add_argument('--g_weight', default=1, type=float, help='loss weight for generator')
+    parser.add_argument('--d_weight', default=1, type=float, help='loss weight for discriminator')
+    parser.add_argument('--l1_weight', default=1, type=float, help='loss weight for l1')
 
     # pgd settings
     parser.add_argument('--eps', default=8.0, type=float)
@@ -107,10 +111,14 @@ d_learning_rate = tf.train.piecewise_constant(
 safe_pgd_loss = full_model.safe_pgd_mean_xent
 total_loss = safe_pgd_loss
 if args.use_d:
-    d_loss = args.gan_weight * full_model.d_loss
-    g_loss = args.gan_weight * full_model.g_loss
+    d_loss = args.g_weight * full_model.d_loss
+    g_loss = args.d_weight * full_model.g_loss
+    l1_loss = args.l1_weight * tf.losses.absolute_difference(full_model.x_input_alg, full_model.x_safe)
     total_loss += d_loss
     total_loss += g_loss
+    if args.l1_loss:
+        total_loss += l1_loss
+
 safe_pgd_acc = full_model.safe_pgd_accuracy
 orig_acc = full_model.orig_accuracy
 safe_acc = full_model.safe_accuracy
@@ -120,12 +128,12 @@ l2_dist = tf.reduce_mean(tf.norm(tf.reshape((full_model.x_safe-full_model.x_inpu
 meta_name = infer_file_name(args)
 
 model_dir = MODEL_PATH + args.model_dir
-if not args.no_save:
+if args.save:
     save_dir = MODEL_PATH + args.save_dir + '/' + meta_name
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
     else:
-        if args.no_overwrite:
+        if not args.overwrite:
             print('folder already exists!')
             sys.exit()
         elif not args.resume:
@@ -152,6 +160,7 @@ train_summaries = [
 if args.use_d:
     train_summaries.append(tf.summary.scalar('d loss', d_loss))
     train_summaries.append(tf.summary.scalar('g loss', g_loss))
+    train_summaries.append(tf.summary.scalar('l1 loss', l1_loss))
     train_summaries.append(tf.summary.scalar('total loss', total_loss))
 train_merged_summaries = tf.summary.merge(train_summaries)
 
@@ -176,11 +185,11 @@ if model_file is None:
 with tf.Session() as sess:
 
     # no data augmentation
-    #cifar = cifar10_input.AugmentedCIFAR10Data(raw_cifar, sess, model)
+    # cifar = cifar10_input.AugmentedCIFAR10Data(raw_cifar, sess, model)
     cifar = raw_cifar
 
     # Initialize the summary writer, global variables, and our time counter.
-    if not args.no_save:
+    if args.save:
         summary_writer = tf.summary.FileWriter(save_dir, sess.graph)
 
     # Restore variables if can, set optimizer
@@ -258,19 +267,19 @@ with tf.Session() as sess:
 
         # Train
         start = timer()
+        _, _, safe_pgd_loss_batch, safe_pgd_acc_batch, orig_acc_batch, safe_acc_batch, \
+            x_safe, x_safe_pgd, l2_dist_batch, train_merged_summaries_batch = \
+            sess.run([train_step_g, extra_update_ops, safe_pgd_loss, safe_pgd_acc, orig_acc, safe_acc,
+                      full_model.x_safe, full_model.x_safe_pgd, l2_dist, train_merged_summaries],
+                     feed_dict=nat_dict)
+
         if args.use_d:
-            _, _, _, safe_pgd_loss_batch, safe_pgd_acc_batch, orig_acc_batch, safe_acc_batch, \
-                x_safe, x_safe_pgd, l2_dist_batch, train_merged_summaries_batch, \
-                total_loss_batch, d_loss_batch, g_loss_batch = \
-                sess.run([train_step_g, train_step_d, extra_update_ops, safe_pgd_loss, safe_pgd_acc, orig_acc, safe_acc,
-                          full_model.x_safe, full_model.x_safe_pgd, l2_dist, train_merged_summaries,
-                          total_loss, d_loss, g_loss],
-                         feed_dict=nat_dict)
-        else:
             _, _, safe_pgd_loss_batch, safe_pgd_acc_batch, orig_acc_batch, safe_acc_batch, \
-                x_safe, x_safe_pgd, l2_dist_batch, train_merged_summaries_batch = \
-                sess.run([train_step_g, extra_update_ops, safe_pgd_loss, safe_pgd_acc, orig_acc, safe_acc,
-                          full_model.x_safe, full_model.x_safe_pgd, l2_dist, train_merged_summaries],
+                x_safe, x_safe_pgd, l2_dist_batch, train_merged_summaries_batch, \
+                total_loss_batch, d_loss_batch, g_loss_batch, l1_loss_batch = \
+                sess.run([train_step_d, extra_update_ops, safe_pgd_loss, safe_pgd_acc, orig_acc, safe_acc,
+                         full_model.x_safe, full_model.x_safe_pgd, l2_dist, train_merged_summaries,
+                         total_loss, d_loss, g_loss, l1_loss],
                          feed_dict=nat_dict)
         end = timer()
 
@@ -290,6 +299,7 @@ with tf.Session() as sess:
             if args.use_d:
                 print('    d loss {:.6}'.format(d_loss_batch))
                 print('    g loss {:.6}'.format(g_loss_batch))
+                print('    l1 loss {:.6}'.format(l1_loss_batch))
                 print('    total loss {:.6}'.format(total_loss_batch))
             if ii != 0:
                 print('    {} examples per second'.format(
@@ -299,7 +309,7 @@ with tf.Session() as sess:
             #sys.exit()
         # Tensorboard summaries
         if ii % num_summary_steps == 0:
-            if not args.no_save:
+            if args.save:
                 summary_writer.add_summary(train_merged_summaries_batch, global_step.eval(sess))
             # evaluate on test set
             #eval_bstart = (ii//num_summary_steps)*eval_batch_size
@@ -325,12 +335,12 @@ with tf.Session() as sess:
                 print('    total loss (eval) {:.6}'.format(total_loss_batch))
             '''
 
-            if not args.no_save:
+            if args.save:
                 summary_writer.add_summary(eval_merged_summaries_batch, global_step.eval(sess))
 
 
         # Write a checkpoint
-        if ii % num_checkpoint_steps == 0 and not args.no_save:
+        if ii % num_checkpoint_steps == 0 and args.save:
             saver.save(sess,
                        os.path.join(save_dir, 'checkpoint'),
                        global_step=global_step)

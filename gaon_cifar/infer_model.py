@@ -48,6 +48,7 @@ class Model(object):
         }
 
         self.use_d = args.use_d
+        self.patch = args.patch
 
         self._build_model()
 
@@ -109,7 +110,7 @@ class Model(object):
             self.safe_pgd_mean_xent = tf.reduce_mean(safe_pgd_y_xent)
 
         if self.use_d:
-            self.discriminator = Discriminator(is_train)
+            self.discriminator = Discriminator(self.patch, is_train)
 
             self.x_input_alg = tf.placeholder(
                 tf.float32,
