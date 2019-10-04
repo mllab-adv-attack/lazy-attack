@@ -19,7 +19,8 @@ def imp_file_name(args):
         + ('_' + str(args.imp_random_seed)) \
         + ('_' + str(args.imp_pp))
     meta_name += ('_rep' if args.imp_rep else '')
-    meta_name += ('_adam' if args.imp_adam else '') + ('_nosign' if args.imp_no_sign else '')
+    meta_name += ('_adam' if args.imp_adam else '') + ('_rms' if args.imp_rms else '')
+    meta_name += ('_nosign' if args.imp_no_sign else '')
     meta_name += ('_corr' if args.corr_only else '') + ('_fail' if args.fail_only else '')
     meta_name += '_val' + ('_' + str(args.val_step_per)) \
         + ('_' + str(args.val_eps)) \

@@ -26,14 +26,12 @@ def encoder_layer(inputs,
     IN is optional, LeakyReLU may be replaced by ReLU
     """
 
-    full_filter = [kernel_size, kernel_size, get_shape(inputs)[-1], filters]
-    full_stride = [1, strides, strides, 1]
 
     x = inputs
     if instance:
         x = instance_norm(x)
     x = lkrelu(x, slope=0.2)
-    x = tf.nn.conv2d(x, filter=full_filter, strides=full_stride, padding='same')
+    x = tf.keras.layers.Conv2D(filters, kernel_size, [strides, strides], padding='same')(x)
     return x
 
 
@@ -83,6 +81,9 @@ class Discriminator(object):
     def __call__(self, inputs):
         with tf.variable_scope('discriminator', reuse=tf.AUTO_REUSE):
 
+            inputs = tf.map_fn(lambda img: tf.image.per_image_standardization(img),
+                               inputs)
+
             inputs = encoder_layer(inputs, 32, 3, 2, False)
             inputs = encoder_layer(inputs, 64, 3, 2, False)
             inputs = encoder_layer(inputs, 128, 3, 2, False)
@@ -90,10 +91,7 @@ class Discriminator(object):
 
             if self.patch:
                 inputs = lkrelu(inputs, 0.2)
-                inputs = tf.nn.conv2d(inputs,
-                                      filter=[3, 3, get_shape(inputs)[-1], 1],
-                                      strides=[1, 2, 2, 1],
-                                      padding='same')
+                inputs = tf.keras.layers.Conv2D(1, 3, strides=[2, 2], padding='same')(inputs)
             else:
                 inputs = tf.layers.flatten(inputs)
                 inputs = tf.layers.dense(inputs, 1)

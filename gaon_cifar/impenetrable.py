@@ -36,6 +36,7 @@ class Impenetrable(object):
         self.val_num_steps = args.val_num_steps
         self.val_eps = args.val_eps
         self.adam = args.imp_adam
+        self.rms = args.imp_rms
         self.rep = args.imp_rep
         self.pp = args.imp_pp
         self.imp_no_sign = args.imp_no_sign
@@ -91,7 +92,7 @@ class Impenetrable(object):
         print("original accuracy: {:.2f}%".format(orig_corr/num_images*100))
         print("original loss: {:.20f}".format(orig_loss/num_images))
 
-        # adam parameters
+        # adam & rms parameters
         beta1 = 0.9
         beta2 = 0.999
         m = np.zeros_like(x)

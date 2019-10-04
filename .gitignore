@@ -44,6 +44,8 @@ imagenet-admm/tools/data/**
 *tensorboard.py
 *run_general*
 *.test_exp
+*.par.*
+*.ipynb
 *__par_main_wrapper__.py
 *.swp
 *.png

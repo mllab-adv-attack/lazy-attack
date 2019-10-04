@@ -48,7 +48,7 @@ if __name__ == '__main__':
     parser.add_argument('--eval_on_cpu', action='store_true')
     parser.add_argument('--delta', default=40, type=int)
 
-    # discriminator settings
+    # gan settings
     parser.add_argument('--use_d', action='store_true')
     parser.add_argument('--d_lr', default=1e-3, type=float)
     parser.add_argument('--patch', action='store_true', help='use patch discriminator, (2x2)')
@@ -242,7 +242,6 @@ with tf.Session() as sess:
 
     # Main training loop
     for ii in range(max_num_training_steps):
-        print(global_step.eval(sess))
 
         # Get data
         x_batch, y_batch, indices = cifar.train_data.get_next_batch(training_batch_size,
@@ -263,7 +262,7 @@ with tf.Session() as sess:
         assert 0 <= np.amin(x_batch) and np.amax(x_batch) <= 255.0
         if args.use_d:
             assert 0 <= np.amin(imp_batch) and np.amax(imp_batch) <= 255.0
-            assert np.amax(np.abs(imp_batch-x_batch)) <= 40
+            assert np.amax(np.abs(imp_batch-x_batch)) <= args.delta
 
         # Train
         start = timer()
@@ -285,6 +284,7 @@ with tf.Session() as sess:
 
         assert 0 <= np.amin(x_safe) and np.amax(x_safe) <= 255.0
         assert 0 <= np.amin(x_safe_pgd) and np.amax(x_safe_pgd) <= 255.0
+        assert np.amax(np.abs(x_safe-x_batch)) <= args.delta
 
         training_time += end - start
 

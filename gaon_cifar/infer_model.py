@@ -120,5 +120,9 @@ class Model(object):
             d_alg_out = self.discriminator(self.x_input_alg)
             d_safe_out = self.discriminator(self.x_safe)
 
-            self.d_loss = tf.reduce_mean(tf.nn.l2_loss(d_alg_out-1) + tf.nn.l2_loss(d_safe_out))
-            self.g_loss = tf.reduce_mean(tf.nn.l2_loss(d_safe_out-1))
+            real = tf.ones_like(d_alg_out)
+            fake = tf.zeros_like(d_alg_out)
+
+            self.d_loss = tf.reduce_mean(tf.losses.mean_squared_error(d_alg_out, real) +
+                                         tf.losses.mean_squared_error(d_safe_out, fake))
+            self.g_loss = tf.reduce_mean(tf.losses.mean_squared_error(d_safe_out, real))

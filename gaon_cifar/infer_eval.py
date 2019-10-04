@@ -46,8 +46,12 @@ if __name__ == '__main__':
     
     # discriminator settings
     parser.add_argument('--use_d', action='store_true')
-    parser.add_argument('--gan_weight', default=1, type=float)
     parser.add_argument('--d_lr', default=1e-3, type=float)
+    parser.add_argument('--patch', action='store_true', help='use patch discriminator, (2x2)')
+    parser.add_argument('--l1_loss', action='store_true', help='use l1 loss on infer(x) and maml(x)')
+    parser.add_argument('--g_weight', default=1, type=float, help='loss weight for generator')
+    parser.add_argument('--d_weight', default=1, type=float, help='loss weight for discriminator')
+    parser.add_argument('--l1_weight', default=1, type=float, help='loss weight for l1')
 
     # pgd (filename) settings
     parser.add_argument('--eps', default=8.0, type=float)
