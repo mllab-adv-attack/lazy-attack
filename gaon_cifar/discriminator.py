@@ -19,8 +19,8 @@ def lkrelu(x, slope=0.01):
 
 def encoder_layer(inputs,
                   filters=16,
-                  kernel_size=3,
-                  strides=2,
+                  kernel=3,
+                  stride=2,
                   instance=True):
     """Builds a generic encoder layer made of Conv2D-IN-LeakyReLU
     IN is optional, LeakyReLU may be replaced by ReLU
@@ -31,7 +31,7 @@ def encoder_layer(inputs,
     if instance:
         x = instance_norm(x)
     x = lkrelu(x, slope=0.2)
-    x = tf.keras.layers.Conv2D(filters, kernel_size, [strides, strides], padding='same')(x)
+    x = tf.layers.conv2d(x, filters, kernel_size=[kernel, kernel], strides=[stride, stride], padding='same')
     return x
 
 
@@ -91,7 +91,7 @@ class Discriminator(object):
 
             if self.patch:
                 inputs = lkrelu(inputs, 0.2)
-                inputs = tf.keras.layers.Conv2D(1, 3, strides=[2, 2], padding='same')(inputs)
+                inputs = tf.layers.conv2d(inputs, 1, kernel_size=[3, 3], strides=[2, 2], padding='same')
             else:
                 inputs = tf.layers.flatten(inputs)
                 inputs = tf.layers.dense(inputs, 1)

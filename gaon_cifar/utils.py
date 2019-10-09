@@ -19,7 +19,7 @@ def imp_file_name(args):
         + ('_' + str(args.imp_random_seed)) \
         + ('_' + str(args.imp_pp))
     meta_name += ('_rep' if args.imp_rep else '')
-    meta_name += ('_adam' if args.imp_adam else '') + ('_rms' if args.imp_rms else '')
+    meta_name += ('_adam' if args.imp_adam else '') + ('_rms' if args.imp_rms else '') + ('_adag' if args.imp_adagrad else '')
     meta_name += ('_nosign' if args.imp_no_sign else '')
     meta_name += ('_corr' if args.corr_only else '') + ('_fail' if args.fail_only else '')
     meta_name += '_val' + ('_' + str(args.val_step_per)) \
@@ -41,7 +41,7 @@ def infer_file_name(args):
         meta_name += '_g' + str(args.g_weight)
         meta_name += '_d' + str(args.d_weight)
         meta_name += '_patch' if args.patch else ''
-        meta_name += ('_lo' + str(args.l1_weight)) if args.l1_loss else ''
+    meta_name += ('_lo' + str(args.l1_weight)) if args.l1_loss else ''
     return meta_name
 
 
@@ -50,7 +50,7 @@ def load_imp_data(args):
 
     data_dir = LOAD_DATA_DIR + final_dir
 
-    posfix_li = [('imp_train_fixed_'+str(idx)) for idx in range(0, CIFAR10_TRAIN_DATA_SIZE, FILE_BATCH_SIZE)]
+    posfix_li = [('imp_train_fixed_{:.1f}_'.format(args.delta)+str(idx)) for idx in range(0, CIFAR10_TRAIN_DATA_SIZE, FILE_BATCH_SIZE)]
     filename_li = [(str_idx + '_' + str(FILE_BATCH_SIZE) + '.npy') for str_idx in posfix_li]
     fullname_li = [(data_dir + filename) for filename in filename_li]
     data_li = [np.load(fullname) for fullname in fullname_li]

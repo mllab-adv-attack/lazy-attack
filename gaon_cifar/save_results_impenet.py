@@ -48,6 +48,8 @@ if __name__ == '__main__':
     parser.add_argument('--imp_rep', action='store_true', help='use reptile instead of MAML')
     parser.add_argument('--imp_pp', default=0, help='step intervals to sum PGD gradients. <= 0 for pure MAML', type=int)
     parser.add_argument('--imp_adam', action='store_true')
+    parser.add_argument('--imp_rms', action='store_true')
+    parser.add_argument('--imp_adagrad', action='store_true')
     parser.add_argument('--imp_no_sign', action='store_true')
     # PGD (evaluation)
     parser.add_argument('--val_step_per', default=0, help="validation per val_step. =< 0 means no eval", type=int)

@@ -61,10 +61,15 @@ class Model(object):
                 tf.float32,
                 shape=[None, 32, 32, 3])
             self.y_input = tf.placeholder(tf.int64, shape=None)
+            
+            self.x_input_alg = tf.placeholder(
+                tf.float32,
+                shape=[None, 32, 32, 3]
+            )
 
         with tf.variable_scope('', reuse=tf.AUTO_REUSE):
-            safe_generator = tf.make_template('generator', generator, f_dim=64, output_size=32, c_dim=3, is_training=is_train)
-            self.x_safe = self.x_input + self.delta * safe_generator(self.x_input)
+            self.generator = tf.make_template('generator', generator, f_dim=64, output_size=32, c_dim=3, is_training=is_train)
+            self.x_safe = self.x_input + self.delta * self.generator(self.x_input)
             self.x_safe = tf.clip_by_value(self.x_safe, self.bounds[0], self.bounds[1])
 
         with tf.variable_scope('', reuse=tf.AUTO_REUSE):
@@ -112,17 +117,12 @@ class Model(object):
         if self.use_d:
             self.discriminator = Discriminator(self.patch, is_train)
 
-            self.x_input_alg = tf.placeholder(
-                tf.float32,
-                shape=[None, 32, 32, 3]
-            )
+            self.d_alg_out = self.discriminator(self.x_input_alg)
+            self.d_safe_out = self.discriminator(self.x_safe)
 
-            d_alg_out = self.discriminator(self.x_input_alg)
-            d_safe_out = self.discriminator(self.x_safe)
+            real = tf.ones_like(self.d_alg_out)
+            fake = tf.zeros_like(self.d_alg_out)
 
-            real = tf.ones_like(d_alg_out)
-            fake = tf.zeros_like(d_alg_out)
-
-            self.d_loss = tf.reduce_mean(tf.losses.mean_squared_error(d_alg_out, real) +
-                                         tf.losses.mean_squared_error(d_safe_out, fake))
-            self.g_loss = tf.reduce_mean(tf.losses.mean_squared_error(d_safe_out, real))
+            self.d_loss = tf.reduce_mean(tf.losses.mean_squared_error(self.d_alg_out, real) +
+                                         tf.losses.mean_squared_error(self.d_safe_out, fake))
+            self.g_loss = tf.reduce_mean(tf.losses.mean_squared_error(self.d_safe_out, real))

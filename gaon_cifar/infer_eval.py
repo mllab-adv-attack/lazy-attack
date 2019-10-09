@@ -14,6 +14,7 @@ import numpy as np
 import cifar10_input
 
 from infer_model import generator as Generator
+from discriminator import Discriminator
 from model import Model as Model
 
 from utils import infer_file_name
@@ -57,6 +58,7 @@ if __name__ == '__main__':
     parser.add_argument('--eps', default=8.0, type=float)
     parser.add_argument('--num_steps', default=10, type=int)
     parser.add_argument('--step_size', default=2.0, type=float)
+    parser.add_argument('--random_start', default=20, type=int)
     
     # pgd (eval) settings
     parser.add_argument('--val_eps', default=8.0, type=float)
@@ -92,6 +94,9 @@ y_input = tf.placeholder(
 )
 
 generator = tf.make_template('generator', Generator, f_dim=64, output_size=32, c_dim=3, is_training=args.train)
+if args.use_d:
+    discriminator = Discriminator(args.patch, is_training=False)
+    d_out = discriminator(x_input)
 
 noise = generator(x_input)
 x_safe = x_input + args.delta * noise
@@ -133,6 +138,14 @@ with tf.Session() as sess:
     # Restore variables if can, set optimizer
     reader = tf.train.NewCheckpointReader(model_file)
     saved_shapes = reader.get_variable_to_shape_map()
+    
+    '''
+    tvar = tf.trainable_variables()
+    for var in tvar:
+        print(var.name)
+    sys.exit()
+    '''
+
     var_names = sorted([(var.name, var.name.split(':')[0]) for var in tf.global_variables()
                         if var.name.split(':')[0] in saved_shapes])
     restore_vars = []
@@ -234,6 +247,13 @@ with tf.Session() as sess:
 
         print('safe acc: {}'.format(np.sum(correct_prediction)))
         safe_correct_num += np.sum(correct_prediction)
+
+        if args.use_d:
+            disc_out = sess.run(d_out,
+                                feed_dict={x_input: x_batch_safe})
+            #print('full disc:')
+            #print(np.mean(disc_out.reshape(disc_out.shape[0], -1), axis=1))
+            print('disc value: {}'.format(np.mean(disc_out)))
 
         assert np.amin(x_batch_safe) >= (0-1e-3) and np.amax(x_batch_safe) <= (255.0+1e-3)
         assert np.amax(np.abs(x_batch_safe-x_batch)) <= args.delta+1e-3

@@ -86,7 +86,8 @@ eval_batch_size = args.eval_batch_size
 
 # Setting up the data and the model
 raw_cifar = cifar10_input.CIFAR10Data(data_path)
-imp_cifar = load_imp_data(args)
+if args.use_d or args.l1_loss:
+    imp_cifar = load_imp_data(args)
 
 global_step = tf.train.get_or_create_global_step()
 
@@ -110,14 +111,14 @@ d_learning_rate = tf.train.piecewise_constant(
 # set up metrics
 safe_pgd_loss = full_model.safe_pgd_mean_xent
 total_loss = safe_pgd_loss
+if args.l1_loss:
+    l1_loss = tf.losses.absolute_difference(full_model.x_input_alg, full_model.x_safe)
+    total_loss += args.l1_weight * l1_loss
 if args.use_d:
-    d_loss = args.g_weight * full_model.d_loss
-    g_loss = args.d_weight * full_model.g_loss
-    l1_loss = args.l1_weight * tf.losses.absolute_difference(full_model.x_input_alg, full_model.x_safe)
-    total_loss += d_loss
-    total_loss += g_loss
-    if args.l1_loss:
-        total_loss += l1_loss
+    d_loss = full_model.d_loss
+    g_loss = full_model.g_loss
+    total_d_loss = total_loss + args.d_weight * d_loss
+    total_g_loss = total_loss + args.g_weight * g_loss
 
 safe_pgd_acc = full_model.safe_pgd_accuracy
 orig_acc = full_model.orig_accuracy
@@ -137,7 +138,7 @@ if args.save:
             print('folder already exists!')
             sys.exit()
         elif not args.resume:
-            shutil.rmtree(save_dir)
+            shutil.rmtree(save_dir, ignore_errors=True)
             os.makedirs(save_dir)
 
 
@@ -160,8 +161,9 @@ train_summaries = [
 if args.use_d:
     train_summaries.append(tf.summary.scalar('d loss', d_loss))
     train_summaries.append(tf.summary.scalar('g loss', g_loss))
-    train_summaries.append(tf.summary.scalar('l1 loss', l1_loss))
     train_summaries.append(tf.summary.scalar('total loss', total_loss))
+if args.l1_loss:
+    train_summaries.append(tf.summary.scalar('l1 loss', l1_loss))
 train_merged_summaries = tf.summary.merge(train_summaries)
 
 eval_summaries = [
@@ -215,13 +217,13 @@ with tf.Session() as sess:
                                                                  'discriminator' in var.name)]
 
     train_step_g = tf.train.AdamOptimizer(g_learning_rate).minimize(
-        total_loss,
+        total_loss if not args.use_d else total_g_loss,
         global_step=global_step,
         var_list=variables_to_train_g)
 
     if args.use_d:
         train_step_d = tf.train.AdamOptimizer(d_learning_rate).minimize(
-            total_loss,
+            total_d_loss,
             global_step=global_step,
             var_list=variables_to_train_d)
 
@@ -236,6 +238,13 @@ with tf.Session() as sess:
 
     print('restore success!')
 
+    '''
+    tvar = tf.trainable_variables()
+    for var in tvar:
+        print(var.name)
+    sys.exit()
+    '''
+
     extra_update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
 
     training_time = 0.0
@@ -248,7 +257,7 @@ with tf.Session() as sess:
                                                            multiple_passes=True,
                                                            get_indices=True)
 
-        if args.use_d:
+        if args.use_d or args.l1_loss:
             imp_batch = imp_cifar[indices, ...]
 
             nat_dict = {full_model.x_input: x_batch,
@@ -260,31 +269,37 @@ with tf.Session() as sess:
 
         # Sanity check
         assert 0 <= np.amin(x_batch) and np.amax(x_batch) <= 255.0
-        if args.use_d:
+        if args.use_d or args.l1_loss:
             assert 0 <= np.amin(imp_batch) and np.amax(imp_batch) <= 255.0
             assert np.amax(np.abs(imp_batch-x_batch)) <= args.delta
 
         # Train
         start = timer()
-        _, _, safe_pgd_loss_batch, safe_pgd_acc_batch, orig_acc_batch, safe_acc_batch, \
-            x_safe, x_safe_pgd, l2_dist_batch, train_merged_summaries_batch = \
-            sess.run([train_step_g, extra_update_ops, safe_pgd_loss, safe_pgd_acc, orig_acc, safe_acc,
-                      full_model.x_safe, full_model.x_safe_pgd, l2_dist, train_merged_summaries],
-                     feed_dict=nat_dict)
+
+        if args.l1_loss:
+            _, _, safe_pgd_loss_batch, safe_pgd_acc_batch, orig_acc_batch, safe_acc_batch, \
+                x_safe, x_safe_pgd, l2_dist_batch, l1_loss_batch, train_merged_summaries_batch = \
+                sess.run([train_step_g, extra_update_ops, safe_pgd_loss, safe_pgd_acc, orig_acc, safe_acc,
+                          full_model.x_safe, full_model.x_safe_pgd, l2_dist, l1_loss, train_merged_summaries],
+                         feed_dict=nat_dict)
+        else:
+            _, _, safe_pgd_loss_batch, safe_pgd_acc_batch, orig_acc_batch, safe_acc_batch, \
+                x_safe, x_safe_pgd, l2_dist_batch, train_merged_summaries_batch = \
+                sess.run([train_step_g, extra_update_ops, safe_pgd_loss, safe_pgd_acc, orig_acc, safe_acc,
+                          full_model.x_safe, full_model.x_safe_pgd, l2_dist, train_merged_summaries],
+                         feed_dict=nat_dict)
 
         if args.use_d:
-            _, _, safe_pgd_loss_batch, safe_pgd_acc_batch, orig_acc_batch, safe_acc_batch, \
-                x_safe, x_safe_pgd, l2_dist_batch, train_merged_summaries_batch, \
-                total_loss_batch, d_loss_batch, g_loss_batch, l1_loss_batch = \
-                sess.run([train_step_d, extra_update_ops, safe_pgd_loss, safe_pgd_acc, orig_acc, safe_acc,
-                         full_model.x_safe, full_model.x_safe_pgd, l2_dist, train_merged_summaries,
-                         total_loss, d_loss, g_loss, l1_loss],
+            _, _,  d_loss_batch, g_loss_batch, d_alg_out_batch, d_safe_out_batch = \
+                sess.run([train_step_d, extra_update_ops, d_loss, g_loss,
+                          full_model.d_alg_out, full_model.d_safe_out],
                          feed_dict=nat_dict)
         end = timer()
 
         assert 0 <= np.amin(x_safe) and np.amax(x_safe) <= 255.0
         assert 0 <= np.amin(x_safe_pgd) and np.amax(x_safe_pgd) <= 255.0
         assert np.amax(np.abs(x_safe-x_batch)) <= args.delta
+
 
         training_time += end - start
 
@@ -299,8 +314,12 @@ with tf.Session() as sess:
             if args.use_d:
                 print('    d loss {:.6}'.format(d_loss_batch))
                 print('    g loss {:.6}'.format(g_loss_batch))
+                print('    d alg out {:.4}'.format(d_alg_out_batch.mean()))
+                print('    d safe out {:.4}'.format(d_safe_out_batch.mean()))
+                print('    d alg acc {:.4}%'.format((d_alg_out_batch>0.5).mean()*100))
+                print('    d safe acc {:.4}%'.format((d_safe_out_batch<=0.5).mean()*100))
+            if args.l1_loss:
                 print('    l1 loss {:.6}'.format(l1_loss_batch))
-                print('    total loss {:.6}'.format(total_loss_batch))
             if ii != 0:
                 print('    {} examples per second'.format(
                     num_output_steps * training_batch_size / training_time))

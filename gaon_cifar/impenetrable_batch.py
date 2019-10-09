@@ -37,6 +37,8 @@ class Impenetrable(object):
         self.val_num_steps = args.val_num_steps
         self.val_eps = args.val_eps
         self.adam = args.imp_adam
+        self.rms = args.imp_rms
+        self.adagrad = args.imp_adagrad
         self.rep = args.imp_rep
         self.pp = args.imp_pp
         assert self.pp <= 0
@@ -90,11 +92,16 @@ class Impenetrable(object):
         print("original accuracy: {:.2f}%".format(orig_corr/num_images*100))
         print("original loss: {:.20f}".format(orig_loss/num_images))
 
-        # adam parameters
+        # adam & rms parameters
         beta1 = 0.9
         beta2 = 0.999
-        m = np.zeros_like(x)
-        v = np.zeros_like(x)
+        adam_m = np.zeros_like(x)
+        adam_v = np.zeros_like(x)
+
+        rho = 0.9
+        rms_v = np.zeros_like(x)
+
+        accum = 0.1
 
         # validation (original image)
         '''
@@ -145,9 +152,15 @@ class Impenetrable(object):
             # restore image
             if self.adam:
                 adam_lr = self.imp_step_size * np.sqrt(1-beta2**step)/(1-beta1**step)
-                m = beta1 * m + (1-beta1) * grad
-                v = beta2 * v + (1-beta2) * grad * grad
-                x_res = x - adam_lr * m / (np.sqrt(v) + 1e-8)
+                adam_m = beta1 * adam_m + (1-beta1) * grad
+                adam_v = beta2 * adam_v + (1-beta2) * grad * grad
+                x_res = x - adam_lr * adam_m / (np.sqrt(adam_v) + 1e-8)
+            elif self.rms:
+                rms_v = rho * rms_v + (1-rho) * (grad**2)
+                x_res = x - self.imp_step_size * grad / (np.sqrt(rms_v + 1e-7))
+            elif self.adagrad:
+                accum += grad**2
+                x_res = x - self.imp_step_size * grad / (np.sqrt(accum) + 1e-7)
             else:
                 if self.imp_no_sign:
                     x_res = x - self.imp_step_size * grad
