@@ -36,6 +36,8 @@ def infer_file_name(args):
     meta_name += '_pgd' + '_' + str(args.eps) \
         + '_' + str(args.num_steps) \
         + '_' + str(args.step_size)
+    if args.use_advG:
+        meta_name += '_advGlr' + str(args.advG_lr)
     if args.use_d:
         meta_name += '_dlr' + str(args.d_lr)
         meta_name += '_g' + str(args.g_weight)

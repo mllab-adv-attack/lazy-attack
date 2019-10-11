@@ -59,7 +59,6 @@ def conv2d_fixed_padding(inputs, filters, kernel_size, strides, data_format):
       data_format=data_format)
 
 
-
 def _building_block_v1(inputs, filters, training, projection_shortcut, strides,
     data_format):
   """
@@ -143,7 +142,7 @@ def block_layer(inputs, filters, bottleneck, block_fn, blocks, strides,
   return tf.identity(inputs, name)
 
 
-def generator(x, f_dim, output_size, c_dim, is_training=True):
+def generator(x, f_dim, c_dim, is_training=True):
     ngf = f_dim
     inputs = x
     data_format='channels_last'
@@ -186,3 +185,7 @@ def generator(x, f_dim, output_size, c_dim, is_training=True):
         inputs = tf.transpose(inputs, [0, 2, 3, 1])
 
     return inputs
+
+
+def get_generator(name, f_dim, c_dim, is_training):
+    return tf.make_template(name, generator, f_dim, c_dim, is_training)

@@ -13,7 +13,7 @@ import numpy as np
 
 import cifar10_input
 
-from infer_model import generator as Generator
+from infer_model import get_generator
 from discriminator import Discriminator
 from model import Model as Model
 
@@ -47,6 +47,8 @@ if __name__ == '__main__':
     
     # discriminator settings
     parser.add_argument('--use_d', action='store_true')
+    parser.add_argument('--use_advG', action='store_true')
+    parser.add_argument('--advG_lr', default=1e-3, type=float)
     parser.add_argument('--d_lr', default=1e-3, type=float)
     parser.add_argument('--patch', action='store_true', help='use patch discriminator, (2x2)')
     parser.add_argument('--l1_loss', action='store_true', help='use l1 loss on infer(x) and maml(x)')
@@ -93,7 +95,7 @@ y_input = tf.placeholder(
     shape=None
 )
 
-generator = tf.make_template('generator', Generator, f_dim=64, output_size=32, c_dim=3, is_training=args.train)
+generator = get_generator('generator', f_dim=64, output_size=32, c_dim=3, is_training=args.train)
 if args.use_d:
     discriminator = Discriminator(args.patch, is_training=False)
     d_out = discriminator(x_input)
