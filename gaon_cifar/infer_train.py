@@ -99,8 +99,6 @@ full_model = Safe_model('train', model, args)
 
 # Setting up the optimizer
 boundaries = [0, 40000, 60000]
-if args.use_d:
-    boundaries = [2*i for i in boundaries]
 boundaries = boundaries[1:]
 
 g_values = [g_lr, g_lr/10, g_lr/100]
@@ -124,10 +122,14 @@ advG_learning_rate = tf.train.piecewise_constant(
 # set up metrics
 safe_adv_loss = full_model.safe_adv_mean_xent
 safe_pgd_loss = full_model.safe_pgd_mean_xent
+safe_loss = full_model.safe_mean_xent
+
 total_loss = safe_adv_loss
 if args.l1_loss:
     l1_loss = tf.losses.absolute_difference(full_model.x_input_alg, full_model.x_safe)
     total_loss += args.l1_weight * l1_loss
+if args.use_advG:
+    total_loss += safe_loss
 if args.use_d:
     d_loss = full_model.d_loss
     g_loss = full_model.g_loss
@@ -169,7 +171,7 @@ train_summaries = [
     tf.summary.scalar('acc orig', full_model.orig_accuracy),
     tf.summary.scalar('acc safe', full_model.safe_accuracy),
     tf.summary.scalar('acc safe_adv', full_model.safe_adv_accuracy),
-    tf.summary.scalar('safe loss', safe_pgd_loss),
+    tf.summary.scalar('safe adv loss', safe_adv_loss),
     tf.summary.scalar('l2 dist', l2_dist),
     tf.summary.image('safe image', full_model.x_safe),
     tf.summary.image('orig image', full_model.x_input),
@@ -245,13 +247,11 @@ with tf.Session() as sess:
     if args.use_d:
         train_step_d = tf.train.AdamOptimizer(d_learning_rate).minimize(
             total_d_loss,
-            global_step=global_step,
             var_list=variables_to_train_d)
 
     if args.use_advG:
         train_step_advG = tf.train.AdamOptimizer(advG_learning_rate).minimize(
             -safe_adv_loss,
-            global_step=global_step,
             var_list=variables_to_train_advG)
 
     sess.run(tf.global_variables_initializer())
@@ -316,11 +316,19 @@ with tf.Session() as sess:
                           full_model.x_safe, full_model.x_safe_adv, l2_dist, train_merged_summaries],
                          feed_dict=nat_dict)
 
+        if args.use_advG:
+            _, _, safe_adv_loss_batch, safe_adv_acc_batch, orig_acc_batch, safe_acc_batch, \
+                x_safe, x_safe_adv, l2_dist_batch, train_merged_summaries_batch = \
+                sess.run([train_step_advG, extra_update_ops, safe_adv_loss, safe_adv_acc, orig_acc, safe_acc,
+                          full_model.x_safe, full_model.x_safe_adv, l2_dist, train_merged_summaries],
+                         feed_dict=nat_dict)
+
         if args.use_d:
             _, _,  d_loss_batch, g_loss_batch, d_alg_out_batch, d_safe_out_batch = \
                 sess.run([train_step_d, extra_update_ops, d_loss, g_loss,
                           full_model.d_alg_out, full_model.d_safe_out],
                          feed_dict=nat_dict)
+        
         end = timer()
 
         assert 0 <= np.amin(x_safe) and np.amax(x_safe) <= 255.0
