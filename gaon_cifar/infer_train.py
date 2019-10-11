@@ -96,6 +96,8 @@ full_model = Safe_model('train', model, args)
 
 # Setting up the optimizer
 boundaries = [0, 40000, 60000]
+if args.use_d:
+    boundaries = [2*i for i in boundaries]
 boundaries = boundaries[1:]
 g_values = [g_lr, g_lr/10, g_lr/100]
 g_learning_rate = tf.train.piecewise_constant(
