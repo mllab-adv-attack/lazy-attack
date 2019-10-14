@@ -13,7 +13,7 @@ import numpy as np
 
 import cifar10_input
 
-from infer_model import get_generator
+from generator import generator as Generator
 from discriminator import Discriminator
 from model import Model as Model
 
@@ -95,7 +95,8 @@ y_input = tf.placeholder(
     shape=None
 )
 
-generator = get_generator('generator', f_dim=64, output_size=32, c_dim=3, is_training=args.train)
+generator = tf.make_template('generator', Generator, f_dim=64, c_dim=3, is_training=args.train)
+
 if args.use_d:
     discriminator = Discriminator(args.patch, is_training=False)
     d_out = discriminator(x_input)

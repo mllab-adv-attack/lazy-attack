@@ -94,7 +94,7 @@ def safe_validation(x, y, model, sess, start_eps=8, end_eps=8, val_num=20):
         mean_loss = np.concatenate(mean_loss, axis=1)
         mean_loss = np.mean(mean_loss, axis=1)
 
-    return sum(true_mask), mean_loss
+    return sum(true_mask), mean_loss, true_mask
 
 
 def result(x_imp, model, sess, x_full_batch, y_full_batch, final_name, params):
@@ -127,7 +127,7 @@ def result(x_imp, model, sess, x_full_batch, y_full_batch, final_name, params):
 
         x_batch = x_full_batch[bstart:bend, :]
         y_batch = y_full_batch[bstart:bend]
-        cur_corr, cur_loss = safe_validation(x_batch, y_batch, model, sess) 
+        cur_corr, cur_loss, _ = safe_validation(x_batch, y_batch, model, sess) 
         total_corr += cur_corr
 
     accuracy = total_corr / num_eval_examples
@@ -154,15 +154,17 @@ def result(x_imp, model, sess, x_full_batch, y_full_batch, final_name, params):
     print('imp Accuracy: {:.2f}%'.format(100.0 * accuracy))
 
     total_corr = 0
+    imp_mask = []
     for ibatch in range(num_batches):
         bstart = ibatch * eval_batch_size
         bend = min(bstart + eval_batch_size, num_eval_examples)
 
         x_batch = x_imp[bstart:bend, :]
         y_batch = y_full_batch[bstart:bend]
-        cur_corr, cur_loss = safe_validation(x_batch, y_batch, model, sess)
+        cur_corr, cur_loss, cur_mask = safe_validation(x_batch, y_batch, model, sess)
         total_corr += cur_corr
         imp_loss_li.append(cur_loss)
+        imp_mask.append(cur_mask)
 
     accuracy = total_corr / num_eval_examples
 
@@ -177,6 +179,9 @@ def result(x_imp, model, sess, x_full_batch, y_full_batch, final_name, params):
     #if params.target_y >= 0:
     #    np.save(final_name + '_loss' + str(params.target_y) + '.npy', imp_loss)
     np.save(final_name + '_loss.npy', imp_loss)
+
+    imp_mask = np.concatenate(imp_mask)
+    np.save(final_name + '_mask.npy', imp_mask)
 
 if __name__ == '__main__':
     import argparse
