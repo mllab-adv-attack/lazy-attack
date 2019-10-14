@@ -51,6 +51,7 @@ if __name__ == '__main__':
     # gan settings
     parser.add_argument('--use_d', action='store_true')
     parser.add_argument('--use_advG', action='store_true')
+    parser.add_argument('--no_lc', action='store_true')
     parser.add_argument('--advG_lr', default=1e-3, type=float)
     parser.add_argument('--d_lr', default=1e-3, type=float)
     parser.add_argument('--patch', action='store_true', help='use patch discriminator, (2x2)')
@@ -124,7 +125,11 @@ safe_adv_loss = full_model.safe_adv_mean_xent
 safe_pgd_loss = full_model.safe_pgd_mean_xent
 safe_loss = full_model.safe_mean_xent
 
-total_loss = safe_adv_loss
+if args.no_lc:
+    total_loss = 0
+else:
+    total_loss = safe_adv_loss
+
 if args.l1_loss:
     l1_loss = tf.losses.absolute_difference(full_model.x_input_alg, full_model.x_safe)
     total_loss += args.l1_weight * l1_loss
@@ -170,12 +175,15 @@ saver = tf.train.Saver()
 train_summaries = [
     tf.summary.scalar('acc orig', full_model.orig_accuracy),
     tf.summary.scalar('acc safe', full_model.safe_accuracy),
-    tf.summary.scalar('acc safe_adv', full_model.safe_adv_accuracy),
-    tf.summary.scalar('safe adv loss', safe_adv_loss),
+    #tf.summary.scalar('acc safe_adv', full_model.safe_adv_accuracy),
+    #tf.summary.scalar('safe adv loss', safe_adv_loss),
     tf.summary.scalar('l2 dist', l2_dist),
     tf.summary.image('safe image', full_model.x_safe),
     tf.summary.image('orig image', full_model.x_input),
 ]
+if not args.no_lc:
+    train_summaries.append(tf.summary.scalar('acc safe_adv', full_model.safe_adv_accuracy))
+    train_summaries.append(tf.summary.scalar('safe adv loss', safe_adv_loss))
 if args.use_d:
     train_summaries.append(tf.summary.scalar('d loss', d_loss))
     train_summaries.append(tf.summary.scalar('g loss', g_loss))
@@ -303,18 +311,32 @@ with tf.Session() as sess:
         # Train
         start = timer()
 
-        if args.l1_loss:
-            _, _, safe_adv_loss_batch, safe_adv_acc_batch, orig_acc_batch, safe_acc_batch, \
-                x_safe, x_safe_adv, l2_dist_batch, l1_loss_batch, train_merged_summaries_batch = \
-                sess.run([train_step_g, extra_update_ops, safe_adv_loss, safe_adv_acc, orig_acc, safe_acc,
-                          full_model.x_safe, full_model.x_safe_adv, l2_dist, l1_loss, train_merged_summaries],
-                         feed_dict=nat_dict)
+        if args.no_lc:
+            if args.l1_loss:
+                _, _, orig_acc_batch, safe_acc_batch, \
+                x_safe, l2_dist_batch, l1_loss_batch, train_merged_summaries_batch = \
+                    sess.run([train_step_g, extra_update_ops, orig_acc, safe_acc,
+                              full_model.x_safe, l2_dist, l1_loss, train_merged_summaries],
+                             feed_dict=nat_dict)
+            else:
+                _, _, orig_acc_batch, safe_acc_batch, \
+                x_safe, l2_dist_batch, train_merged_summaries_batch = \
+                    sess.run([train_step_g, extra_update_ops, orig_acc, safe_acc,
+                              full_model.x_safe, l2_dist, train_merged_summaries],
+                             feed_dict=nat_dict)
         else:
-            _, _, safe_adv_loss_batch, safe_adv_acc_batch, orig_acc_batch, safe_acc_batch, \
-                x_safe, x_safe_adv, l2_dist_batch, train_merged_summaries_batch = \
-                sess.run([train_step_g, extra_update_ops, safe_adv_loss, safe_adv_acc, orig_acc, safe_acc,
-                          full_model.x_safe, full_model.x_safe_adv, l2_dist, train_merged_summaries],
-                         feed_dict=nat_dict)
+            if args.l1_loss:
+                _, _, safe_adv_loss_batch, safe_adv_acc_batch, orig_acc_batch, safe_acc_batch, \
+                    x_safe, x_safe_adv, l2_dist_batch, l1_loss_batch, train_merged_summaries_batch = \
+                    sess.run([train_step_g, extra_update_ops, safe_adv_loss, safe_adv_acc, orig_acc, safe_acc,
+                              full_model.x_safe, full_model.x_safe_adv, l2_dist, l1_loss, train_merged_summaries],
+                             feed_dict=nat_dict)
+            else:
+                _, _, safe_adv_loss_batch, safe_adv_acc_batch, orig_acc_batch, safe_acc_batch, \
+                    x_safe, x_safe_adv, l2_dist_batch, train_merged_summaries_batch = \
+                    sess.run([train_step_g, extra_update_ops, safe_adv_loss, safe_adv_acc, orig_acc, safe_acc,
+                              full_model.x_safe, full_model.x_safe_adv, l2_dist, train_merged_summaries],
+                             feed_dict=nat_dict)
 
         if args.use_advG:
             _, _, safe_adv_loss_batch, safe_adv_acc_batch, orig_acc_batch, safe_acc_batch, \
