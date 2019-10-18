@@ -354,7 +354,8 @@ with tf.Session() as sess:
         end = timer()
 
         assert 0 <= np.amin(x_safe) and np.amax(x_safe) <= 255.0
-        assert 0 <= np.amin(x_safe_adv) and np.amax(x_safe_adv) <= 255.0
+        if not args.no_lc:
+            assert 0 <= np.amin(x_safe_adv) and np.amax(x_safe_adv) <= 255.0
         assert np.amax(np.abs(x_safe-x_batch)) <= args.delta
 
         training_time += end - start
@@ -364,9 +365,10 @@ with tf.Session() as sess:
             print('Step {}:    ({})'.format(ii, datetime.now()))
             print('    orig accuracy {:.4}%'.format(orig_acc_batch * 100))
             print('    safe accuracy {:.4}%'.format(safe_acc_batch * 100))
-            print('    safe(adv) accuracy {:.4}%'.format(safe_adv_acc_batch * 100))
             print('    l2 dist {:.4}'.format(l2_dist_batch))
-            print('    safe(adv) loss {:.6}'.format(safe_adv_loss_batch))
+            if not args.no_lc:
+                print('    safe(adv) accuracy {:.4}%'.format(safe_adv_acc_batch * 100))
+                print('    safe(adv) loss {:.6}'.format(safe_adv_loss_batch))
             if args.use_d:
                 print('    d loss {:.6}'.format(d_loss_batch))
                 print('    g loss {:.6}'.format(g_loss_batch))
@@ -393,9 +395,10 @@ with tf.Session() as sess:
             eval_x_batch, eval_y_batch = raw_cifar.eval_data.get_next_batch(eval_batch_size, multiple_passes=True)
             eval_dict = {full_model.x_input: eval_x_batch,
                          full_model.y_input: eval_y_batch}
-            safe_pgd_loss_batch, safe_pgd_acc_batch, orig_acc_batch, safe_acc_batch, \
+            safe_pgd_loss_batch, safe_pgd_acc_batch, safe_adv_acc_batch, safe_adv_loss_batch, \
+                orig_acc_batch, safe_acc_batch, \
                 x_safe, x_safe_pgd, l2_dist_batch, eval_merged_summaries_batch = \
-                sess.run([safe_pgd_loss, safe_pgd_acc, orig_acc, safe_acc,
+                sess.run([safe_pgd_loss, safe_pgd_acc, safe_adv_acc, safe_adv_loss, orig_acc, safe_acc,
                           full_model.x_safe, full_model.x_safe_pgd, l2_dist, eval_merged_summaries], feed_dict=eval_dict)
             
             print('    orig accuracy (eval) {:.4}%'.format(orig_acc_batch * 100))
