@@ -21,17 +21,18 @@ def encoder_layer(inputs,
                   filters=16,
                   kernel=3,
                   stride=2,
-                  instance=True):
+                  batch_norm=True,
+                  padding='valid'):
     """Builds a generic encoder layer made of Conv2D-IN-LeakyReLU
     IN is optional, LeakyReLU may be replaced by ReLU
     """
 
-
     x = inputs
-    if instance:
-        x = instance_norm(x)
+    x = tf.layers.conv2d(x, filters, kernel_size=[kernel, kernel], strides=[stride, stride], padding=padding)
+    if batch_norm:
+        x = tf.layers.batch_normalization(x, momentum=0.8)
     x = lkrelu(x, slope=0.2)
-    x = tf.layers.conv2d(x, filters, kernel_size=[kernel, kernel], strides=[stride, stride], padding='same')
+    x = tf.layers.dropout(x, float=0.25)
     return x
 
 
@@ -44,7 +45,7 @@ class Discriminator(object):
 
         self._center = center
         self._scale = scale
-        self._prob = 0.5 # constant from pix2pix paper
+        self._prob = 0.5  # constant from pix2pix paper
 
     def _build_layer(self, name, inputs, k, bn=True, use_dropout=False):
         layer = dict()
@@ -81,17 +82,16 @@ class Discriminator(object):
     def __call__(self, inputs):
         with tf.variable_scope('discriminator', reuse=tf.AUTO_REUSE):
 
-            inputs = tf.map_fn(lambda img: tf.image.per_image_standardization(img),
-                               inputs)
+            inputs = (inputs/255) * 2 - 1
 
-            inputs = encoder_layer(inputs, 32, 3, 2, False)
-            inputs = encoder_layer(inputs, 64, 3, 2, False)
-            inputs = encoder_layer(inputs, 128, 3, 2, False)
-            inputs = encoder_layer(inputs, 256, 3, 1, False)
+            inputs = encoder_layer(inputs, 32, 3, 2, batch_norm=False)
+            inputs = encoder_layer(inputs, 64, 3, 1)
+            inputs = encoder_layer(inputs, 128, 3, 1)
+            inputs = encoder_layer(inputs, 256, 3, 1)
 
             if self.patch:
-                inputs = lkrelu(inputs, 0.2)
-                inputs = tf.layers.conv2d(inputs, 1, kernel_size=[3, 3], strides=[2, 2], padding='same')
+                inputs = tf.layers.conv2d(inputs, 1, kernel_size=[3, 3], strides=[1, 1], padding='same')
+                print(get_shape(inputs))
             else:
                 inputs = tf.layers.flatten(inputs)
                 inputs = tf.layers.dense(inputs, 1)
