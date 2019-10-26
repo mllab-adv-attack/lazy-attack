@@ -49,6 +49,7 @@ if __name__ == '__main__':
     parser.add_argument('--delta', default=40, type=int)
 
     # gan settings
+    parser.add_argument('--simple_recon', action='store_true')
     parser.add_argument('--use_unet', action='store_true')
     parser.add_argument('--use_d', action='store_true')
     parser.add_argument('--use_advG', action='store_true')
@@ -302,7 +303,10 @@ with tf.Session() as sess:
                                                            get_indices=True)
 
         if args.use_d or args.l1_loss or args.l2_loss:
-            imp_batch = imp_cifar[indices, ...]
+            if args.simple_recon:
+                imp_batch = np.copy(x_batch)
+            else:
+                imp_batch = imp_cifar[indices, ...]
 
             nat_dict = {full_model.x_input: x_batch,
                         full_model.y_input: y_batch,
