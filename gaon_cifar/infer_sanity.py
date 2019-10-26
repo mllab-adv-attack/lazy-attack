@@ -365,7 +365,6 @@ with tf.Session() as sess:
         assert 0 <= np.amin(x_safe) and np.amax(x_safe) <= 255.0
         if not args.no_lc:
             assert 0 <= np.amin(x_safe_adv) and np.amax(x_safe_adv) <= 255.0
-        assert np.amax(np.abs(x_safe-x_batch)) <= args.delta
 
         training_time += end - start
 
