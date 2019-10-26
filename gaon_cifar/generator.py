@@ -147,6 +147,9 @@ def generator(x, f_dim, c_dim, is_training=True):
     inputs = x
     data_format='channels_last'
 
+    # normalize ([0, 255] -> [-1, 1])
+    inputs = (inputs/255) * 2 - 1
+
     # for GPU; channels_first
     if data_format=='channels_first':
         inputs = tf.transpose(inputs, [0, 3, 1, 2])

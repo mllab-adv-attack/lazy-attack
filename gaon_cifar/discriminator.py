@@ -1,8 +1,5 @@
 import tensorflow as tf
 
-from tensorflow.contrib.layers import instance_norm
-
-
 def get_shape(tensor):
     return tensor.get_shape().as_list()
 
@@ -22,7 +19,9 @@ def encoder_layer(inputs,
                   kernel=3,
                   stride=2,
                   batch_norm=True,
-                  padding='valid'):
+                  padding='valid',
+                  is_training=True,
+                  ):
     """Builds a generic encoder layer made of Conv2D-IN-LeakyReLU
     IN is optional, LeakyReLU may be replaced by ReLU
     """
@@ -30,9 +29,9 @@ def encoder_layer(inputs,
     x = inputs
     x = tf.layers.conv2d(x, filters, kernel_size=[kernel, kernel], strides=[stride, stride], padding=padding)
     if batch_norm:
-        x = tf.layers.batch_normalization(x, momentum=0.8)
+        x = tf.layers.batch_normalization(x, momentum=0.8, training=is_training)
     x = lkrelu(x, slope=0.2)
-    x = tf.layers.dropout(x, float=0.25)
+    x = tf.layers.dropout(x, rate=0.25, training=is_training)
     return x
 
 
@@ -84,10 +83,10 @@ class Discriminator(object):
 
             inputs = (inputs/255) * 2 - 1
 
-            inputs = encoder_layer(inputs, 32, 3, 2, batch_norm=False)
-            inputs = encoder_layer(inputs, 64, 3, 1)
-            inputs = encoder_layer(inputs, 128, 3, 1)
-            inputs = encoder_layer(inputs, 256, 3, 1)
+            inputs = encoder_layer(inputs, 32, 3, 2, batch_norm=False, is_training=self._is_training)
+            inputs = encoder_layer(inputs, 64, 3, 1, is_training=self._is_training)
+            inputs = encoder_layer(inputs, 128, 3, 1, is_training=self._is_training)
+            inputs = encoder_layer(inputs, 256, 3, 1, is_training=self._is_training)
 
             if self.patch:
                 inputs = tf.layers.conv2d(inputs, 1, kernel_size=[3, 3], strides=[1, 1], padding='same')
@@ -95,6 +94,5 @@ class Discriminator(object):
             else:
                 inputs = tf.layers.flatten(inputs)
                 inputs = tf.layers.dense(inputs, 1)
-                inputs = tf.keras.activations.linear(inputs)
 
         return inputs
