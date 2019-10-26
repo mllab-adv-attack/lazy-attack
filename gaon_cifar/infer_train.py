@@ -92,7 +92,7 @@ eval_batch_size = args.eval_batch_size
 
 # Setting up the data and the model
 raw_cifar = cifar10_input.CIFAR10Data(data_path)
-if args.use_d or args.l1_loss:
+if args.use_d or args.l1_loss or args.l2_loss:
     imp_cifar = load_imp_data(args)
 
 global_step = tf.train.get_or_create_global_step()
@@ -126,6 +126,8 @@ advG_learning_rate = tf.train.piecewise_constant(
 safe_adv_loss = full_model.safe_adv_mean_xent
 safe_pgd_loss = full_model.safe_pgd_mean_xent
 safe_loss = full_model.safe_mean_xent
+l1_loss = tf.losses.absolute_difference(full_model.x_input_alg/255, full_model.x_safe/255)
+l2_loss = tf.losses.mean_squared_error(full_model.x_input_alg/255, full_model.x_safe/255)
 
 if args.no_lc:
     total_loss = 0
@@ -133,10 +135,8 @@ else:
     total_loss = safe_adv_loss
 
 if args.l1_loss:
-    l1_loss = tf.losses.absolute_difference(full_model.x_input_alg, full_model.x_safe)
     total_loss += args.l1_weight * l1_loss
 if args.l2_loss:
-    l2_loss = tf.losses.mean_squared_error(full_model.x_input_alg, full_model.x_safe)
     total_loss += args.l2_weight * l2_loss
 if args.use_advG:
     total_loss += safe_loss
@@ -320,7 +320,7 @@ with tf.Session() as sess:
         start = timer()
 
         if args.no_lc:
-            if args.l1_loss:
+            if args.use_d or args.l1_loss or args.l2_loss:
                 _, _, orig_acc_batch, safe_acc_batch, \
                 x_safe, l2_dist_batch, l1_loss_batch, l2_loss_batch, train_merged_summaries_batch = \
                     sess.run([train_step_g, extra_update_ops, orig_acc, safe_acc,
@@ -333,7 +333,7 @@ with tf.Session() as sess:
                               full_model.x_safe, l2_dist, train_merged_summaries],
                              feed_dict=nat_dict)
         else:
-            if args.l1_loss:
+            if args.use_d or args.l1_loss or args.l2_loss:
                 _, _, safe_adv_loss_batch, safe_adv_acc_batch, orig_acc_batch, safe_acc_batch, \
                     x_safe, x_safe_adv, l2_dist_batch, l1_loss_batch, l2_loss_batch, train_merged_summaries_batch = \
                     sess.run([train_step_g, extra_update_ops, safe_adv_loss, safe_adv_acc, orig_acc, safe_acc,
