@@ -15,7 +15,7 @@ import numpy as np
 
 import cifar10_input
 
-from infer_model import Model as Safe_model
+from infer_model_sanity import Model as Safe_model
 from infer_target import Model as Target_model
 
 from utils import infer_file_name, load_imp_data
