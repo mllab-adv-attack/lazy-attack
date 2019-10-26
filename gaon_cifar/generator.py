@@ -190,5 +190,76 @@ def generator(x, f_dim, c_dim, is_training=True):
     return inputs
 
 
-def get_generator(name, f_dim, c_dim, is_training):
-    return tf.make_template(name, generator, f_dim, c_dim, is_training)
+def unet_generator(x, is_training=True):
+
+    inputs = x
+    inputs = (inputs/255) * 2 - 1
+
+    conv1 = tf.layers.conv2d(inputs, 16, 3, activation='relu', padding='same',
+                             kernel_initializer=tf.initializers.he_normal())
+    conv1 = tf.layers.conv2d(conv1, 16, 3,  activation='relu', padding='same',
+                             kernel_initializer=tf.initializers.he_normal())
+    pool1 = tf.layers.max_pooling2d(conv1, 2)
+
+    conv2 = tf.layers.conv2d(pool1, 32, 3, activation='relu', padding='same',
+                             kernel_initializer=tf.initializers.he_normal())
+    conv2 = tf.layers.conv2d(conv2, 32, 3, activation='relu', padding='same',
+                             kernel_initializer=tf.initializers.he_normal())
+    pool2 = tf.layers.max_pooling2d(conv2, 2)
+
+    conv3 = tf.layers.conv2d(pool2, 64, 3, activation='relu', padding='same',
+                             kernel_initializer=tf.initializers.he_normal())
+    conv3 = tf.layers.conv2d(conv3, 64, 3, activation='relu', padding='same',
+                             kernel_initializer=tf.initializers.he_normal())
+    pool3 = tf.layers.max_pooling2d(conv3, 2)
+
+    conv4 = tf.layers.conv2d(pool3, 128, 3, activation='relu', padding='same',
+                             kernel_initializer=tf.initializers.he_normal())
+    conv4 = tf.layers.conv2d(conv4, 128, 3, activation='relu', padding='same',
+                             kernel_initializer=tf.initializers.he_normal())
+    drop4 = tf.layers.dropout(conv4, training=is_training)
+    pool4 = tf.layers.max_pooling2d(drop4, 2)
+
+    conv5 = tf.layers.conv2d(pool4, 256, 3, activation='relu', padding='same',
+                             kernel_initializer=tf.initializers.he_normal())
+    conv5 = tf.layers.conv2d(conv5, 256, 3, activation='relu', padding='same',
+                             kernel_initializer=tf.initializers.he_normal())
+    drop5 = tf.layers.dropout(conv5, training=is_training)
+
+    up6 = tf.keras.layers.UpSampling2D()(drop5)
+    up6 = tf.layers.conv2d(up6, 128, 2, activation='relu', padding='same',
+                           kernel_initializer=tf.initializers.he_normal())
+    merge6 = tf.concat([drop4, up6], axis=3)
+    conv6 = tf.layers.conv2d(merge6, 128, 3, activation='relu', padding='same',
+                             kernel_initializer=tf.initializers.he_normal())
+    conv6 = tf.layers.conv2d(conv6, 128, 3, activation='relu', padding='same',
+                             kernel_initializer=tf.initializers.he_normal())
+
+    up7 = tf.keras.layers.UpSampling2D()(conv6)
+    up7 = tf.layers.conv2d(up7, 64, 2, activation='relu', padding='same',
+                           kernel_initializer=tf.initializers.he_normal())
+    merge7 = tf.concat([conv3, up7], axis=3)
+    conv7 = tf.layers.conv2d(merge7, 64, 3, activation='relu', padding='same',
+                             kernel_initializer=tf.initializers.he_normal())
+    conv7 = tf.layers.conv2d(conv7, 64, 3, activation='relu', padding='same',
+                             kernel_initializer=tf.initializers.he_normal())
+
+    up8 = tf.keras.layers.UpSampling2D()(conv7)
+    up8 = tf.layers.conv2d(up8, 32, 2, activation='relu', padding='same',
+                           kernel_initializer=tf.initializers.he_normal())
+    merge8 = tf.concat([conv2, up8], axis=3)
+    conv8 = tf.layers.conv2d(merge8, 32, 3, activation='relu', padding='same',
+                             kernel_initializer=tf.initializers.he_normal())
+    conv8 = tf.layers.conv2d(conv8, 32, 3, activation='relu', padding='same',
+                             kernel_initializer=tf.initializers.he_normal())
+
+    up9 = tf.keras.layers.UpSampling2D()(conv8)
+    up9 = tf.layers.conv2d(up9, 16, 2, activation='relu', padding='same',
+                           kernel_initializer=tf.initializers.he_normal())
+    merge9 = tf.concat([conv1, up9], axis=3)
+    conv9 = tf.layers.conv2d(merge9, 16, 3, activation='relu', padding='same',
+                             kernel_initializer=tf.initializers.he_normal())
+    outputs = tf.layers.conv2d(conv9, 16, 3, activation='relu', padding='same',
+                             kernel_initializer=tf.initializers.he_normal())
+
+    return outputs

@@ -3,7 +3,7 @@
 
 import tensorflow as tf
 from discriminator import Discriminator
-from generator import generator
+from generator import generator, unet_generator
 
 
 def PGD(x, y, model_fn, attack_params):
@@ -47,6 +47,7 @@ class Model(object):
             'bounds': self.bounds,
         }
 
+        self.use_unet = args.use_unet
         self.use_d = args.use_d
         self.use_advG = args.use_advG
         self.patch = args.patch
@@ -69,14 +70,20 @@ class Model(object):
             )
 
         with tf.variable_scope('', reuse=tf.AUTO_REUSE):
-            self.def_generator = tf.make_template('generator', generator, f_dim=64, c_dim=3, is_training=is_train)
+            if self.use_unet:
+                self.def_generator = tf.make_template('generator', unet_generator, is_training=is_train)
+            else:
+                self.def_generator = tf.make_template('generator', generator, f_dim=64, c_dim=3, is_training=is_train)
             self.x_safe = self.x_input + self.delta * self.def_generator(self.x_input)
             self.x_safe = tf.clip_by_value(self.x_safe, self.bounds[0], self.bounds[1])
 
         with tf.variable_scope('', reuse=tf.AUTO_REUSE):
             if self.use_advG:
                 # use adv generator as attacker (PGD only when evaluation)
-                self.adv_generator = tf.make_template('adv_generator', generator, f_dim=64, c_dim=3, is_training=is_train)
+                if self.use_unet:
+                    self.adv_generator = tf.make_template('adv_generator', unet_generator, is_training=is_train)
+                else:
+                    self.adv_generator = tf.make_template('adv_generator', generator, f_dim=64, c_dim=3, is_training=is_train)
                 #self.x_safe_adv = self.x_safe + self.attack_params['eps'] * self.adv_generator(self.x_safe)
                 self.x_safe_adv = self.x_safe + self.delta * self.adv_generator(self.x_safe)
                 self.x_safe_adv = tf.clip_by_value(self.x_safe_adv, self.bounds[0], self.bounds[1])

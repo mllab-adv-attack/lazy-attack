@@ -49,6 +49,7 @@ if __name__ == '__main__':
     parser.add_argument('--delta', default=40, type=int)
 
     # gan settings
+    parser.add_argument('--use_unet', action='store_true')
     parser.add_argument('--use_d', action='store_true')
     parser.add_argument('--use_advG', action='store_true')
     parser.add_argument('--no_lc', action='store_true')
