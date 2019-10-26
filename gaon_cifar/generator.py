@@ -6,6 +6,8 @@ import tensorflow as tf
 _BATCH_NORM_DECAY = 0.997
 _BATCH_NORM_EPSILON = 1e-5
 
+def get_shape(tensor):
+    print(tensor.get_shape().as_list())
 
 ################################################################################
 # Convenience functions for building the ResNet model.
@@ -199,32 +201,37 @@ def unet_generator(x, is_training=True):
                              kernel_initializer=tf.initializers.he_normal())
     conv1 = tf.layers.conv2d(conv1, 16, 3,  activation='relu', padding='same',
                              kernel_initializer=tf.initializers.he_normal())
-    pool1 = tf.layers.max_pooling2d(conv1, 2)
+    pool1 = tf.layers.max_pooling2d(conv1, 2, 2)
+    #get_shape(pool1)
 
     conv2 = tf.layers.conv2d(pool1, 32, 3, activation='relu', padding='same',
                              kernel_initializer=tf.initializers.he_normal())
     conv2 = tf.layers.conv2d(conv2, 32, 3, activation='relu', padding='same',
                              kernel_initializer=tf.initializers.he_normal())
-    pool2 = tf.layers.max_pooling2d(conv2, 2)
+    pool2 = tf.layers.max_pooling2d(conv2, 2, 2)
+    #get_shape(pool2)
 
     conv3 = tf.layers.conv2d(pool2, 64, 3, activation='relu', padding='same',
                              kernel_initializer=tf.initializers.he_normal())
     conv3 = tf.layers.conv2d(conv3, 64, 3, activation='relu', padding='same',
                              kernel_initializer=tf.initializers.he_normal())
-    pool3 = tf.layers.max_pooling2d(conv3, 2)
+    pool3 = tf.layers.max_pooling2d(conv3, 2, 2)
+    #get_shape(pool3)
 
     conv4 = tf.layers.conv2d(pool3, 128, 3, activation='relu', padding='same',
                              kernel_initializer=tf.initializers.he_normal())
     conv4 = tf.layers.conv2d(conv4, 128, 3, activation='relu', padding='same',
                              kernel_initializer=tf.initializers.he_normal())
     drop4 = tf.layers.dropout(conv4, training=is_training)
-    pool4 = tf.layers.max_pooling2d(drop4, 2)
+    pool4 = tf.layers.max_pooling2d(drop4, 2, 2)
+    #get_shape(pool4)
 
     conv5 = tf.layers.conv2d(pool4, 256, 3, activation='relu', padding='same',
                              kernel_initializer=tf.initializers.he_normal())
     conv5 = tf.layers.conv2d(conv5, 256, 3, activation='relu', padding='same',
                              kernel_initializer=tf.initializers.he_normal())
     drop5 = tf.layers.dropout(conv5, training=is_training)
+    #get_shape(drop5)
 
     up6 = tf.keras.layers.UpSampling2D()(drop5)
     up6 = tf.layers.conv2d(up6, 128, 2, activation='relu', padding='same',
@@ -234,6 +241,7 @@ def unet_generator(x, is_training=True):
                              kernel_initializer=tf.initializers.he_normal())
     conv6 = tf.layers.conv2d(conv6, 128, 3, activation='relu', padding='same',
                              kernel_initializer=tf.initializers.he_normal())
+    #get_shape(conv6)
 
     up7 = tf.keras.layers.UpSampling2D()(conv6)
     up7 = tf.layers.conv2d(up7, 64, 2, activation='relu', padding='same',
@@ -243,6 +251,7 @@ def unet_generator(x, is_training=True):
                              kernel_initializer=tf.initializers.he_normal())
     conv7 = tf.layers.conv2d(conv7, 64, 3, activation='relu', padding='same',
                              kernel_initializer=tf.initializers.he_normal())
+    #get_shape(conv7)
 
     up8 = tf.keras.layers.UpSampling2D()(conv7)
     up8 = tf.layers.conv2d(up8, 32, 2, activation='relu', padding='same',
@@ -252,6 +261,7 @@ def unet_generator(x, is_training=True):
                              kernel_initializer=tf.initializers.he_normal())
     conv8 = tf.layers.conv2d(conv8, 32, 3, activation='relu', padding='same',
                              kernel_initializer=tf.initializers.he_normal())
+    #get_shape(conv8)
 
     up9 = tf.keras.layers.UpSampling2D()(conv8)
     up9 = tf.layers.conv2d(up9, 16, 2, activation='relu', padding='same',
@@ -259,7 +269,8 @@ def unet_generator(x, is_training=True):
     merge9 = tf.concat([conv1, up9], axis=3)
     conv9 = tf.layers.conv2d(merge9, 16, 3, activation='relu', padding='same',
                              kernel_initializer=tf.initializers.he_normal())
-    outputs = tf.layers.conv2d(conv9, 16, 3, activation='relu', padding='same',
+    outputs = tf.layers.conv2d(conv9, 3, 3, activation='tanh', padding='same',
                              kernel_initializer=tf.initializers.he_normal())
+    #get_shape(outputs)
 
     return outputs
