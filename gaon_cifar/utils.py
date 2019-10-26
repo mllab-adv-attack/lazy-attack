@@ -46,6 +46,7 @@ def infer_file_name(args):
         meta_name += '_d' + str(args.d_weight)
         meta_name += '_patch' if args.patch else ''
     meta_name += ('_lo' + str(args.l1_weight)) if args.l1_loss else ''
+    meta_name += ('_lt' + str(args.l2_weight)) if args.l2_loss else ''
     return meta_name
 
 

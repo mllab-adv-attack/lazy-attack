@@ -56,9 +56,11 @@ if __name__ == '__main__':
     parser.add_argument('--d_lr', default=1e-3, type=float)
     parser.add_argument('--patch', action='store_true', help='use patch discriminator, (2x2)')
     parser.add_argument('--l1_loss', action='store_true', help='use l1 loss on infer(x) and maml(x)')
+    parser.add_argument('--l2_loss', action='store_true', help='use l2 loss on infer(x) and maml(x)')
     parser.add_argument('--g_weight', default=1, type=float, help='loss weight for generator')
     parser.add_argument('--d_weight', default=1, type=float, help='loss weight for discriminator')
     parser.add_argument('--l1_weight', default=1, type=float, help='loss weight for l1')
+    parser.add_argument('--l2_weight', default=1, type=float, help='loss weight for l2')
 
     # pgd settings
     parser.add_argument('--eps', default=8.0, type=float)
@@ -133,6 +135,9 @@ else:
 if args.l1_loss:
     l1_loss = tf.losses.absolute_difference(full_model.x_input_alg, full_model.x_safe)
     total_loss += args.l1_weight * l1_loss
+if args.l2_loss:
+    l2_loss = tf.losses.mean_squared_error(full_model.x_input_alg, full_model.x_safe)
+    total_loss += args.l2_weight * l2_loss
 if args.use_advG:
     total_loss += safe_loss
 if args.use_d:
@@ -187,9 +192,12 @@ if not args.no_lc:
 if args.use_d:
     train_summaries.append(tf.summary.scalar('d loss', d_loss))
     train_summaries.append(tf.summary.scalar('g loss', g_loss))
-    train_summaries.append(tf.summary.scalar('total loss', total_loss))
-if args.l1_loss:
+if args.use_d or args.l1_loss or args.l2_loss:
+    tf.summary.image('alg image', full_model.x_input_alg),
     train_summaries.append(tf.summary.scalar('l1 loss', l1_loss))
+    train_summaries.append(tf.summary.scalar('l2 loss', l2_loss))
+    train_summaries.append(tf.summary.scalar('total loss', total_loss))
+
 train_merged_summaries = tf.summary.merge(train_summaries)
 
 eval_summaries = [
@@ -292,7 +300,7 @@ with tf.Session() as sess:
                                                            multiple_passes=True,
                                                            get_indices=True)
 
-        if args.use_d or args.l1_loss:
+        if args.use_d or args.l1_loss or args.l2_loss:
             imp_batch = imp_cifar[indices, ...]
 
             nat_dict = {full_model.x_input: x_batch,
@@ -304,7 +312,7 @@ with tf.Session() as sess:
 
         # Sanity check
         assert 0 <= np.amin(x_batch) and np.amax(x_batch) <= 255.0
-        if args.use_d or args.l1_loss:
+        if args.use_d or args.l1_loss or args.l2_loss:
             assert 0 <= np.amin(imp_batch) and np.amax(imp_batch) <= 255.0
             assert np.amax(np.abs(imp_batch-x_batch)) <= args.delta
 
@@ -314,9 +322,9 @@ with tf.Session() as sess:
         if args.no_lc:
             if args.l1_loss:
                 _, _, orig_acc_batch, safe_acc_batch, \
-                x_safe, l2_dist_batch, l1_loss_batch, train_merged_summaries_batch = \
+                x_safe, l2_dist_batch, l1_loss_batch, l2_loss_batch, train_merged_summaries_batch = \
                     sess.run([train_step_g, extra_update_ops, orig_acc, safe_acc,
-                              full_model.x_safe, l2_dist, l1_loss, train_merged_summaries],
+                              full_model.x_safe, l2_dist, l1_loss, l2_loss, train_merged_summaries],
                              feed_dict=nat_dict)
             else:
                 _, _, orig_acc_batch, safe_acc_batch, \
@@ -327,9 +335,9 @@ with tf.Session() as sess:
         else:
             if args.l1_loss:
                 _, _, safe_adv_loss_batch, safe_adv_acc_batch, orig_acc_batch, safe_acc_batch, \
-                    x_safe, x_safe_adv, l2_dist_batch, l1_loss_batch, train_merged_summaries_batch = \
+                    x_safe, x_safe_adv, l2_dist_batch, l1_loss_batch, l2_loss_batch, train_merged_summaries_batch = \
                     sess.run([train_step_g, extra_update_ops, safe_adv_loss, safe_adv_acc, orig_acc, safe_acc,
-                              full_model.x_safe, full_model.x_safe_adv, l2_dist, l1_loss, train_merged_summaries],
+                              full_model.x_safe, full_model.x_safe_adv, l2_dist, l1_loss, l2_loss, train_merged_summaries],
                              feed_dict=nat_dict)
             else:
                 _, _, safe_adv_loss_batch, safe_adv_acc_batch, orig_acc_batch, safe_acc_batch, \
@@ -376,8 +384,9 @@ with tf.Session() as sess:
                 print('    d safe out {:.4}'.format(d_safe_out_batch.mean()))
                 print('    d alg acc {:.4}%'.format((d_alg_out_batch>0.5).mean()*100))
                 print('    d safe acc {:.4}%'.format((d_safe_out_batch<=0.5).mean()*100))
-            if args.l1_loss:
+            if args.use_d or args.l1_loss or args.l2_loss:
                 print('    l1 loss {:.6}'.format(l1_loss_batch))
+                print('    l2 loss {:.6}'.format(l2_loss_batch))
             if ii != 0:
                 print('    {} examples per second'.format(
                     num_output_steps * training_batch_size / training_time))
