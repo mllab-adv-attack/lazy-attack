@@ -71,7 +71,7 @@ if __name__ == '__main__':
     parser.add_argument('--eps', default=8.0, type=float)
     parser.add_argument('--num_steps', default=10, type=int)
     parser.add_argument('--step_size', default=2.0, type=float)
-    parser.add_argument('--random_start', action='store_false')
+    parser.add_argument('--random_start', action='store_true')
 
     args = parser.parse_args()
 

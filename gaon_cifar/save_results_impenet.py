@@ -31,6 +31,7 @@ if __name__ == '__main__':
     parser.add_argument('--model_dir', default='naturally_trained', type=str)
     parser.add_argument('--corr_only', action='store_true')
     parser.add_argument('--fail_only', action='store_true')
+    parser.add_argument('--eval', action='store_true')
     parser.add_argument('--loss_func', default='xent', type=str)
     # PGD (training)
     parser.add_argument('--pgd_eps', default=8, help='Attack eps', type=float)
@@ -123,8 +124,12 @@ if __name__ == '__main__':
             if (len(x_full_batch) >= num_eval_examples) or bstart >= 10000:
                 break
             '''
-            x_candid = cifar.train_data.xs[indices[bstart:bstart + 100]]
-            y_candid = cifar.train_data.ys[indices[bstart:bstart + 100]]
+            if params.eval:
+                x_candid = cifar.eval_data.xs[indices[bstart:bstart + 100]]
+                y_candid = cifar.eval_data.ys[indices[bstart:bstart + 100]]
+            else:
+                x_candid = cifar.train_data.xs[indices[bstart:bstart + 100]]
+                y_candid = cifar.train_data.ys[indices[bstart:bstart + 100]]
             mask, logits = sess.run([model.correct_prediction, model.pre_softmax],
                                     feed_dict={model.x_input: x_candid,
                                                model.y_input: y_candid})
@@ -196,7 +201,7 @@ if __name__ == '__main__':
         # save image
         folder_name = './../cifar10_data/imp_adv_fixed/' if params.model_dir == 'adv_trained' \
             else './../cifar10_data/imp_nat_fixed/'
-        file_name = 'imp_train_fixed' + '_' + str(params.imp_delta)
+        file_name = 'imp_' + ('eval' if params.eval else 'train') + '_fixed' + '_' + str(params.imp_delta)
         batch_name = '_' + str(params.bstart) + '_' + str(params.sample_size)
         common_name = folder_name + file_name + batch_name
         
