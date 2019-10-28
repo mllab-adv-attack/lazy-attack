@@ -6,6 +6,7 @@ import tensorflow as tf
 _BATCH_NORM_DECAY = 0.997
 _BATCH_NORM_EPSILON = 1e-5
 
+
 def get_shape(tensor):
     print(tensor.get_shape().as_list())
 

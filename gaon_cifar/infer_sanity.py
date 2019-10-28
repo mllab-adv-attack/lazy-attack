@@ -49,7 +49,11 @@ if __name__ == '__main__':
     parser.add_argument('--delta', default=40, type=int)
 
     # gan settings
-    parser.add_argument('--simple_recon', action='store_true')
+    parser.add_argument('--few_samples', action='store_true')
+    parser.add_argument('--f_dim', default=64, type=int)
+    parser.add_argument('--n_down', default=2, type=int)
+    parser.add_argument('--n_blocks', default=6, type=int)
+    parser.add_argument('--clean2clean', action='store_true')
     parser.add_argument('--use_unet', action='store_true')
     parser.add_argument('--use_d', action='store_true')
     parser.add_argument('--use_advG', action='store_true')
@@ -68,7 +72,7 @@ if __name__ == '__main__':
     parser.add_argument('--eps', default=8.0, type=float)
     parser.add_argument('--num_steps', default=10, type=int)
     parser.add_argument('--step_size', default=2.0, type=float)
-    parser.add_argument('--random_start', action='store_false')
+    parser.add_argument('--random_start', action='store_true')
 
     args = parser.parse_args()
 
@@ -205,10 +209,10 @@ train_merged_summaries = tf.summary.merge(train_summaries)
 eval_summaries = [
     tf.summary.scalar('acc orig (eval)', full_model.orig_accuracy),
     tf.summary.scalar('acc safe (eval)', full_model.safe_accuracy),
-    tf.summary.scalar('acc safe_adv (eval)', full_model.safe_adv_accuracy),
-    tf.summary.scalar('acc safe_pgd (eval)', full_model.safe_pgd_accuracy),
-    tf.summary.scalar('safe adv loss (eval)', safe_adv_loss),
-    tf.summary.scalar('safe pgd loss (eval)', safe_pgd_loss),
+    #tf.summary.scalar('acc safe_adv (eval)', full_model.safe_adv_accuracy),
+    #tf.summary.scalar('acc safe_pgd (eval)', full_model.safe_pgd_accuracy),
+    #tf.summary.scalar('safe adv loss (eval)', safe_adv_loss),
+    #tf.summary.scalar('safe pgd loss (eval)', safe_pgd_loss),
     tf.summary.scalar('l2 dist (eval)', l2_dist),
     tf.summary.image('safe image (eval)', full_model.x_safe),
     tf.summary.image('orig image (eval)', full_model.x_input),
@@ -303,7 +307,12 @@ with tf.Session() as sess:
                                                            get_indices=True)
 
         if args.use_d or args.l1_loss or args.l2_loss:
-            if args.simple_recon:
+            if args.clean2clean:
+                imp_batch = np.copy(x_batch)
+            elif args.noise2noise:
+                imp_batch = imp_cifar[indices, ...]
+                x_batch = imp_batch - x_batch
+                x_batch = (x_batch+args.delta)/(2*args.delta) * 255
                 imp_batch = np.copy(x_batch)
             else:
                 imp_batch = imp_cifar[indices, ...]
@@ -398,6 +407,7 @@ with tf.Session() as sess:
 
             #sys.exit()
         # Tensorboard summaries
+
         if ii % num_summary_steps == 0:
             if args.save:
                 summary_writer.add_summary(train_merged_summaries_batch, global_step.eval(sess))
@@ -408,19 +418,18 @@ with tf.Session() as sess:
             eval_x_batch, eval_y_batch = raw_cifar.eval_data.get_next_batch(eval_batch_size, multiple_passes=True)
             eval_dict = {full_model.x_input: eval_x_batch,
                          full_model.y_input: eval_y_batch}
-            safe_pgd_loss_batch, safe_pgd_acc_batch, safe_adv_acc_batch, safe_adv_loss_batch, \
-                orig_acc_batch, safe_acc_batch, \
-                x_safe, x_safe_pgd, l2_dist_batch, eval_merged_summaries_batch = \
-                sess.run([safe_pgd_loss, safe_pgd_acc, safe_adv_acc, safe_adv_loss, orig_acc, safe_acc,
-                          full_model.x_safe, full_model.x_safe_pgd, l2_dist, eval_merged_summaries], feed_dict=eval_dict)
+            orig_acc_batch, safe_acc_batch, \
+                x_safe, l2_dist_batch, eval_merged_summaries_batch = \
+                sess.run([orig_acc, safe_acc,
+                          full_model.x_safe, l2_dist, eval_merged_summaries], feed_dict=eval_dict)
             
             print('    orig accuracy (eval) {:.4}%'.format(orig_acc_batch * 100))
             print('    safe accuracy (eval) {:.4}%'.format(safe_acc_batch * 100))
-            print('    safe(adv) accuracy (eval) {:.4}%'.format(safe_adv_acc_batch * 100))
-            print('    safe(pgd) accuracy (eval) {:.4}%'.format(safe_pgd_acc_batch * 100))
+            #print('    safe(adv) accuracy (eval) {:.4}%'.format(safe_adv_acc_batch * 100))
+            #print('    safe(pgd) accuracy (eval) {:.4}%'.format(safe_pgd_acc_batch * 100))
             print('    l2 dist (eval) {:.4}'.format(l2_dist_batch))
-            print('    safe(adv) loss (eval) {:.6}'.format(safe_adv_loss_batch))
-            print('    safe(pgd) loss (eval) {:.6}'.format(safe_pgd_loss_batch))
+            #print('    safe(adv) loss (eval) {:.6}'.format(safe_adv_loss_batch))
+            #print('    safe(pgd) loss (eval) {:.6}'.format(safe_pgd_loss_batch))
             '''
             if args.use_d:
                 print('    d loss (eval) {:.6}'.format(d_loss_batch))

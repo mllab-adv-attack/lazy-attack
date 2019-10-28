@@ -50,6 +50,9 @@ class Model(object):
         self.use_unet = args.use_unet
         self.use_d = args.use_d
         self.use_advG = args.use_advG
+        self.f_dim = args.f_dim
+        self.n_down = args.n_down
+        self.n_blocks = args.n_blocks
         self.patch = args.patch
 
         self._build_model()
@@ -73,7 +76,8 @@ class Model(object):
             if self.use_unet:
                 self.def_generator = tf.make_template('generator', unet_generator, is_training=is_train)
             else:
-                self.def_generator = tf.make_template('generator', generator, f_dim=64, c_dim=3, is_training=is_train)
+                self.def_generator = tf.make_template('generator', generator, f_dim=self.f_dim, c_dim=3,
+                                                      n_down=self.n_down, n_blocks=self.n_blocks, is_training=is_train)
             # self.x_safe = self.x_input + self.delta * self.def_generator(self.x_input)
             # self.x_safe = tf.clip_by_value(self.x_safe, self.bounds[0], self.bounds[1])
             self.x_safe = 255 * (self.def_generator(self.x_input)+1)/2
@@ -84,7 +88,8 @@ class Model(object):
                 if self.use_unet:
                     self.adv_generator = tf.make_template('adv_generator', unet_generator, is_training=is_train)
                 else:
-                    self.adv_generator = tf.make_template('adv_generator', generator, f_dim=64, c_dim=3, is_training=is_train)
+                    self.adv_generator = tf.make_template('adv_generator', generator, f_dim=self.f_dim, c_dim=3,
+                                                          n_down=self.n_down, n_blocks=self.n_blocks, is_training=is_train)
                 # self.x_safe_adv = self.x_safe + self.attack_params['eps'] * self.adv_generator(self.x_safe)
                 # self.x_safe_adv = self.x_safe + self.delta * self.adv_generator(self.x_safe)
                 # self.x_safe_adv = tf.clip_by_value(self.x_safe_adv, self.bounds[0], self.bounds[1])
