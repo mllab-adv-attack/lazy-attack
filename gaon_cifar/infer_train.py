@@ -49,6 +49,10 @@ if __name__ == '__main__':
     parser.add_argument('--delta', default=40, type=int)
 
     # gan settings
+    parser.add_argument('--f_dim', default=64, type=int)
+    parser.add_argument('--n_down', default=2, type=int)
+    parser.add_argument('--n_blocks', default=6, type=int)
+    parser.add_argument('--noise_only', action='store_true')
     parser.add_argument('--use_unet', action='store_true')
     parser.add_argument('--use_d', action='store_true')
     parser.add_argument('--use_advG', action='store_true')
@@ -255,6 +259,12 @@ with tf.Session() as sess:
                                                                  'discriminator' in var.name)]
     variables_to_train_advG = [var for var in trainable_variables if (var.name not in restore_vars_name_list and
                                                                    'adv_generator' in var.name)]
+
+    print(np.sum([np.prod(v.get_shape().as_list()) for v in restore_vars]))
+    print(np.sum([np.prod(v.get_shape().as_list()) for v in variables_to_train]))
+    print(np.sum([np.prod(v.get_shape().as_list()) for v in variables_to_train_g]))
+    print(np.sum([np.prod(v.get_shape().as_list()) for v in variables_to_train_d]))
+    print(np.sum([np.prod(v.get_shape().as_list()) for v in variables_to_train_advG]))
 
     train_step_g = tf.train.AdamOptimizer(g_learning_rate).minimize(
         total_loss if not args.use_d else total_g_loss,

@@ -53,7 +53,7 @@ class Discriminator(object):
 
             if self.patch:
                 inputs = tf.layers.conv2d(inputs, 1, kernel_size=[3, 3], strides=[1, 1], padding='same')
-                print(get_shape(inputs))
+                #print(get_shape(inputs))
             else:
                 inputs = tf.layers.flatten(inputs)
                 inputs = tf.layers.dense(inputs, 1)

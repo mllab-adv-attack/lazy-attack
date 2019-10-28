@@ -76,7 +76,7 @@ class Model(object):
                 self.def_generator = tf.make_template('generator', generator, f_dim=64, c_dim=3, is_training=is_train)
             # self.x_safe = self.x_input + self.delta * self.def_generator(self.x_input)
             # self.x_safe = tf.clip_by_value(self.x_safe, self.bounds[0], self.bounds[1])
-            self.x_safe = (self.def_generator(self.x_input)+1)/2
+            self.x_safe = 255 * (self.def_generator(self.x_input)+1)/2
 
         with tf.variable_scope('', reuse=tf.AUTO_REUSE):
             if self.use_advG:
@@ -88,7 +88,7 @@ class Model(object):
                 # self.x_safe_adv = self.x_safe + self.attack_params['eps'] * self.adv_generator(self.x_safe)
                 # self.x_safe_adv = self.x_safe + self.delta * self.adv_generator(self.x_safe)
                 # self.x_safe_adv = tf.clip_by_value(self.x_safe_adv, self.bounds[0], self.bounds[1])
-                self.x_safe_adv = (self.adv_generator(self.x_safe)+1)/2
+                self.x_safe_adv = 255 * (self.adv_generator(self.x_safe)+1)/2
                 self.x_safe_pgd = PGD(self.x_safe, self.y_input, self.model.fprop, self.attack_params)
             else:
                 # use PGD as attacker

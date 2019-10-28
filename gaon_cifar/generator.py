@@ -144,7 +144,7 @@ def block_layer(inputs, filters, bottleneck, block_fn, blocks, strides,
   return tf.identity(inputs, name)
 
 
-def generator(x, f_dim, c_dim, is_training=True):
+def generator(x, f_dim=64, c_dim=3, n_down=2, n_blocks=6, is_training=True):
     ngf = f_dim
     inputs = x
     data_format='channels_last'
@@ -160,7 +160,7 @@ def generator(x, f_dim, c_dim, is_training=True):
     inputs = batch_norm(inputs, is_training, data_format)
     inputs = tf.nn.relu(inputs)
 
-    n_downsampling = 2
+    n_downsampling = n_down
     for i in range(n_downsampling):
         mult = 2**i
         inputs = conv2d_fixed_padding(inputs, filters=ngf*mult*2, kernel_size=3, strides=2, data_format=data_format)
@@ -170,7 +170,7 @@ def generator(x, f_dim, c_dim, is_training=True):
     mult = 2**n_downsampling
     inputs = block_layer(
           inputs=inputs, filters=ngf*mult, bottleneck=False,
-          block_fn=_building_block_v1, blocks=6,
+          block_fn=_building_block_v1, blocks=n_blocks,
           strides=1, training=is_training,
           name='block_layer_G{}'.format(1), data_format=data_format)
 
