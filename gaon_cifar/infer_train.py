@@ -185,15 +185,14 @@ saver = tf.train.Saver()
 train_summaries = [
     tf.summary.scalar('acc orig', full_model.orig_accuracy),
     tf.summary.scalar('acc safe', full_model.safe_accuracy),
-    #tf.summary.scalar('acc safe_adv', full_model.safe_adv_accuracy),
-    #tf.summary.scalar('safe adv loss', safe_adv_loss),
+    tf.summary.scalar('acc safe_adv', full_model.safe_adv_accuracy),
+    tf.summary.scalar('acc safe_pgd', full_model.safe_pgd_accuracy),
+    tf.summary.scalar('safe adv loss', safe_adv_loss),
+    tf.summary.scalar('safe pgd loss', safe_pgd_loss),
     tf.summary.scalar('l2 dist', l2_dist),
     tf.summary.image('safe image', full_model.x_safe),
     tf.summary.image('orig image', full_model.x_input),
 ]
-if not args.no_lc:
-    train_summaries.append(tf.summary.scalar('acc safe_adv', full_model.safe_adv_accuracy))
-    train_summaries.append(tf.summary.scalar('safe adv loss', safe_adv_loss))
 if args.use_d:
     train_summaries.append(tf.summary.scalar('d loss', d_loss))
     train_summaries.append(tf.summary.scalar('g loss', g_loss))
@@ -333,43 +332,43 @@ with tf.Session() as sess:
         if args.no_lc:
             if args.use_d or args.l1_loss or args.l2_loss:
                 _, _, orig_acc_batch, safe_acc_batch, \
-                x_safe, l2_dist_batch, l1_loss_batch, l2_loss_batch, train_merged_summaries_batch = \
+                x_safe, l2_dist_batch, l1_loss_batch, l2_loss_batch = \
                     sess.run([train_step_g, extra_update_ops, orig_acc, safe_acc,
-                              full_model.x_safe, l2_dist, l1_loss, l2_loss, train_merged_summaries],
+                              full_model.x_safe, l2_dist, l1_loss, l2_loss],
                              feed_dict=nat_dict)
             else:
                 _, _, orig_acc_batch, safe_acc_batch, \
-                x_safe, l2_dist_batch, train_merged_summaries_batch = \
+                x_safe, l2_dist_batch = \
                     sess.run([train_step_g, extra_update_ops, orig_acc, safe_acc,
-                              full_model.x_safe, l2_dist, train_merged_summaries],
+                              full_model.x_safe, l2_dist],
                              feed_dict=nat_dict)
         else:
             if args.use_d or args.l1_loss or args.l2_loss:
                 _, _, safe_adv_loss_batch, safe_adv_acc_batch, orig_acc_batch, safe_acc_batch, \
-                    x_safe, x_safe_adv, l2_dist_batch, l1_loss_batch, l2_loss_batch, train_merged_summaries_batch = \
+                x_safe, x_safe_adv, l2_dist_batch, l1_loss_batch, l2_loss_batch = \
                     sess.run([train_step_g, extra_update_ops, safe_adv_loss, safe_adv_acc, orig_acc, safe_acc,
-                              full_model.x_safe, full_model.x_safe_adv, l2_dist, l1_loss, l2_loss, train_merged_summaries],
+                              full_model.x_safe, full_model.x_safe_adv, l2_dist, l1_loss, l2_loss],
                              feed_dict=nat_dict)
             else:
                 _, _, safe_adv_loss_batch, safe_adv_acc_batch, orig_acc_batch, safe_acc_batch, \
-                    x_safe, x_safe_adv, l2_dist_batch, train_merged_summaries_batch = \
+                x_safe, x_safe_adv, l2_dist_batch = \
                     sess.run([train_step_g, extra_update_ops, safe_adv_loss, safe_adv_acc, orig_acc, safe_acc,
-                              full_model.x_safe, full_model.x_safe_adv, l2_dist, train_merged_summaries],
+                              full_model.x_safe, full_model.x_safe_adv, l2_dist],
                              feed_dict=nat_dict)
 
         if args.use_advG:
-            _, _, safe_adv_loss_batch, safe_adv_acc_batch, orig_acc_batch, safe_acc_batch, \
-                x_safe, x_safe_adv, l2_dist_batch, train_merged_summaries_batch = \
-                sess.run([train_step_advG, extra_update_ops, safe_adv_loss, safe_adv_acc, orig_acc, safe_acc,
-                          full_model.x_safe, full_model.x_safe_adv, l2_dist, train_merged_summaries],
+            _, safe_adv_loss_batch, safe_adv_acc_batch, orig_acc_batch, safe_acc_batch, \
+            x_safe, x_safe_adv, l2_dist_batch = \
+                sess.run([train_step_advG, safe_adv_loss, safe_adv_acc, orig_acc, safe_acc,
+                          full_model.x_safe, full_model.x_safe_adv, l2_dist],
                          feed_dict=nat_dict)
 
         if args.use_d:
-            _, _,  d_loss_batch, g_loss_batch, d_alg_out_batch, d_safe_out_batch = \
-                sess.run([train_step_d, extra_update_ops, d_loss, g_loss,
+            _, d_loss_batch, g_loss_batch, d_alg_out_batch, d_safe_out_batch = \
+                sess.run([train_step_d, d_loss, g_loss,
                           full_model.d_alg_out, full_model.d_safe_out],
                          feed_dict=nat_dict)
-        
+
         end = timer()
 
         assert 0 <= np.amin(x_safe) and np.amax(x_safe) <= 255.0
@@ -406,6 +405,14 @@ with tf.Session() as sess:
             #sys.exit()
         # Tensorboard summaries
         if ii % num_summary_steps == 0:
+            safe_adv_acc_batch, safe_adv_loss_batch, \
+                safe_pgd_acc_batch, safe_pgd_loss_batch, train_merged_summaries_batch \
+                = sess.run([safe_adv_acc, safe_adv_loss,
+                            safe_pgd_acc, safe_pgd_loss, train_merged_summaries], feed_dict=nat_dict)
+            print('    safe(adv) accuracy {:.4}%'.format(safe_adv_acc_batch * 100))
+            print('    safe(pgd) accuracy {:.4}%'.format(safe_pgd_acc_batch * 100))
+            print('    safe(adv) loss {:.6}'.format(safe_adv_loss_batch))
+            print('    safe(pgd) loss {:.6}'.format(safe_pgd_loss_batch))
             if args.save:
                 summary_writer.add_summary(train_merged_summaries_batch, global_step.eval(sess))
             # evaluate on test set
@@ -415,17 +422,17 @@ with tf.Session() as sess:
             eval_x_batch, eval_y_batch = raw_cifar.eval_data.get_next_batch(eval_batch_size, multiple_passes=True)
             eval_dict = {full_model.x_input: eval_x_batch,
                          full_model.y_input: eval_y_batch}
-            safe_pgd_loss_batch, safe_pgd_acc_batch, safe_adv_acc_batch, safe_adv_loss_batch, \
-                orig_acc_batch, safe_acc_batch, \
-                x_safe, x_safe_pgd, l2_dist_batch, eval_merged_summaries_batch = \
-                sess.run([safe_pgd_loss, safe_pgd_acc, safe_adv_acc, safe_adv_loss, orig_acc, safe_acc,
-                          full_model.x_safe, full_model.x_safe_pgd, l2_dist, eval_merged_summaries], feed_dict=eval_dict)
-            
+            orig_acc_batch, safe_acc_batch, safe_adv_acc_batch, safe_adv_loss_batch, \
+                safe_pgd_acc_batch, safe_pgd_loss_batch, \
+                x_safe, l2_dist_batch, eval_merged_summaries_batch = \
+                sess.run([orig_acc, safe_acc, safe_adv_acc, safe_adv_loss, safe_pgd_acc, safe_pgd_loss,
+                          full_model.x_safe, l2_dist, eval_merged_summaries], feed_dict=eval_dict)
+
             print('    orig accuracy (eval) {:.4}%'.format(orig_acc_batch * 100))
             print('    safe accuracy (eval) {:.4}%'.format(safe_acc_batch * 100))
+            print('    l2 dist (eval) {:.4}'.format(l2_dist_batch))
             print('    safe(adv) accuracy (eval) {:.4}%'.format(safe_adv_acc_batch * 100))
             print('    safe(pgd) accuracy (eval) {:.4}%'.format(safe_pgd_acc_batch * 100))
-            print('    l2 dist (eval) {:.4}'.format(l2_dist_batch))
             print('    safe(adv) loss (eval) {:.6}'.format(safe_adv_loss_batch))
             print('    safe(pgd) loss (eval) {:.6}'.format(safe_pgd_loss_batch))
             '''
