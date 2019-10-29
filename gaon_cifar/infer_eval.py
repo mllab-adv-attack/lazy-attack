@@ -106,7 +106,8 @@ y_input = tf.placeholder(
     shape=None
 )
 
-generator = tf.make_template('generator', Generator, f_dim=64, c_dim=3, is_training=args.train_mode)
+generator = tf.make_template('generator', Generator, f_dim=args.f_dim, c_dim=3,
+                             n_down=args.n_down, n_blocks=args.n_blocks, is_training=args.train_mode)
 
 if args.use_d:
     discriminator = Discriminator(args.patch, is_training=False)
@@ -316,7 +317,7 @@ with tf.Session() as sess:
         for _ in range(args.val_restarts):
             
             x_batch_attacked, _ = pgd.perturb(x_batch_safe, y_batch, sess,
-                                   proj=True, reverse=False, rand=True)
+                                   proj=True, reverse=False)
 
             correct_prediction = sess.run(model.correct_prediction,
                                            feed_dict={model.x_input: x_batch_attacked,
