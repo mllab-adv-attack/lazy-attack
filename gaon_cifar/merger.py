@@ -65,6 +65,7 @@ def merge(params):
 
     return x_org, x_imp, y, final_name
 
+
 def safe_validation(x, y, model, sess, start_eps=8, end_eps=8, val_num=20):
 
     cur_eps = start_eps

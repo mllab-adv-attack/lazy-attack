@@ -46,8 +46,9 @@ if __name__ == '__main__':
     parser.add_argument('--sample_size', default=1000, type=int)
     parser.add_argument('--bstart', default=0, type=int)
     parser.add_argument('--train_mode', action='store_true', help='use train mode neural nets')
-    parser.add_argument('--comp_dist', action='store_true', help='compare distance with S_maml results')
-    
+    parser.add_argument('--comp_imp', action='store_true', help='compare distance with S_maml results')
+    parser.add_argument('--eval_imp', action='store_true', help='also evaluate S_maml results')
+
     # GAN settings
     parser.add_argument('--f_dim', default=64, type=int)
     parser.add_argument('--n_down', default=2, type=int)
@@ -149,7 +150,7 @@ if args.eval:
 else:
     cifar = cifar10_input.CIFAR10Data(data_path).train_data
 
-if args.comp_dist:
+if args.comp_imp or args.eval_imp:
     imp_cifar = load_imp_data(args, args.eval)
 
 model_file = tf.train.latest_checkpoint(model_dir)
@@ -210,7 +211,7 @@ with tf.Session() as sess:
         x_candid = cifar.xs[indices[bstart:bstart + 100]]
         y_candid = cifar.ys[indices[bstart:bstart + 100]]
 
-        if args.comp_dist:
+        if args.comp_imp or args.eval_imp:
             imp_candid = imp_cifar[indices[bstart:bstart + 100]]
 
             if np.amax(np.abs(x_candid-imp_candid)) > args.delta + 1e-3:
@@ -228,14 +229,14 @@ with tf.Session() as sess:
             x_full_batch = x_candid[:min(num_eval_examples, len(x_candid))]
             y_full_batch = y_candid[:min(num_eval_examples, len(y_candid))]
             logit_full_batch = logits[:min(num_eval_examples, len(logits))]
-            if args.comp_dist:
+            if args.comp_imp or args.eval_imp:
                 imp_full_batch = imp_candid[:min(num_eval_examples, len(imp_candid))]
         else:
             index = min(num_eval_examples - len(x_full_batch), len(x_candid))
             x_full_batch = np.concatenate((x_full_batch, x_candid[:index]))
             y_full_batch = np.concatenate((y_full_batch, y_candid[:index]))
             logit_full_batch = np.concatenate((logit_full_batch, logits[:index]))
-            if args.comp_dist:
+            if args.comp_imp or args.eval_imp:
                 imp_full_batch = np.concatenate((imp_full_batch, imp_candid[:index]))
         bstart += 100
         if (len(x_full_batch) >= num_eval_examples) or bstart >= len(indices):
@@ -260,9 +261,12 @@ with tf.Session() as sess:
     safe_correct_num = 0
     l2_dist = []
 
-    if args.comp_dist:
+    if args.comp_imp:
         l1_loss = []
         l2_loss = []
+    if args.eval_imp:
+        imp_correct_num = 0
+        imp_full_mask = []
 
     for ibatch in range(num_batches):
         bstart = ibatch * eval_batch_size
@@ -272,7 +276,7 @@ with tf.Session() as sess:
         x_batch = x_full_batch[bstart:bend, :]
         y_batch = y_full_batch[bstart:bend]
 
-        if args.comp_dist:
+        if args.comp_imp or args.eval_imp:
             imp_batch = imp_full_batch[bstart: bend, :]
 
         correct_prediction = sess.run(model.correct_prediction,
@@ -292,6 +296,14 @@ with tf.Session() as sess:
         print('safe acc: {}'.format(np.sum(correct_prediction)))
         safe_correct_num += np.sum(correct_prediction)
 
+        if args.eval_imp:
+            correct_prediction = sess.run(model.correct_prediction,
+                                          feed_dict={model.x_input: imp_batch,
+                                                     model.y_input: y_batch})
+
+            print('imp acc: {}'.format(np.sum(correct_prediction)))
+            imp_correct_num += np.sum(correct_prediction)
+
         if args.use_d:
             disc_out = sess.run(d_out,
                                 feed_dict={x_input: x_batch_safe})
@@ -307,7 +319,7 @@ with tf.Session() as sess:
 
         mask = np.array([True for _ in range(len(y_batch))])
 
-        if args.comp_dist:
+        if args.comp_imp:
             raw_dist = (imp_batch - x_batch_safe)/255
             l1_loss_batch = np.mean(np.abs(raw_dist))
             l2_loss_batch = np.mean(np.linalg.norm(raw_dist.reshape(raw_dist.shape[0], -1), axis=1))
@@ -333,13 +345,39 @@ with tf.Session() as sess:
         l2_loss.append(l2_loss_batch)
         full_mask.append(mask)
 
-        print('{}/{} safe'.format(np.sum(mask), np.size(mask)))
+        print('safe(PGD) acc: {}'.format(np.sum(mask)/np.size(mask)))
+
+        if args.eval_imp:
+            for _ in range(args.val_restarts):
+
+                imp_batch_attacked, _ = pgd.perturb(imp_batch, y_batch, sess,
+                                                  proj=True, reverse=False)
+
+                correct_prediction = sess.run(model.correct_prediction,
+                                              feed_dict={model.x_input: imp_batch_attacked,
+                                                         model.y_input: y_batch})
+
+                mask *= correct_prediction
+
+                if np.sum(mask)==0:
+                    break
+
+            imp_full_mask.append(mask)
+
+            print('imp(PGD) acc: {}'.format(np.sum(mask)/np.size(mask)))
 
     full_mask = np.concatenate(full_mask)
 
+    if args.imp_eval:
+        imp_full_mask = np.concatenate(imp_full_mask)
+
     print("orig accuracy: {:.2f}".format(orig_correct_num/np.size(full_mask)*100))
     print("safe accuracy: {:.2f}".format(safe_correct_num/np.size(full_mask)*100))
+    if args.imp_eval:
+        print("imp accuracy: {:.2f}".format(imp_correct_num/np.size(full_mask)*100))
     print("safe(PGD) accuracy: {:.2f}".format(np.mean(full_mask)*100))
+    if args.imp_eval:
+        print("imp(PGD) accuracy: {:.2f}".format(np.mean(imp_full_mask)*100))
     print("l2 dist: {:.4f}".format(np.mean(l2_dist)))
     print("l1 loss: {:.5f}".format(np.mean(l1_loss)))
     print("l2 loss: {:.5f}".format(np.mean(l2_loss)))
