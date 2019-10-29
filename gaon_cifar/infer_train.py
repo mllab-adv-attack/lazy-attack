@@ -42,13 +42,12 @@ if __name__ == '__main__':
     parser.add_argument('--num_summary_steps', default=100, type=int)
     parser.add_argument('--num_checkpoint_steps', default=1000, type=int)
     parser.add_argument('--g_lr', default=1e-3, type=float)
-    parser.add_argument('--num_eval_examples', default=10000, type=int)
     parser.add_argument('--training_batch_size', default=128, type=int)
     parser.add_argument('--eval_batch_size', default=100, type=int)
     parser.add_argument('--eval_on_cpu', action='store_true')
     parser.add_argument('--delta', default=40, type=int)
 
-    # gan settings
+    # GAN settings
     parser.add_argument('--f_dim', default=64, type=int)
     parser.add_argument('--n_down', default=2, type=int)
     parser.add_argument('--n_blocks', default=6, type=int)

@@ -31,7 +31,7 @@ if __name__ == '__main__':
 
 
 class LinfPGDAttack:
-    def __init__(self, model, epsilon, num_steps, step_size, random_start, loss_func):
+    def __init__(self, model, epsilon, num_steps, step_size, random_start, loss_func='xent'):
         """Attack parameter initialization. The attack performs k steps of
         size a, while always staying within epsilon from the initial
            point."""

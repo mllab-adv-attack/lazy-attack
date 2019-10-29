@@ -2,6 +2,7 @@ import numpy as np
 
 LOAD_DATA_DIR = '/data/home/gaon/lazy-attack/cifar10_data/'
 CIFAR10_TRAIN_DATA_SIZE = 50000
+CIFAR10_EVAL_DATA_SIZE = 10000
 FILE_BATCH_SIZE = 1000
 
 
@@ -54,12 +55,13 @@ def infer_file_name(args):
     return meta_name
 
 
-def load_imp_data(args):
+def load_imp_data(args, eval=False):
     final_dir = 'imp_nat_fixed/' if args.model_dir == 'naturally_trained' else 'imp_adv_fixed/'
 
     data_dir = LOAD_DATA_DIR + final_dir
 
-    posfix_li = [('imp_train_fixed_{:.1f}_'.format(args.delta)+str(idx)) for idx in range(0, CIFAR10_TRAIN_DATA_SIZE, FILE_BATCH_SIZE)]
+    posfix_li = [('imp_' + ('eval' if eval else 'train') + '_fixed_{:.1f}_'.format(args.delta)+str(idx))
+                 for idx in range(0, CIFAR10_EVAL_DATA_SIZE if eval else CIFAR10_TRAIN_DATA_SIZE, FILE_BATCH_SIZE)]
     filename_li = [(str_idx + '_' + str(FILE_BATCH_SIZE) + '.npy') for str_idx in posfix_li]
     fullname_li = [(data_dir + filename) for filename in filename_li]
     data_li = [np.load(fullname) for fullname in fullname_li]

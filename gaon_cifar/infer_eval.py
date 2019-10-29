@@ -17,7 +17,7 @@ from generator import generator as Generator
 from discriminator import Discriminator
 from model import Model as Model
 
-from utils import infer_file_name
+from utils import infer_file_name, load_imp_data
 
 import argparse
 
@@ -31,42 +31,53 @@ if __name__ == '__main__':
     parser.add_argument('--data_path', default='../cifar10_data', type=str)
     parser.add_argument('--model_dir', default='naturally_trained', type=str)
     parser.add_argument('--save_dir', default='safe_net', type=str, help='safe_net saved folder')
-    parser.add_argument('--corr_only', action='store_false')
+    parser.add_argument('--corr_only', action='store_true')
     parser.add_argument('--fail_only', action='store_true')
+    parser.add_argument('--eval', action='store_true', help='use test set data. else use train set data.')
+    parser.add_argument('--force_path', default='', type=str, help='if you want to manually select the folder')
 
     # eval parameters
     parser.add_argument('--tf_random_seed', default=451760341, type=int)
     parser.add_argument('--np_random_seed', default=216105420, type=int)
+    parser.add_argument('--g_lr', default=1e-3, type=float)
     parser.add_argument('--eval_batch_size', default=100, type=int)
     parser.add_argument('--eval_on_cpu', action='store_true')
-    parser.add_argument('--delta', default=40, type=int)
-    parser.add_argument('--g_lr', default=1e-3, type=float)
+    parser.add_argument('--delta', default=16, type=int)
     parser.add_argument('--sample_size', default=1000, type=int)
     parser.add_argument('--bstart', default=0, type=int)
-    parser.add_argument('--train', action='store_true')
+    parser.add_argument('--train_mode', action='store_true', help='use train mode neural nets')
+    parser.add_argument('--comp_dist', action='store_true', help='compare distance with S_maml results')
     
-    # discriminator settings
+    # GAN settings
+    parser.add_argument('--f_dim', default=64, type=int)
+    parser.add_argument('--n_down', default=2, type=int)
+    parser.add_argument('--n_blocks', default=6, type=int)
+    parser.add_argument('--noise_only', action='store_true')
+    parser.add_argument('--use_unet', action='store_true')
     parser.add_argument('--use_d', action='store_true')
     parser.add_argument('--use_advG', action='store_true')
+    parser.add_argument('--no_lc', action='store_true')
     parser.add_argument('--advG_lr', default=1e-3, type=float)
     parser.add_argument('--d_lr', default=1e-3, type=float)
     parser.add_argument('--patch', action='store_true', help='use patch discriminator, (2x2)')
     parser.add_argument('--l1_loss', action='store_true', help='use l1 loss on infer(x) and maml(x)')
+    parser.add_argument('--l2_loss', action='store_true', help='use l2 loss on infer(x) and maml(x)')
     parser.add_argument('--g_weight', default=1, type=float, help='loss weight for generator')
     parser.add_argument('--d_weight', default=1, type=float, help='loss weight for discriminator')
     parser.add_argument('--l1_weight', default=1, type=float, help='loss weight for l1')
+    parser.add_argument('--l2_weight', default=1, type=float, help='loss weight for l2')
 
     # pgd (filename) settings
     parser.add_argument('--eps', default=8.0, type=float)
     parser.add_argument('--num_steps', default=10, type=int)
     parser.add_argument('--step_size', default=2.0, type=float)
-    parser.add_argument('--random_start', default=20, type=int)
-    
+
     # pgd (eval) settings
     parser.add_argument('--val_eps', default=8.0, type=float)
     parser.add_argument('--val_num_steps', default=20, type=int)
     parser.add_argument('--val_step_size', default=2.0, type=float)
-    parser.add_argument('--val_restarts', default=20, type=int)
+    parser.add_argument('--val_restarts', default=1, type=int)
+    parser.add_argument('--val_rand', action='store_true', help='PGD random start. Set to True if val_restarts > 1')
 
     args = parser.parse_args()
 
@@ -95,7 +106,7 @@ y_input = tf.placeholder(
     shape=None
 )
 
-generator = tf.make_template('generator', Generator, f_dim=64, c_dim=3, is_training=args.train)
+generator = tf.make_template('generator', Generator, f_dim=64, c_dim=3, is_training=args.train_mode)
 
 if args.use_d:
     discriminator = Discriminator(args.patch, is_training=False)
@@ -109,11 +120,14 @@ pgd = LinfPGDAttack(model,
                     args.val_eps,
                     args.val_num_steps,
                     args.val_step_size,
-                    True,
-                    'xent')
+                    random_start=(True if args.val_restarts > 1 else args.val_rand),
+                    loss_func='xent')
 
 # Setting up the Tensorboard and checkpoint outputs
-meta_name = infer_file_name(args)
+if args.force_path:
+    meta_name = args.force_path
+else:
+    meta_name = infer_file_name(args)
 print(meta_name)
 
 model_dir = MODEL_PATH + args.save_dir + '/' + meta_name
@@ -129,7 +143,13 @@ if not os.path.exists(model_dir):
 # - eval of different runs
 
 saver = tf.train.Saver()
-cifar = cifar10_input.CIFAR10Data(data_path)
+if args.eval:
+    cifar = cifar10_input.CIFAR10Data(data_path).eval_data
+else:
+    cifar = cifar10_input.CIFAR10Data(data_path).train_data
+
+if args.comp_dist:
+    imp_cifar = load_imp_data(args, args.eval)
 
 model_file = tf.train.latest_checkpoint(model_dir)
 if model_file is None:
@@ -186,8 +206,15 @@ with tf.Session() as sess:
     # load data
     bstart = args.bstart
     while True:
-        x_candid = cifar.eval_data.xs[indices[bstart:bstart + 100]]
-        y_candid = cifar.eval_data.ys[indices[bstart:bstart + 100]]
+        x_candid = cifar.xs[indices[bstart:bstart + 100]]
+        y_candid = cifar.ys[indices[bstart:bstart + 100]]
+
+        if args.comp_dist:
+            imp_candid = imp_cifar[indices[bstart:bstart + 100]]
+
+            if np.amax(np.abs(x_candid-imp_candid)) > args.delta + 1e-3:
+                raise Exception
+
         mask, logits = sess.run([model.correct_prediction, model.pre_softmax],
                                 feed_dict={model.x_input: x_candid,
                                            model.y_input: y_candid})
@@ -200,11 +227,15 @@ with tf.Session() as sess:
             x_full_batch = x_candid[:min(num_eval_examples, len(x_candid))]
             y_full_batch = y_candid[:min(num_eval_examples, len(y_candid))]
             logit_full_batch = logits[:min(num_eval_examples, len(logits))]
+            if args.comp_dist:
+                imp_full_batch = imp_candid[:min(num_eval_examples, len(imp_candid))]
         else:
             index = min(num_eval_examples - len(x_full_batch), len(x_candid))
             x_full_batch = np.concatenate((x_full_batch, x_candid[:index]))
             y_full_batch = np.concatenate((y_full_batch, y_candid[:index]))
             logit_full_batch = np.concatenate((logit_full_batch, logits[:index]))
+            if args.comp_dist:
+                imp_full_batch = np.concatenate((imp_full_batch, imp_candid[:index]))
         bstart += 100
         if (len(x_full_batch) >= num_eval_examples) or bstart >= len(indices):
             break
@@ -212,7 +243,7 @@ with tf.Session() as sess:
     # Adjust num_eval_examples. Iterate over the samples batch-by-batch
     num_eval_examples = len(x_full_batch)
 
-    if num_eval_examples > args.eval_batch_size :
+    if num_eval_examples > args.eval_batch_size:
         eval_batch_size = args.eval_batch_size
     else:
         eval_batch_size = min(args.eval_batch_size, num_eval_examples)
@@ -224,8 +255,13 @@ with tf.Session() as sess:
     x_full_batch = x_full_batch.astype(np.float32)
 
     full_mask = []
+    orig_correct_num = 0
     safe_correct_num = 0
     l2_dist = []
+
+    if args.comp_dist:
+        l1_loss = []
+        l2_loss = []
 
     for ibatch in range(num_batches):
         bstart = ibatch * eval_batch_size
@@ -234,12 +270,16 @@ with tf.Session() as sess:
 
         x_batch = x_full_batch[bstart:bend, :]
         y_batch = y_full_batch[bstart:bend]
-        
+
+        if args.comp_dist:
+            imp_batch = imp_full_batch[bstart: bend, :]
+
         correct_prediction = sess.run(model.correct_prediction,
                                        feed_dict={model.x_input: x_batch,
                                                   model.y_input: y_batch})
 
         print('original acc: {}'.format(np.sum(correct_prediction)))
+        orig_correct_num += np.sum(correct_prediction)
         
         [x_batch_safe, noise_batch] = sess.run([x_safe_clipped, noise],
                                 feed_dict={x_input: x_batch})
@@ -264,8 +304,14 @@ with tf.Session() as sess:
         l2_dist_batch = np.mean(np.linalg.norm((x_batch_safe-x_batch).reshape(x_batch.shape[0], -1)/255, axis=1))
         print('l2 dist: {:.4f}'.format(l2_dist_batch))
 
-
         mask = np.array([True for _ in range(len(y_batch))])
+
+        if args.comp_dist:
+            raw_dist = (imp_batch - x_batch_safe)/255
+            l1_loss_batch = np.mean(np.abs(raw_dist))
+            l2_loss_batch = np.mean(np.linalg.norm(raw_dist.reshape(raw_dist.shape[0], -1), axis=1))
+            print('l1 loss: {:.5f}'.format(l1_loss_batch))
+            print('l2 loss: {:.5f}'.format(l2_loss_batch))
 
         for _ in range(args.val_restarts):
             
@@ -282,13 +328,18 @@ with tf.Session() as sess:
                 break
 
         l2_dist.append(l2_dist_batch)
+        l1_loss.append(l1_loss_batch)
+        l2_loss.append(l2_loss_batch)
         full_mask.append(mask)
 
         print('{}/{} safe'.format(np.sum(mask), np.size(mask)))
 
     full_mask = np.concatenate(full_mask)
 
+    print("orig accuracy: {:.2f}".format(orig_correct_num/np.size(full_mask)*100))
     print("safe accuracy: {:.2f}".format(safe_correct_num/np.size(full_mask)*100))
-    print("evaluation accuracy: {:.2f}".format(np.mean(full_mask)*100))
+    print("safe(PGD) accuracy: {:.2f}".format(np.mean(full_mask)*100))
     print("l2 dist: {:.4f}".format(np.mean(l2_dist)))
+    print("l1 loss: {:.5f}".format(np.mean(l1_loss)))
+    print("l2 loss: {:.5f}".format(np.mean(l2_loss)))
 
