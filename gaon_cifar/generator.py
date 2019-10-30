@@ -96,7 +96,7 @@ def _building_block_v1(inputs, filters, training, projection_shortcut, strides,
   inputs = batch_norm(inputs, training, data_format)
   inputs = tf.nn.relu(inputs)
 
-  inputs = tf.nn.dropout(inputs, keep_prop=(1-drop))
+  inputs = tf.layers.dropout(inputs, rate=drop, training=training)
 
   inputs = conv2d_fixed_padding(
       inputs=inputs, filters=filters, kernel_size=3, strides=1,
@@ -142,7 +142,7 @@ def block_layer(inputs, filters, bottleneck, block_fn, blocks, strides,
                     drop, data_format)
 
   for _ in range(1, blocks):
-    inputs = block_fn(inputs, filters, training, None, 1, data_format)
+    inputs = block_fn(inputs, filters, training, None, 1, drop, data_format)
 
   return tf.identity(inputs, name)
 
