@@ -55,6 +55,7 @@ class Model(object):
         self.n_down = args.n_down
         self.n_blocks = args.n_blocks
         self.patch = args.patch
+        self.drop = 0 if not args.dropout else args.dropout_rate
 
         self._build_model()
 
@@ -75,9 +76,10 @@ class Model(object):
 
         with tf.variable_scope('', reuse=tf.AUTO_REUSE):
             if self.use_unet:
-                self.def_generator = tf.make_template('generator', unet_generator, is_training=is_train)
+                self.def_generator = tf.make_template('generator', unet_generator, drop=self.drop,
+                                                      is_training=is_train)
             else:
-                self.def_generator = tf.make_template('generator', generator, f_dim=self.f_dim, c_dim=3,
+                self.def_generator = tf.make_template('generator', generator, f_dim=self.f_dim, c_dim=3, drop=self.drop,
                                                       n_down=self.n_down, n_blocks=self.n_blocks, is_training=is_train)
             self.x_safe = self.x_input + self.delta * self.def_generator(self.x_input)
             self.x_safe = tf.clip_by_value(self.x_safe, self.bounds[0], self.bounds[1])
@@ -86,10 +88,12 @@ class Model(object):
             if self.use_advG:
                 # use adv generator as attacker (PGD only when evaluation)
                 if self.use_unet:
-                    self.adv_generator = tf.make_template('adv_generator', unet_generator, is_training=is_train)
+                    self.adv_generator = tf.make_template('adv_generator', unet_generator,
+                                                          drop=self.drop, is_training=is_train)
                 else:
                     self.adv_generator = tf.make_template('adv_generator', generator, f_dim=self.f_dim, c_dim=3,
-                                                          n_down=self.n_down, n_blocks=self.n_blocks, is_training=is_train)
+                                                          n_down=self.n_down, n_blocks=self.n_blocks,
+                                                          drop=self.drop, is_training=is_train)
                 #self.x_safe_adv = self.x_safe + self.attack_params['eps'] * self.adv_generator(self.x_safe)
                 self.x_safe_adv = self.x_safe + self.delta * self.adv_generator(self.x_safe)
                 self.x_safe_adv = tf.clip_by_value(self.x_safe_adv, self.bounds[0], self.bounds[1])

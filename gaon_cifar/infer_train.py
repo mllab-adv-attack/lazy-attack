@@ -48,6 +48,8 @@ if __name__ == '__main__':
     parser.add_argument('--delta', default=40, type=int)
 
     # GAN settings
+    parser.add_argument('--dropout', action='store_true')
+    parser.add_argument('--dropout_rate', default=0.3, type=float)
     parser.add_argument('--f_dim', default=64, type=int)
     parser.add_argument('--n_down', default=2, type=int)
     parser.add_argument('--n_blocks', default=6, type=int)

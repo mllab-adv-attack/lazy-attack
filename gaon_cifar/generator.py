@@ -63,7 +63,7 @@ def conv2d_fixed_padding(inputs, filters, kernel_size, strides, data_format):
 
 
 def _building_block_v1(inputs, filters, training, projection_shortcut, strides,
-    data_format):
+    drop, data_format):
   """
   Convolution then batch normalization then ReLU as described by:
     Deep Residual Learning for Image Recognition
@@ -96,6 +96,8 @@ def _building_block_v1(inputs, filters, training, projection_shortcut, strides,
   inputs = batch_norm(inputs, training, data_format)
   inputs = tf.nn.relu(inputs)
 
+  inputs = tf.nn.dropout(inputs, rate=drop)
+
   inputs = conv2d_fixed_padding(
       inputs=inputs, filters=filters, kernel_size=3, strides=1,
       data_format=data_format)
@@ -107,7 +109,7 @@ def _building_block_v1(inputs, filters, training, projection_shortcut, strides,
 
 
 def block_layer(inputs, filters, bottleneck, block_fn, blocks, strides,
-                training, name, data_format):
+                drop, training, name, data_format):
   """Creates one layer of blocks for the ResNet model.
   Args:
     inputs: A tensor of size [batch, channels, height_in, width_in] or
@@ -137,7 +139,7 @@ def block_layer(inputs, filters, bottleneck, block_fn, blocks, strides,
 
   # Only the first block per block_layer uses projection_shortcut and strides
   inputs = block_fn(inputs, filters, training, projection_shortcut, strides,
-                    data_format)
+                    drop, data_format)
 
   for _ in range(1, blocks):
     inputs = block_fn(inputs, filters, training, None, 1, data_format)
@@ -145,7 +147,7 @@ def block_layer(inputs, filters, bottleneck, block_fn, blocks, strides,
   return tf.identity(inputs, name)
 
 
-def generator(x, f_dim=64, c_dim=3, n_down=2, n_blocks=6, is_training=True):
+def generator(x, f_dim=64, c_dim=3, n_down=2, n_blocks=6, drop=0, is_training=True):
     ngf = f_dim
     inputs = x
     data_format='channels_last'
@@ -172,7 +174,7 @@ def generator(x, f_dim=64, c_dim=3, n_down=2, n_blocks=6, is_training=True):
     inputs = block_layer(
           inputs=inputs, filters=ngf*mult, bottleneck=False,
           block_fn=_building_block_v1, blocks=n_blocks,
-          strides=1, training=is_training,
+          strides=1, drop=drop, training=is_training,
           name='block_layer_G{}'.format(1), data_format=data_format)
 
     for i in range(n_downsampling):
