@@ -96,7 +96,7 @@ def _building_block_v1(inputs, filters, training, projection_shortcut, strides,
   inputs = batch_norm(inputs, training, data_format)
   inputs = tf.nn.relu(inputs)
 
-  inputs = tf.nn.dropout(inputs, rate=drop)
+  inputs = tf.nn.dropout(inputs, keep_prop=(1-drop))
 
   inputs = conv2d_fixed_padding(
       inputs=inputs, filters=filters, kernel_size=3, strides=1,
