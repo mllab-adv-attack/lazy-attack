@@ -132,6 +132,7 @@ safe_pgd_loss = full_model.safe_pgd_mean_xent
 safe_loss = full_model.safe_mean_xent
 l1_loss = tf.losses.absolute_difference(full_model.x_input_alg/255, full_model.x_safe/255)
 l2_loss = tf.losses.mean_squared_error(full_model.x_input_alg/255, full_model.x_safe/255)
+#l2_loss = tf.reduce_mean(tf.sqrt(tf.reduce_sum(tf.square((full_model.x_input_alg-full_model.x_safe)/255), axis=[1, 2, 3])))
 
 if args.no_lc:
     total_loss = 0

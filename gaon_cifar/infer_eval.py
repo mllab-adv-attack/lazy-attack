@@ -325,6 +325,9 @@ with tf.Session() as sess:
             l2_loss_batch = np.mean(np.linalg.norm(raw_dist.reshape(raw_dist.shape[0], -1), axis=1))
             print('l1 loss: {:.5f}'.format(l1_loss_batch))
             print('l2 loss: {:.5f}'.format(l2_loss_batch))
+            
+            l1_loss.append(l1_loss_batch)
+            l2_loss.append(l2_loss_batch)
 
         for _ in range(args.val_restarts):
             
@@ -341,16 +344,16 @@ with tf.Session() as sess:
                 break
 
         l2_dist.append(l2_dist_batch)
-        l1_loss.append(l1_loss_batch)
-        l2_loss.append(l2_loss_batch)
         full_mask.append(mask)
 
         print('safe(PGD) acc: {}'.format(np.sum(mask)/np.size(mask)))
 
         if args.eval_imp:
+
+            mask = np.array([True for _ in range(len(y_batch))])
             for _ in range(args.val_restarts):
 
-                imp_batch_attacked, _ = pgd.perturb(imp_batch, y_batch, sess,
+                imp_batch_attacked, _ = pgd.perturb(imp_batch.astype(np.float32), y_batch, sess,
                                                   proj=True, reverse=False)
 
                 correct_prediction = sess.run(model.correct_prediction,
@@ -366,19 +369,22 @@ with tf.Session() as sess:
 
             print('imp(PGD) acc: {}'.format(np.sum(mask)/np.size(mask)))
 
+        print()
+
     full_mask = np.concatenate(full_mask)
 
-    if args.imp_eval:
+    if args.eval_imp:
         imp_full_mask = np.concatenate(imp_full_mask)
 
     print("orig accuracy: {:.2f}".format(orig_correct_num/np.size(full_mask)*100))
     print("safe accuracy: {:.2f}".format(safe_correct_num/np.size(full_mask)*100))
-    if args.imp_eval:
+    if args.eval_imp:
         print("imp accuracy: {:.2f}".format(imp_correct_num/np.size(full_mask)*100))
     print("safe(PGD) accuracy: {:.2f}".format(np.mean(full_mask)*100))
-    if args.imp_eval:
+    if args.eval_imp:
         print("imp(PGD) accuracy: {:.2f}".format(np.mean(imp_full_mask)*100))
     print("l2 dist: {:.4f}".format(np.mean(l2_dist)))
-    print("l1 loss: {:.5f}".format(np.mean(l1_loss)))
-    print("l2 loss: {:.5f}".format(np.mean(l2_loss)))
+    if args.comp_imp:
+        print("l1 loss: {:.5f}".format(np.mean(l1_loss)))
+        print("l2 loss: {:.5f}".format(np.mean(l2_loss)))
 
