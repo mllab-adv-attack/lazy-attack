@@ -70,7 +70,7 @@ if __name__ == '__main__':
     parser.add_argument('--sample_size', default=1000, help='sample size', type=int)
     parser.add_argument('--bstart', default=0, type=int)
     parser.add_argument('--model_dir', default='naturally_trained', type=str)
-    parser.add_argument('--corr_only', action='store_false')
+    parser.add_argument('--corr_only', action='store_true')
     parser.add_argument('--fail_only', action='store_true')
     parser.add_argument('--loss_func', default='xent', type=str)
     # PGD (training)
@@ -92,6 +92,7 @@ if __name__ == '__main__':
     parser.add_argument('--imp_rms', action='store_true')
     parser.add_argument('--imp_adagrad', action='store_true')
     parser.add_argument('--imp_no_sign', action='store_true')
+    parser.add_argument('--label_infer', action='store_true')
     # PGD (evaluation)
     parser.add_argument('--val_step_per', default=0, help="validation per val_step. =< 0 means no eval", type=int)
     parser.add_argument('--val_eps', default=8, help='Evaluation eps', type=float)
@@ -227,9 +228,16 @@ if __name__ == '__main__':
             x_batch = x_full_batch[bstart:bend, :]
             y_batch = y_full_batch[bstart:bend]
 
+            dict_orig = {model.x_input: x_batch,
+                        model.y_input: y_batch}
+            cur_corr, y_pred_batch = sess.run([model.num_correct, model.predictions],
+                                              feed_dict=dict_orig)
+
+            print('original Accuracy: {:.2f}%'.format(100.0 * cur_corr/len(x_batch)))
+
             # run our algorithm
             print('fortifying image ', bstart)
-            x_batch_imp, step_batch_imp = impenet.fortify(x_batch, y_batch, sess)
+            x_batch_imp, step_batch_imp = impenet.fortify(x_batch, y_pred_batch if params.label_infer else y_batch, sess)
             print()
 
             # evaluation

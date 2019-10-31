@@ -52,6 +52,7 @@ if __name__ == '__main__':
     parser.add_argument('--imp_rms', action='store_true')
     parser.add_argument('--imp_adagrad', action='store_true')
     parser.add_argument('--imp_no_sign', action='store_true')
+    parser.add_argument('--label_infer', action='store_true')
     # PGD (evaluation)
     parser.add_argument('--val_step_per', default=0, help="validation per val_step. =< 0 means no eval", type=int)
     parser.add_argument('--val_eps', default=8, help='Evaluation eps', type=float)
