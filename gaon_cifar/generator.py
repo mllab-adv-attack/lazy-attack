@@ -147,10 +147,13 @@ def block_layer(inputs, filters, bottleneck, block_fn, blocks, strides,
   return tf.identity(inputs, name)
 
 
-def generator(x, f_dim=64, c_dim=3, n_down=2, n_blocks=6, drop=0, is_training=True):
+def generator(x, f_dim=64, c_dim=3, n_down=2, n_blocks=6, drop=0, unet=False, is_training=True):
     ngf = f_dim
     inputs = x
     data_format='channels_last'
+
+    # unet
+    unet_li = []
 
     # normalize ([0, 255] -> [-1, 1])
     inputs = (inputs/255) * 2 - 1
@@ -163,12 +166,22 @@ def generator(x, f_dim=64, c_dim=3, n_down=2, n_blocks=6, drop=0, is_training=Tr
     inputs = batch_norm(inputs, is_training, data_format)
     inputs = tf.nn.relu(inputs)
 
+    if unet:
+        unet_li.append(inputs)
+
+    get_shape(inputs)
+
     n_downsampling = n_down
     for i in range(n_downsampling):
         mult = 2**i
         inputs = conv2d_fixed_padding(inputs, filters=ngf*mult*2, kernel_size=3, strides=2, data_format=data_format)
         inputs = batch_norm(inputs, is_training, data_format)
         inputs = tf.nn.relu(inputs)
+        
+        if unet and i != (n_downsampling-1):
+            unet_li.append(inputs)
+        
+        get_shape(inputs)
 
     mult = 2**n_downsampling
     inputs = block_layer(
@@ -176,25 +189,35 @@ def generator(x, f_dim=64, c_dim=3, n_down=2, n_blocks=6, drop=0, is_training=Tr
           block_fn=_building_block_v1, blocks=n_blocks,
           strides=1, drop=drop, training=is_training,
           name='block_layer_G{}'.format(1), data_format=data_format)
+    
+    get_shape(inputs)
 
     for i in range(n_downsampling):
         mult = 2**(n_downsampling-i)
+
+        if unet and i != 0:
+            inputs = tf.concat(values=[inputs, unet_li[-i]], axis=3)
         # fix this 2d transpose
         inputs = tf.layers.conv2d_transpose(inputs, filters=int(ngf*mult/2), kernel_size=3, strides=(2,2),
                  padding='same', kernel_initializer=tf.truncated_normal_initializer(0.0, 0.02), data_format=data_format, use_bias=False)
         inputs = batch_norm(inputs, is_training, data_format)
         inputs = tf.nn.relu(inputs)
+        
+        get_shape(inputs)
 
     inputs = tf.layers.conv2d(inputs, filters=c_dim, kernel_size=3, strides=1,
       padding='same', use_bias=True, kernel_initializer=tf.truncated_normal_initializer(0.0, 0.02), data_format=data_format)
     inputs = tf.nn.tanh(inputs)
+    
+    get_shape(inputs)
 
     if data_format=='channels_first':
         inputs = tf.transpose(inputs, [0, 2, 3, 1])
 
     return inputs
 
-
+# do not use
+'''
 def unet_generator(x, is_training=True):
 
     inputs = x
@@ -277,3 +300,4 @@ def unet_generator(x, is_training=True):
     #get_shape(outputs)
 
     return outputs
+'''

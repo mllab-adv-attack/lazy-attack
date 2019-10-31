@@ -41,7 +41,7 @@ def infer_file_name(args):
     meta_name += '_fdim' + str(args.f_dim)
     meta_name += '_nblk' + str(args.n_blocks)
     meta_name += '_ndwn' + str(args.n_down)
-    meta_name += '_unet' if args.use_unet else ''
+    meta_name += '_unet' if args.unet else ''
     meta_name += ('_drop' + str(args.dropout_rate)) if args.dropout else ''
     meta_name += '_nolc' if args.no_lc else ''
     meta_name += '_noise' if args.noise_only else ''

@@ -54,7 +54,7 @@ if __name__ == '__main__':
     parser.add_argument('--n_down', default=2, type=int)
     parser.add_argument('--n_blocks', default=6, type=int)
     parser.add_argument('--noise_only', action='store_true')
-    parser.add_argument('--use_unet', action='store_true')
+    parser.add_argument('--unet', action='store_true')
     parser.add_argument('--use_d', action='store_true')
     parser.add_argument('--use_advG', action='store_true')
     parser.add_argument('--no_lc', action='store_true')
