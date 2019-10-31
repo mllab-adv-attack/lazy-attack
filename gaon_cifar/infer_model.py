@@ -56,6 +56,7 @@ class Model(object):
         self.n_blocks = args.n_blocks
         self.patch = args.patch
         self.drop = 0 if not args.dropout else args.dropout_rate
+        self.lp_loss = args.lp_loss
 
         self._build_model()
 
@@ -120,15 +121,15 @@ class Model(object):
             self.orig_mean_xent = tf.reduce_mean(orig_y_xent)
  
             # eval safe image
-            safe_pre_softmax = self.model.fprop(self.x_safe)
+            self.safe_pre_softmax = self.model.fprop(self.x_safe)
 
-            safe_predictions = tf.argmax(safe_pre_softmax, 1)
+            safe_predictions = tf.argmax(self.safe_pre_softmax, 1)
             safe_correct_prediction = tf.equal(safe_predictions, self.y_input)
             self.safe_accuracy = tf.reduce_mean(
                 tf.cast(safe_correct_prediction, tf.float32))
 
             safe_y_xent = tf.nn.sparse_softmax_cross_entropy_with_logits(
-                logits=safe_pre_softmax, labels=self.y_input)
+                logits=self.safe_pre_softmax, labels=self.y_input)
             self.safe_mean_xent = tf.reduce_mean(safe_y_xent)
 
             # eval attacked safe image
@@ -163,6 +164,18 @@ class Model(object):
                 self.safe_pgd_accuracy = self.safe_adv_accuracy
                 self.safe_pgd_mean_xent = self.safe_adv_mean_xent
 
+            # eval alg image
+            self.alg_pre_softmax = self.model.fprop(self.x_input_alg)
+
+            alg_predictions = tf.argmax(self.alg_pre_softmax, 1)
+            alg_correct_prediction = tf.equal(alg_predictions, self.y_input)
+            self.alg_accuracy = tf.reduce_mean(
+                tf.cast(alg_correct_prediction, tf.float32))
+
+            alg_y_xent = tf.nn.sparse_softmax_cross_entropy_with_logits(
+                logits=self.alg_pre_softmax, labels=self.y_input)
+            self.alg_mean_xent = tf.reduce_mean(alg_y_xent)
+
         if self.use_d:
             self.discriminator = Discriminator(self.patch, is_train)
 
@@ -179,3 +192,4 @@ class Model(object):
             self.d_loss = tf.reduce_mean(tf.losses.mean_squared_error(self.d_alg_out, real) +
                                          tf.losses.mean_squared_error(self.d_safe_out, fake))
             self.g_loss = tf.reduce_mean(tf.losses.mean_squared_error(self.d_safe_out, real))
+

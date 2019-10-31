@@ -65,10 +65,12 @@ if __name__ == '__main__':
     parser.add_argument('--patch', action='store_true', help='use patch discriminator, (2x2)')
     parser.add_argument('--l1_loss', action='store_true', help='use l1 loss on infer(x) and maml(x)')
     parser.add_argument('--l2_loss', action='store_true', help='use l2 loss on infer(x) and maml(x)')
+    parser.add_argument('--lp_loss', action='store_true', help='use logit pairing loss on infer(x) and maml(x)')
     parser.add_argument('--g_weight', default=1, type=float, help='loss weight for generator')
     parser.add_argument('--d_weight', default=1, type=float, help='loss weight for discriminator')
     parser.add_argument('--l1_weight', default=1, type=float, help='loss weight for l1')
     parser.add_argument('--l2_weight', default=1, type=float, help='loss weight for l2')
+    parser.add_argument('--lp_weight', default=1, type=float, help='loss weight for logit pairing')
 
     # pgd (filename) settings
     parser.add_argument('--eps', default=8.0, type=float)
