@@ -53,8 +53,6 @@ class Impenetrable(object):
         if self.loss_func == 'xent':
             self.loss = self.model.xent
             self.loss_full = self.model.y_xent
-            self.loss2 = self.model.xent2
-            self.loss2_full = self.model.y_xent2
         elif self.loss_func == 'cw':
             label_mask = tf.one_hot(self.model.y_input,
                                     10,
@@ -69,7 +67,6 @@ class Impenetrable(object):
             self.loss = self.model.xent
 
         self.grad = tf.gradients(self.loss, self.model.x_input)[0]
-        self.grad2 = tf.gradients(self.loss2, self.model.x_input)[0]
         self.softmax = self.model.softmax
 
     def fortify(self, x_orig, y, sess):

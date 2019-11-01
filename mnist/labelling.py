@@ -68,9 +68,9 @@ if __name__ == '__main__':
     import sys
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--sample_size', default=1000, help='sample size', type=int)
+    parser.add_argument('--sample_size', default=10000, help='sample size', type=int)
     parser.add_argument('--bstart', default=0, type=int)
-    parser.add_argument('--model_dir', default='naturally_trained', type=str)
+    parser.add_argument('--model_dir', default='adv_trained', type=str)
     parser.add_argument('--corr_only', action='store_true')
     parser.add_argument('--fail_only', action='store_true')
     parser.add_argument('--loss_func', default='xent', type=str)
@@ -132,6 +132,8 @@ if __name__ == '__main__':
 
     mnist = input_data.read_data_sets('MNIST_data', one_hot=False, validation_size=0, reshape=False)
 
+    success_indices = []
+
     configs = tf.ConfigProto()
     configs.gpu_options.allow_growth = True
     with tf.Session(config=configs) as sess:
@@ -141,18 +143,7 @@ if __name__ == '__main__':
         # Set number of examples to evaluate
         num_eval_examples = params.sample_size
 
-        if params.corr_only:
-            if params.model_dir == 'naturally_trained':
-                indices = np.load('/data/home/gaon/lazy-attack/mnist/mnist_data/nat_sucess_indices.npy')
-            else:
-                indices = np.load('/data/home/gaon/lazy-attack/mnist/mnist_data/adv_sucess_indices.npy')
-        elif params.fail_only:
-            if params.model_dir == 'naturally_trained':
-                indices = np.load('/data/home/gaon/lazy-attack/mnist/mnist_data/nat_fail_indices.npy')
-            else:
-                indices = np.load('/data/home/gaon/lazy-attack/mnist/mnist_data/adv_fail_indices.npy')
-        else:
-            indices = [i for i in range(params.sample_size + params.bstart)]
+        indices = [i for i in range(params.sample_size + params.bstart)]
 
         # load data
         bstart = params.bstart
@@ -187,6 +178,7 @@ if __name__ == '__main__':
                                     feed_dict={model.x_input: x_candid,
                                                model.y_input: y_candid})
             print(sum(mask))
+            success_indices.append(mask)
             if params.corr_only and (np.mean(mask) < 1.0 - 1E-6):
                 raise Exception
             if params.fail_only and (np.mean(mask) > 0.0 + 1E-6):
@@ -203,6 +195,26 @@ if __name__ == '__main__':
             bstart += 100
             if (len(x_full_batch) >= num_eval_examples) or bstart >= len(indices):
                 break
+
+        success_mask = np.concatenate(success_indices)
+        print(success_mask.shape)
+        print(np.mean(success_mask))
+
+        indices = np.array([i for i in range(len(success_mask))])
+        success_indices = indices[success_mask]
+        fail_indices = indices[np.invert(success_mask)]
+
+        print(success_indices.shape)
+        print(fail_indices.shape)
+
+        np.save('adv_sucess_indices.npy', success_indices)
+        np.save('adv_fail_indices.npy', fail_indices)
+
+        sys.exit()
+        
+        #
+
+        
 
         # Adjust num_eval_examples. Iterate over the samples batch-by-batch
         num_eval_examples = len(x_full_batch)

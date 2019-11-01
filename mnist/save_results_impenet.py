@@ -27,7 +27,7 @@ if __name__ == '__main__':
     import sys
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--sample_size', default=1000, help='sample size', type=int)
+    parser.add_argument('--sample_size', default=10000, help='sample size', type=int)
     parser.add_argument('--bstart', default=0, type=int)
     parser.add_argument('--model_dir', default='naturally_trained', type=str)
     parser.add_argument('--corr_only', action='store_true')
@@ -87,7 +87,7 @@ if __name__ == '__main__':
     saver = tf.train.Saver()
 
     data_path = config['data_path']
-    mnist = input_data.read_data_sets('MNIST_data', one_hot=False, validation_size=0)
+    mnist = input_data.read_data_sets('MNIST_data', one_hot=False, validation_size=0, reshape=False)
 
     configs = tf.ConfigProto()
     configs.gpu_options.allow_growth = True

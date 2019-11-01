@@ -10,16 +10,17 @@ import tensorflow as tf
 
 class Model(object):
   def __init__(self):
-    self.x_input = tf.placeholder(tf.float32, shape=[None, 784])
+    self.x_input = tf.placeholder(tf.float32, shape=[None, 28, 28, 1])
     self.y_input = tf.placeholder(tf.int64, shape=[None])
 
-    self.x_image = tf.reshape(self.x_input, [-1, 28, 28, 1])
+    #self.x_image = tf.reshape(self.x_input, [-1, 28, 28, 1])
+    self.x_image = self.x_input
 
     # first convolutional layer
     W_conv1 = self._weight_variable([5,5,1,32])
     b_conv1 = self._bias_variable([32])
 
-    h_conv1 = tf.nn.relu(self._conv2d(self.x_image, W_conv1) + b_conv1)
+    h_conv1 = tf.nn.relu(self._conv2d(self.x_input, W_conv1) + b_conv1)
     h_pool1 = self._max_pool_2x2(h_conv1)
 
     # second convolutional layer
@@ -42,10 +43,12 @@ class Model(object):
 
     self.pre_softmax = tf.matmul(h_fc1, W_fc2) + b_fc2
 
-    y_xent = tf.nn.sparse_softmax_cross_entropy_with_logits(
+    self.softmax = tf.nn.softmax(self.pre_softmax)
+
+    self.y_xent = tf.nn.sparse_softmax_cross_entropy_with_logits(
         labels=self.y_input, logits=self.pre_softmax)
 
-    self.xent = tf.reduce_sum(y_xent)
+    self.xent = tf.reduce_sum(self.y_xent)
 
     self.y_pred = tf.argmax(self.pre_softmax, 1)
 
