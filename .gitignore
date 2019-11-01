@@ -52,6 +52,7 @@ mnist/models/**
 *.swp
 *.png
 *.zip
+*.gz
 
 **/results
 **/.DS_Store
