@@ -34,6 +34,8 @@ imagenet-admm/tools/data/**
 *.out
 *.sh
 
+mnist/out/**
+mnist/models/**
 
 *BUILD
 *WORKSPACE
@@ -49,6 +51,7 @@ imagenet-admm/tools/data/**
 *__par_main_wrapper__.py
 *.swp
 *.png
+*.zip
 
 **/results
 **/.DS_Store
