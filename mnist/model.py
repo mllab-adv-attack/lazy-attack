@@ -10,8 +10,8 @@ import tensorflow as tf
 
 class Model(object):
   def __init__(self):
-    self.x_input = tf.placeholder(tf.float32, shape = [None, 784])
-    self.y_input = tf.placeholder(tf.int64, shape = [None])
+    self.x_input = tf.placeholder(tf.float32, shape=[None, 784])
+    self.y_input = tf.placeholder(tf.int64, shape=[None])
 
     self.x_image = tf.reshape(self.x_input, [-1, 28, 28, 1])
 
@@ -49,10 +49,12 @@ class Model(object):
 
     self.y_pred = tf.argmax(self.pre_softmax, 1)
 
-    correct_prediction = tf.equal(self.y_pred, self.y_input)
+    self.predictions = self.y_pred
 
-    self.num_correct = tf.reduce_sum(tf.cast(correct_prediction, tf.int64))
-    self.accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+    self.correct_prediction = tf.equal(self.y_pred, self.y_input)
+
+    self.num_correct = tf.reduce_sum(tf.cast(self.correct_prediction, tf.int64))
+    self.accuracy = tf.reduce_mean(tf.cast(self.correct_prediction, tf.float32))
 
   @staticmethod
   def _weight_variable(shape):

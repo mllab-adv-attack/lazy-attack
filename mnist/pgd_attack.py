@@ -12,14 +12,14 @@ import numpy as np
 
 
 class LinfPGDAttack:
-  def __init__(self, model, epsilon, k, a, random_start, loss_func):
+  def __init__(self, model, epsilon, num_steps, step_size, random_start, loss_func):
     """Attack parameter initialization. The attack performs k steps of
        size a, while always staying within epsilon from the initial
        point."""
     self.model = model
     self.epsilon = epsilon
-    self.k = k
-    self.a = a
+    self.num_steps = num_steps
+    self.step_size = step_size
     self.rand = random_start
 
     if loss_func == 'xent':
@@ -40,25 +40,31 @@ class LinfPGDAttack:
 
     self.grad = tf.gradients(loss, model.x_input)[0]
 
-  def perturb(self, x_nat, y, sess):
+  def perturb(self, x_nat, y, sess, rand=False, step_size=None, num_steps=None):
     """Given a set of examples (x_nat, y), returns a set of adversarial
        examples within epsilon of x_nat in l_infinity norm."""
-    if self.rand:
+
+    if not step_size:
+      step_size = self.step_size
+    if not num_steps:
+      num_steps = self.num_steps
+
+    if rand or self.rand:
       x = x_nat + np.random.uniform(-self.epsilon, self.epsilon, x_nat.shape)
       x = np.clip(x, 0, 1) # ensure valid pixel range
     else:
       x = np.copy(x_nat)
 
-    for i in range(self.k):
+    for i in range(self.num_steps):
       grad = sess.run(self.grad, feed_dict={self.model.x_input: x,
                                             self.model.y_input: y})
 
-      x += self.a * np.sign(grad)
+      x += self.step_size * np.sign(grad)
 
       x = np.clip(x, x_nat - self.epsilon, x_nat + self.epsilon) 
       x = np.clip(x, 0, 1) # ensure valid pixel range
 
-    return x
+    return x, None
 
 
 if __name__ == '__main__':

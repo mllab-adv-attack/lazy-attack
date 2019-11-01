@@ -26,13 +26,14 @@ class Impenetrable(object):
         self.imp_delta = args.imp_delta
         self.pgd_eps = args.pgd_eps
         self.pgd_num_steps = args.pgd_num_steps
-        # self.pgd_step_size = args.pgd_step_size
-        self.pgd_step_size = self.pgd_eps/4.0
+        self.pgd_step_size = args.pgd_step_size
+        #self.pgd_step_size = self.pgd_eps/4.0
         self.pgd_restarts = args.pgd_restarts
         self.pgd_random_start = args.pgd_random_start or (self.pgd_restarts > 1)
         self.imp_step_size = args.imp_step_size
         self.val_step_per = args.val_step_per
         self.val_restarts = args.val_restarts
+        self.val_step_size = args.val_step_size
         self.val_num_steps = args.val_num_steps
         self.val_eps = args.val_eps
         self.adam = args.imp_adam
@@ -80,9 +81,9 @@ class Impenetrable(object):
         # initialize image
         if self.imp_random_start > 0:
             x = x_orig + np.random.uniform(-self.imp_random_start, self.imp_random_start, x_orig.shape)
-            x = np.clip(x, 0, 255)
+            x = np.clip(x, 0, 1)
         elif self.imp_gray_start:
-            x = np.ones_like(x_orig).astype('float32') * 128
+            x = np.ones_like(x_orig).astype('float32') * 0.5
         else:
             x = np.copy(x_orig)
 
@@ -122,8 +123,7 @@ class Impenetrable(object):
             x_adv_batch = np.tile(x, (self.pgd_restarts, 1, 1, 1))
             y_batch = np.tile(y, self.pgd_restarts)
 
-            x_adv_batch, x_adv_batch_full = self.pgd.perturb(x_adv_batch, y_batch, sess,
-                                           proj=True, reverse=False, pp=self.pp)
+            x_adv_batch, x_adv_batch_full = self.pgd.perturb(x_adv_batch, y_batch, sess)
 
             if self.pp > 0:
                 x_adv_batch = x_adv_batch_full
@@ -166,7 +166,7 @@ class Impenetrable(object):
                 else:
                     x_res = x - self.imp_step_size * np.sign(grad)
 
-            x_res = np.clip(x_res, 0, 255)
+            x_res = np.clip(x_res, 0, 1)
 
             if self.imp_delta > 0:
                 x_res = np.clip(x_res, x_orig-self.imp_delta, x_orig+self.imp_delta)
@@ -175,7 +175,7 @@ class Impenetrable(object):
                                                     feed_dict={self.model.x_input: x_res,
                                                                self.model.y_input: y})
 
-            l2_dist = np.linalg.norm((x_res - x_orig).flatten()) / 255.0
+            l2_dist = np.linalg.norm((x_res - x_orig).flatten())
             print("restored accuracy: {:.2f}%".format(res_corr/num_images*100))
             print("l2 distance: {:.2f}".format(l2_dist))
             print("res loss: {:.20f}".format(res_loss/num_images))
@@ -212,7 +212,7 @@ class Impenetrable(object):
         self.pgd.random_start = random_start
 
     def set_pgd_val(self):
-        self.set_pgd(self.val_eps, self.val_eps/4.0, self.val_num_steps, True)
+        self.set_pgd(self.val_eps, self.val_step_size, self.val_num_steps, True)
 
     def validation(self, x, y, sess):
         
@@ -236,8 +236,7 @@ class Impenetrable(object):
 
             for i in range(val_iter//100):
 
-                x_val, _ = self.pgd.perturb(x_val_batch, y_hard_val_batch, sess,
-                                         proj=True, reverse=False, rand=True)
+                x_val, _ = self.pgd.perturb(x_val_batch, y_hard_val_batch, sess, rand=True)
 
                 cur_corr = sess.run(self.model.num_correct,
                                     feed_dict={self.model.x_input: x_val,
@@ -249,8 +248,7 @@ class Impenetrable(object):
             # y_val_batch = np.tile(y, (100, 1))
             y_hard_val_batch = np.tile(y, val_iter)
 
-            x_val, _ = self.pgd.perturb(x_val_batch, y_hard_val_batch, sess,
-                                     proj=True, reverse=False, rand=True)
+            x_val, _ = self.pgd.perturb(x_val_batch, y_hard_val_batch, sess, rand=True)
 
             cur_corr = sess.run(self.model.num_correct,
                                 feed_dict={self.model.x_input: x_val,

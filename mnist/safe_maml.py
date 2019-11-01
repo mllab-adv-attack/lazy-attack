@@ -12,12 +12,14 @@ from __future__ import print_function
 import math
 import tensorflow as tf
 import numpy as np
-import cifar10_input
 from utils import imp_file_name
+
+from tensorflow.examples.tutorials.mnist import input_data
 
 # import os
 
 from impenetrable import Impenetrable
+
 
 def result(x_imp, model, sess, x_full_batch, y_full_batch):
     num_eval_examples = x_imp.shape[0]
@@ -74,9 +76,9 @@ if __name__ == '__main__':
     parser.add_argument('--fail_only', action='store_true')
     parser.add_argument('--loss_func', default='xent', type=str)
     # PGD (training)
-    parser.add_argument('--pgd_eps', default=8, help='Attack eps', type=float)
-    parser.add_argument('--pgd_num_steps', default=20, type=int)
-    parser.add_argument('--pgd_step_size', default=2, type=float)
+    parser.add_argument('--pgd_eps', default=0.3, help='Attack eps', type=float)
+    parser.add_argument('--pgd_num_steps', default=100, type=int)
+    parser.add_argument('--pgd_step_size', default=0.01, type=float)
     parser.add_argument('--pgd_random_start', action='store_true')
     parser.add_argument('--pgd_restarts', default=20, help="training PGD restart numbers per eps", type=int)
     # impenetrable
@@ -85,7 +87,7 @@ if __name__ == '__main__':
     parser.add_argument('--imp_random_seed', default=0, help='random seed for random start of image', type=int)
     parser.add_argument('--imp_gray_start', action='store_true')
     parser.add_argument('--imp_num_steps', default=500, help='0 for until convergence', type=int)
-    parser.add_argument('--imp_step_size', default=0.5, type=float)
+    parser.add_argument('--imp_step_size', default=0.01, type=float)
     parser.add_argument('--imp_rep', action='store_true', help='use reptile instead of MAML')
     parser.add_argument('--imp_pp', default=0, help='step intervals to sum PGD gradients. <= 0 for pure MAML', type=int)
     parser.add_argument('--imp_adam', action='store_true')
@@ -95,8 +97,9 @@ if __name__ == '__main__':
     parser.add_argument('--label_infer', action='store_true')
     # PGD (evaluation)
     parser.add_argument('--val_step_per', default=0, help="validation per val_step. =< 0 means no eval", type=int)
-    parser.add_argument('--val_eps', default=8, help='Evaluation eps', type=float)
-    parser.add_argument('--val_num_steps', default=20, help="validation PGD number of steps per PGD", type=int)
+    parser.add_argument('--val_eps', default=0.3, help='Evaluation eps', type=float)
+    parser.add_argument('--val_num_steps', default=100, help="validation PGD number of steps per PGD", type=int)
+    parser.add_argument('--val_step_size', default=0.01, type=float)
     parser.add_argument('--val_restarts', default=20, help="validation PGD restart numbers per eps", type=int)
     params = parser.parse_args()
     for key, val in vars(params).items():
@@ -126,13 +129,13 @@ if __name__ == '__main__':
         print('No model found')
         sys.exit()
 
-    model = Model(mode='eval')
+    model = Model()
     impenet = Impenetrable(model,
                            params)
     saver = tf.train.Saver()
 
     data_path = config['data_path']
-    cifar = cifar10_input.CIFAR10Data(data_path)
+    mnist = input_data.read_data_sets('MNIST_data', one_hot=False, validation_size=0)
 
     configs = tf.ConfigProto()
     configs.gpu_options.allow_growth = True
@@ -182,8 +185,9 @@ if __name__ == '__main__':
             if (len(x_full_batch) >= num_eval_examples) or bstart >= 10000:
                 break
             '''
-            x_candid = cifar.eval_data.xs[indices[bstart:bstart + 100]]
-            y_candid = cifar.eval_data.ys[indices[bstart:bstart + 100]]
+            x_candid = mnist.test.images[indices[bstart:bstart + 100]]
+            y_candid = mnist.test.labels[indices[bstart:bstart + 100]]
+
             mask, logits = sess.run([model.correct_prediction, model.pre_softmax],
                                     feed_dict={model.x_input: x_candid,
                                                model.y_input: y_candid})
@@ -248,8 +252,8 @@ if __name__ == '__main__':
 
             x_imp.append(x_batch_imp)
             step_imp.append(np.array([step_batch_imp]))
-            l2_li.append(np.linalg.norm((x_batch_imp - x_batch)/255))
-            print('l2 distance (curr):', np.linalg.norm(x_batch_imp - x_batch)/255)
+            l2_li.append(np.linalg.norm(x_batch_imp - x_batch))
+            print('l2 distance (curr):', np.linalg.norm(x_batch_imp - x_batch))
             print('l2 distance (total):', np.mean(l2_li))
             print()
             print('------------------------------------------------------------------------------')
@@ -269,7 +273,7 @@ if __name__ == '__main__':
         np.save(common_name + '_y', y_full_batch)
 
         # sanity check
-        if np.amax(x_imp) > 255.0001 or \
+        if np.amax(x_imp) > 1.0001 or \
             np.amin(x_imp) < -0.0001 or \
             np.isnan(np.amax(x_imp)):
             print('Invalid pixel range in x_imp. Expected [0,255], fount[{},{}]'.format(np.amin(x_imp),

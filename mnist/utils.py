@@ -1,9 +1,9 @@
 import numpy as np
 
-LOAD_DATA_DIR = '/data/home/gaon/lazy-attack/cifar10_data/'
-CIFAR10_TRAIN_DATA_SIZE = 50000
+LOAD_DATA_DIR = '/data/home/gaon/lazy-attack/mnist/mnist_data/'
+CIFAR10_TRAIN_DATA_SIZE = 60000
 CIFAR10_EVAL_DATA_SIZE = 10000
-FILE_BATCH_SIZE = 1000
+FILE_BATCH_SIZE = 10000
 
 
 def imp_file_name(args):
