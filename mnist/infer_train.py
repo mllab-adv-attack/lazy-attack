@@ -13,12 +13,12 @@ from timeit import default_timer as timer
 import tensorflow as tf
 import numpy as np
 
-import cifar10_input
+from tensorflow.examples.tutorials.mnist import input_data
 
 from infer_model import Model as Safe_model
 from infer_target import Model as Target_model
 
-from utils import infer_file_name, load_imp_data
+from utils import infer_file_name, load_imp_data, CustomDataSet
 
 import argparse
 
@@ -27,7 +27,6 @@ MODEL_PATH = './models/'
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     # save & load path
-    parser.add_argument('--data_path', default='../cifar10_data', type=str)
     parser.add_argument('--model_dir', default='naturally_trained', type=str)
     parser.add_argument('--save_dir', default='safe_net', type=str)
     parser.add_argument('--save', action='store_true')
@@ -37,30 +36,27 @@ if __name__ == '__main__':
     # training parameters
     parser.add_argument('--tf_random_seed', default=451760341, type=int)
     parser.add_argument('--np_random_seed', default=216105420, type=int)
-    parser.add_argument('--max_num_training_steps', default=80000, type=int)
+    parser.add_argument('--max_num_training_steps', default=100000, type=int)
     parser.add_argument('--num_output_steps', default=1, type=int)
     parser.add_argument('--num_summary_steps', default=100, type=int)
-    parser.add_argument('--num_checkpoint_steps', default=1000, type=int)
+    parser.add_argument('--num_checkpoint_steps', default=300, type=int)
     parser.add_argument('--g_lr', default=1e-3, type=float)
-    parser.add_argument('--training_batch_size', default=128, type=int)
+    parser.add_argument('--training_batch_size', default=50, type=int)
     parser.add_argument('--eval_batch_size', default=100, type=int)
     parser.add_argument('--eval_on_cpu', action='store_true')
-    parser.add_argument('--delta', default=40, type=int)
+    parser.add_argument('--delta', default=0.3, type=int)
 
     # GAN settings
     parser.add_argument('--dropout', action='store_true')
     parser.add_argument('--dropout_rate', default=0.3, type=float)
     parser.add_argument('--f_dim', default=64, type=int)
-    parser.add_argument('--n_down', default=2, type=int)
-    parser.add_argument('--n_blocks', default=6, type=int)
     parser.add_argument('--noise_only', action='store_true')
     parser.add_argument('--unet', action='store_true')
     parser.add_argument('--use_d', action='store_true')
     parser.add_argument('--use_advG', action='store_true')
     parser.add_argument('--no_lc', action='store_true')
-    parser.add_argument('--advG_lr', default=1e-3, type=float)
-    parser.add_argument('--d_lr', default=1e-3, type=float)
-    parser.add_argument('--patch', action='store_true', help='use patch discriminator, (2x2)')
+    parser.add_argument('--advG_lr', default=1e-4, type=float)
+    parser.add_argument('--d_lr', default=1e-4, type=float)
     parser.add_argument('--l1_loss', action='store_true', help='use l1 loss on infer(x) and maml(x)')
     parser.add_argument('--l2_loss', action='store_true', help='use l2 loss on infer(x) and maml(x)')
     parser.add_argument('--lp_loss', action='store_true', help='use logit pairing loss on infer(x) and maml(x)')
@@ -71,9 +67,9 @@ if __name__ == '__main__':
     parser.add_argument('--lp_weight', default=1, type=float, help='loss weight for logit pairing')
 
     # pgd settings
-    parser.add_argument('--eps', default=8.0, type=float)
-    parser.add_argument('--num_steps', default=10, type=int)
-    parser.add_argument('--step_size', default=2.0, type=float)
+    parser.add_argument('--eps', default=0.3, type=float)
+    parser.add_argument('--num_steps', default=40, type=int)
+    parser.add_argument('--step_size', default=0.01, type=float)
     parser.add_argument('--random_start', action='store_true')
 
     args = parser.parse_args()
@@ -95,50 +91,30 @@ num_checkpoint_steps = args.num_checkpoint_steps
 g_lr = args.g_lr
 d_lr = args.d_lr
 advG_lr = args.advG_lr
-data_path = args.data_path
 training_batch_size = args.training_batch_size
 eval_batch_size = args.eval_batch_size
 
 
 # Setting up the data and the model
-raw_cifar = cifar10_input.CIFAR10Data(data_path)
+mnist = input_data.read_data_sets('MNIST_data', one_hot=False, validation_size=0, reshape=False)
 if USE_ALG:
-    imp_cifar = load_imp_data(args)
+    imp_mnist = load_imp_data(args)
+
+mnist_train = CustomDataSet(mnist.train.images, mnist.train.labels)
+mnist_test = CustomDataSet(mnist.test.images, mnist.test.labels)
 
 global_step = tf.train.get_or_create_global_step()
 
-model = Target_model('eval')
+model = Target_model()
 full_model = Safe_model('train', model, args)
-
-# Setting up the optimizer
-boundaries = [0, 40000, 60000]
-boundaries = boundaries[1:]
-
-g_values = [g_lr, g_lr/10, g_lr/100]
-g_learning_rate = tf.train.piecewise_constant(
-    tf.cast(global_step, tf.int32),
-    boundaries,
-    g_values)
-
-d_values = [d_lr, d_lr/10, d_lr/100]
-d_learning_rate = tf.train.piecewise_constant(
-    tf.cast(global_step, tf.int32),
-    boundaries,
-    d_values)
-
-advG_values = [advG_lr, advG_lr/10, advG_lr/100]
-advG_learning_rate = tf.train.piecewise_constant(
-    tf.cast(global_step, tf.int32),
-    boundaries,
-    advG_values)
 
 # set up metrics
 safe_adv_loss = full_model.safe_adv_mean_xent
 safe_pgd_loss = full_model.safe_pgd_mean_xent
 safe_loss = full_model.safe_mean_xent
-l1_loss = tf.losses.absolute_difference(full_model.x_input_alg/255, full_model.x_safe/255)
-l2_loss = tf.losses.mean_squared_error(full_model.x_input_alg/255, full_model.x_safe/255)
-#l2_loss = tf.reduce_mean(tf.sqrt(tf.reduce_sum(tf.square((full_model.x_input_alg-full_model.x_safe)/255), axis=[1, 2, 3])))
+l1_loss = tf.losses.absolute_difference(full_model.x_input_alg, full_model.x_safe)
+l2_loss = tf.losses.mean_squared_error(full_model.x_input_alg, full_model.x_safe)
+#l2_loss = tf.reduce_mean(tf.sqrt(tf.reduce_sum(tf.square((full_model.x_input_alg-full_model.x_safe)), axis=[1, 2, 3])))
 lp_loss = tf.losses.mean_squared_error(full_model.safe_pre_softmax, full_model.alg_pre_softmax)
 
 
@@ -165,7 +141,7 @@ safe_adv_acc = full_model.safe_adv_accuracy
 safe_pgd_acc = full_model.safe_pgd_accuracy
 orig_acc = full_model.orig_accuracy
 safe_acc = full_model.safe_accuracy
-l2_dist = tf.reduce_mean(tf.norm(tf.reshape((full_model.x_safe-full_model.x_input)/255, shape=[-1, 32*32*3]), axis=1))
+l2_dist = tf.reduce_mean(tf.norm(tf.reshape(full_model.x_safe-full_model.x_input, shape=[-1, 28*28*1]), axis=1))
 
 # Setting up the Tensorboard and checkpoint outputs
 meta_name = infer_file_name(args)
@@ -238,10 +214,6 @@ if model_file is None:
 
 with tf.Session() as sess:
 
-    # no data augmentation
-    # cifar = cifar10_input.AugmentedCIFAR10Data(raw_cifar, sess, model)
-    cifar = raw_cifar
-
     # Initialize the summary writer, global variables, and our time counter.
     if args.save:
         summary_writer = tf.summary.FileWriter(save_dir, sess.graph)
@@ -276,18 +248,18 @@ with tf.Session() as sess:
     print(np.sum([np.prod(v.get_shape().as_list()) for v in variables_to_train_d]))
     print(np.sum([np.prod(v.get_shape().as_list()) for v in variables_to_train_advG]))
 
-    train_step_g = tf.train.AdamOptimizer(g_learning_rate).minimize(
+    train_step_g = tf.train.AdamOptimizer(args.g_lr).minimize(
         total_loss if not args.use_d else total_g_loss,
         global_step=global_step,
         var_list=variables_to_train_g)
 
     if args.use_d:
-        train_step_d = tf.train.AdamOptimizer(d_learning_rate).minimize(
+        train_step_d = tf.train.AdamOptimizer(args.d_lr).minimize(
             total_d_loss,
             var_list=variables_to_train_d)
 
     if args.use_advG:
-        train_step_advG = tf.train.AdamOptimizer(advG_learning_rate).minimize(
+        train_step_advG = tf.train.AdamOptimizer(args.advG_lr).minimize(
             -safe_adv_loss,
             var_list=variables_to_train_advG)
 
@@ -317,12 +289,12 @@ with tf.Session() as sess:
     for ii in range(max_num_training_steps):
 
         # Get data
-        x_batch, y_batch, indices = cifar.train_data.get_next_batch(training_batch_size,
-                                                           multiple_passes=True,
-                                                           get_indices=True)
+        x_batch, y_batch, indices = mnist_train.get_next_batch(training_batch_size,
+                                                               multiple_passes=True,
+                                                               get_indices=True)
 
         if USE_ALG:
-            imp_batch = imp_cifar[indices, ...]
+            imp_batch = imp_mnist[indices, ...]
 
             nat_dict = {full_model.x_input: x_batch,
                         full_model.y_input: y_batch,
@@ -332,9 +304,9 @@ with tf.Session() as sess:
                         full_model.y_input: y_batch}
 
         # Sanity check
-        assert 0 <= np.amin(x_batch) and np.amax(x_batch) <= 255.0
+        assert 0 <= np.amin(x_batch) and np.amax(x_batch) <= 1.0
         if USE_ALG:
-            assert 0 <= np.amin(imp_batch) and np.amax(imp_batch) <= 255.0
+            assert 0 <= np.amin(imp_batch) and np.amax(imp_batch) <= 1.0
             assert np.amax(np.abs(imp_batch-x_batch)) <= args.delta
 
         # Train
@@ -382,9 +354,9 @@ with tf.Session() as sess:
 
         end = timer()
 
-        assert 0 <= np.amin(x_safe) and np.amax(x_safe) <= 255.0
+        assert 0 <= np.amin(x_safe) and np.amax(x_safe) <= 1.0
         if not args.no_lc:
-            assert 0 <= np.amin(x_safe_adv) and np.amax(x_safe_adv) <= 255.0
+            assert 0 <= np.amin(x_safe_adv) and np.amax(x_safe_adv) <= 1.0
         assert np.amax(np.abs(x_safe-x_batch)) <= args.delta
 
         training_time += end - start
@@ -431,7 +403,8 @@ with tf.Session() as sess:
             #eval_bstart = (ii//num_summary_steps)*eval_batch_size
             #eval_bend = (ii//num_summary_steps+1)*eval_batch_size
             
-            eval_x_batch, eval_y_batch = raw_cifar.eval_data.get_next_batch(eval_batch_size, multiple_passes=True)
+            eval_x_batch, eval_y_batch, _ = mnist_test.get_next_batch(eval_batch_size, multiple_passes=True,
+                                                                   get_indices=True)
             eval_dict = {full_model.x_input: eval_x_batch,
                          full_model.y_input: eval_y_batch}
             orig_acc_batch, safe_acc_batch, safe_adv_acc_batch, safe_adv_loss_batch, \

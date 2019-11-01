@@ -38,7 +38,7 @@ class Model(object):
         self.mode = mode
         self.model = model
         self.delta = args.delta
-        self.bounds = (0, 255)
+        self.bounds = (0, 1)
         self.attack_params = {
             'eps': args.eps,
             'step_size': args.step_size,
@@ -54,7 +54,6 @@ class Model(object):
         self.f_dim = args.f_dim
         self.n_down = args.n_down
         self.n_blocks = args.n_blocks
-        self.patch = args.patch
         self.drop = 0 if not args.dropout else args.dropout_rate
         self.lp_loss = args.lp_loss
 
@@ -67,28 +66,26 @@ class Model(object):
         with tf.variable_scope('infer_input', reuse=tf.AUTO_REUSE):
             self.x_input = tf.placeholder(
                 tf.float32,
-                shape=[None, 32, 32, 3])
+                shape=[None, 28, 28, 1])
             self.y_input = tf.placeholder(tf.int64, shape=None)
             
             self.x_input_alg = tf.placeholder(
                 tf.float32,
-                shape=[None, 32, 32, 3]
+                shape=[None, 28, 28, 1]
             )
 
         with tf.variable_scope('', reuse=tf.AUTO_REUSE):
-            self.def_generator = tf.make_template('generator', generator, f_dim=self.f_dim, c_dim=3, drop=self.drop,
-                                                  n_down=self.n_down, n_blocks=self.n_blocks, unet=self.unet,
-                                                  is_training=is_train)
+            self.def_generator = tf.make_template('generator', generator, f_dim=self.f_dim, c_dim=1, drop=self.drop,
+                                                  unet=self.unet, is_training=is_train)
             self.x_safe = self.x_input + self.delta * self.def_generator(self.x_input)
             self.x_safe = tf.clip_by_value(self.x_safe, self.bounds[0], self.bounds[1])
 
         with tf.variable_scope('', reuse=tf.AUTO_REUSE):
             if self.use_advG:
                 # use adv generator as attacker (PGD only when evaluation)
-                self.adv_generator = tf.make_template('adv_generator', generator, f_dim=self.f_dim, c_dim=3,
-                                                      n_down=self.n_down, n_blocks=self.n_blocks, unet=self.unet,
+                self.adv_generator = tf.make_template('adv_generator', generator, f_dim=self.f_dim, c_dim=1,
+                                                      unet=self.unet,
                                                       drop=self.drop, is_training=is_train)
-                #self.x_safe_adv = self.x_safe + self.attack_params['eps'] * self.adv_generator(self.x_safe)
                 self.x_safe_adv = self.x_safe + self.delta * self.adv_generator(self.x_safe)
                 self.x_safe_adv = tf.clip_by_value(self.x_safe_adv, self.bounds[0], self.bounds[1])
                 self.x_safe_pgd = PGD(self.x_safe, self.y_input, self.model.fprop, self.attack_params)
@@ -170,7 +167,7 @@ class Model(object):
             self.alg_mean_xent = tf.reduce_mean(alg_y_xent)
 
         if self.use_d:
-            self.discriminator = Discriminator(self.patch, is_train)
+            self.discriminator = Discriminator()
 
             if self.noise_only:
                 self.d_alg_out = self.discriminator((self.x_input_alg-self.x_input)/self.delta)

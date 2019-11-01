@@ -11,7 +11,7 @@ import math
 import tensorflow as tf
 import numpy as np
 
-import cifar10_input
+from tensorflow.examples.tutorials.mnist import input_data
 
 from generator import generator as Generator
 from discriminator import Discriminator
@@ -28,7 +28,6 @@ MODEL_PATH = './models/'
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     # save & load path
-    parser.add_argument('--data_path', default='../cifar10_data', type=str)
     parser.add_argument('--model_dir', default='naturally_trained', type=str)
     parser.add_argument('--save_dir', default='safe_net', type=str, help='safe_net saved folder')
     parser.add_argument('--corr_only', action='store_true')
@@ -53,16 +52,13 @@ if __name__ == '__main__':
     parser.add_argument('--dropout', action='store_true')
     parser.add_argument('--dropout_rate', default=0.3, type=float)
     parser.add_argument('--f_dim', default=64, type=int)
-    parser.add_argument('--n_down', default=2, type=int)
-    parser.add_argument('--n_blocks', default=6, type=int)
     parser.add_argument('--noise_only', action='store_true')
     parser.add_argument('--unet', action='store_true')
     parser.add_argument('--use_d', action='store_true')
     parser.add_argument('--use_advG', action='store_true')
     parser.add_argument('--no_lc', action='store_true')
-    parser.add_argument('--advG_lr', default=1e-3, type=float)
-    parser.add_argument('--d_lr', default=1e-3, type=float)
-    parser.add_argument('--patch', action='store_true', help='use patch discriminator, (2x2)')
+    parser.add_argument('--advG_lr', default=1e-4, type=float)
+    parser.add_argument('--d_lr', default=1e-4, type=float)
     parser.add_argument('--l1_loss', action='store_true', help='use l1 loss on infer(x) and maml(x)')
     parser.add_argument('--l2_loss', action='store_true', help='use l2 loss on infer(x) and maml(x)')
     parser.add_argument('--lp_loss', action='store_true', help='use logit pairing loss on infer(x) and maml(x)')
@@ -73,15 +69,15 @@ if __name__ == '__main__':
     parser.add_argument('--lp_weight', default=1, type=float, help='loss weight for logit pairing')
 
     # pgd (filename) settings
-    parser.add_argument('--eps', default=8.0, type=float)
-    parser.add_argument('--num_steps', default=10, type=int)
-    parser.add_argument('--step_size', default=2.0, type=float)
+    parser.add_argument('--eps', default=0.3, type=float)
+    parser.add_argument('--num_steps', default=40, type=int)
+    parser.add_argument('--step_size', default=0.01, type=float)
 
     # pgd (eval) settings
-    parser.add_argument('--val_eps', default=8.0, type=float)
-    parser.add_argument('--val_num_steps', default=20, type=int)
-    parser.add_argument('--val_step_size', default=2.0, type=float)
-    parser.add_argument('--val_restarts', default=1, type=int)
+    parser.add_argument('--val_eps', default=0.3, type=float)
+    parser.add_argument('--val_num_steps', default=100, type=int)
+    parser.add_argument('--val_step_size', default=0.01, type=float)
+    parser.add_argument('--val_restarts', default=50, type=int)
     parser.add_argument('--val_rand', action='store_true', help='PGD random start. Set to True if val_restarts > 1')
 
     args = parser.parse_args()
@@ -100,11 +96,11 @@ eval_batch_size = args.eval_batch_size
 # Setting up the data and the model
 global_step = tf.train.get_or_create_global_step()
 
-model = Model('eval')
+model = Model()
 
 x_input = tf.placeholder(
     tf.float32,
-    shape=[None, 32, 32, 3]
+    shape=[None, 28, 28, 1]
 )
 y_input = tf.placeholder(
     tf.int64,
@@ -112,15 +108,15 @@ y_input = tf.placeholder(
 )
 
 generator = tf.make_template('generator', Generator, f_dim=args.f_dim, c_dim=3,
-                             n_down=args.n_down, n_blocks=args.n_blocks, is_training=args.train_mode)
+                             is_training=args.train_mode)
 
 if args.use_d:
-    discriminator = Discriminator(args.patch, is_training=False)
+    discriminator = Discriminator()
     d_out = discriminator(x_input)
 
 noise = generator(x_input)
 x_safe = x_input + args.delta * noise
-x_safe_clipped = tf.clip_by_value(x_safe, 0, 255)
+x_safe_clipped = tf.clip_by_value(x_safe, 0, 1)
 
 pgd = LinfPGDAttack(model,
                     args.val_eps,
@@ -150,12 +146,12 @@ if not os.path.exists(model_dir):
 
 saver = tf.train.Saver()
 if args.eval:
-    cifar = cifar10_input.CIFAR10Data(data_path).eval_data
+    mnist = input_data.read_data_sets('MNIST_data', one_hot=False, validation_size=0, reshape=False).test
 else:
-    cifar = cifar10_input.CIFAR10Data(data_path).train_data
+    mnist = input_data.read_data_sets('MNIST_data', one_hot=False, validation_size=0, reshape=False).train
 
 if args.comp_imp or args.eval_imp:
-    imp_cifar = load_imp_data(args, args.eval)
+    imp_mnist = load_imp_data(args, args.eval)
 
 model_file = tf.train.latest_checkpoint(model_dir)
 if model_file is None:
@@ -198,25 +194,25 @@ with tf.Session() as sess:
 
     if args.corr_only:
         if args.model_dir == 'naturally_trained':
-            indices = np.load('/data/home/gaon/lazy-attack/cifar10_data/nat_indices_untargeted.npy')
+            indices = np.load('/data/home/gaon/lazy-attack/mnist/mnist_data/nat_sucess_indices.npy')
         else:
-            indices = np.load('/data/home/gaon/lazy-attack/cifar10_data/indices_untargeted.npy')
+            indices = np.load('/data/home/gaon/lazy-attack/mnist/mnist_data/adv_sucess_indices.npy')
     elif args.fail_only:
         if args.model_dir == 'naturally_trained':
-            indices = np.load('/data/home/gaon/lazy-attack/cifar10_data/fail_nat_indices_untargeted.npy')
+            indices = np.load('/data/home/gaon/lazy-attack/mnist/mnist_data/nat_fail_indices.npy')
         else:
-            indices = np.load('/data/home/gaon/lazy-attack/cifar10_data/fail_indices_untargeted.npy')
+            indices = np.load('/data/home/gaon/lazy-attack/mnist/mnist_data/adv_fail_indices.npy')
     else:
         indices = [i for i in range(args.sample_size + args.bstart)]
 
     # load data
     bstart = args.bstart
     while True:
-        x_candid = cifar.xs[indices[bstart:bstart + 100]]
-        y_candid = cifar.ys[indices[bstart:bstart + 100]]
+        x_candid = mnist.images[indices[bstart:bstart + 100]]
+        y_candid = mnist.labels[indices[bstart:bstart + 100]]
 
         if args.comp_imp or args.eval_imp:
-            imp_candid = imp_cifar[indices[bstart:bstart + 100]]
+            imp_candid = imp_mnist[indices[bstart:bstart + 100]]
 
             if np.amax(np.abs(x_candid-imp_candid)) > args.delta + 1e-3:
                 raise Exception
@@ -315,10 +311,10 @@ with tf.Session() as sess:
             #print(np.mean(disc_out.reshape(disc_out.shape[0], -1), axis=1))
             print('disc value: {}'.format(np.mean(disc_out)))
 
-        assert np.amin(x_batch_safe) >= (0-1e-3) and np.amax(x_batch_safe) <= (255.0+1e-3)
+        assert np.amin(x_batch_safe) >= (0-1e-3) and np.amax(x_batch_safe) <= (1.0+1e-3)
         assert np.amax(np.abs(x_batch_safe-x_batch)) <= args.delta+1e-3
 
-        l2_dist_batch = np.mean(np.linalg.norm((x_batch_safe-x_batch).reshape(x_batch.shape[0], -1)/255, axis=1))
+        l2_dist_batch = np.mean(np.linalg.norm((x_batch_safe-x_batch).reshape(x_batch.shape[0], -1), axis=1))
         print('l2 dist: {:.4f}'.format(l2_dist_batch))
 
         mask = np.array([True for _ in range(len(y_batch))])
@@ -335,8 +331,7 @@ with tf.Session() as sess:
 
         for _ in range(args.val_restarts):
             
-            x_batch_attacked, _ = pgd.perturb(x_batch_safe, y_batch, sess,
-                                   proj=True, reverse=False)
+            x_batch_attacked, _ = pgd.perturb(x_batch_safe, y_batch, sess)
 
             correct_prediction = sess.run(model.correct_prediction,
                                            feed_dict={model.x_input: x_batch_attacked,
@@ -357,8 +352,7 @@ with tf.Session() as sess:
             mask = np.array([True for _ in range(len(y_batch))])
             for _ in range(args.val_restarts):
 
-                imp_batch_attacked, _ = pgd.perturb(imp_batch.astype(np.float32), y_batch, sess,
-                                                  proj=True, reverse=False)
+                imp_batch_attacked, _ = pgd.perturb(imp_batch.astype(np.float32), y_batch, sess)
 
                 correct_prediction = sess.run(model.correct_prediction,
                                               feed_dict={model.x_input: imp_batch_attacked,

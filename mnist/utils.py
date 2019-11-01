@@ -1,9 +1,9 @@
 import numpy as np
 
 LOAD_DATA_DIR = '/data/home/gaon/lazy-attack/mnist/mnist_data/'
-CIFAR10_TRAIN_DATA_SIZE = 60000
-CIFAR10_EVAL_DATA_SIZE = 10000
-FILE_BATCH_SIZE = 10000
+MNIST_TRAIN_DATA_SIZE = 60000
+MNIST_EVAL_DATA_SIZE = 10000
+FILE_BATCH_SIZE = 1000
 
 
 def imp_file_name(args):
@@ -64,9 +64,50 @@ def load_imp_data(args, eval=False):
     data_dir = LOAD_DATA_DIR + final_dir
 
     posfix_li = [('imp_' + ('eval' if eval else 'train') + '_fixed_{:.1f}_'.format(args.delta)+str(idx))
-                 for idx in range(0, CIFAR10_EVAL_DATA_SIZE if eval else CIFAR10_TRAIN_DATA_SIZE, FILE_BATCH_SIZE)]
+                 for idx in range(0, MNIST_EVAL_DATA_SIZE if eval else MNIST_TRAIN_DATA_SIZE, FILE_BATCH_SIZE)]
     filename_li = [(str_idx + '_' + str(FILE_BATCH_SIZE) + '.npy') for str_idx in posfix_li]
     fullname_li = [(data_dir + filename) for filename in filename_li]
     data_li = [np.load(fullname) for fullname in fullname_li]
     data = np.concatenate(data_li)
     return data
+
+
+class CustomDataSet(object):
+    def __init__(self, xs, ys):
+        self.xs = xs
+        self.n = xs.shape[0]
+        self.ys = ys
+        self.batch_start = 0
+        self.cur_order = np.random.permutation(self.n)
+
+    def get_next_batch(self, batch_size, multiple_passes=False, reshuffle_after_pass=True, get_indices=False):
+        if self.n < batch_size:
+            raise ValueError('Batch size can be at most the dataset size')
+        if not multiple_passes:
+            actual_batch_size = min(batch_size, self.n - self.batch_start)
+            if actual_batch_size <= 0:
+                raise ValueError('Pass through the dataset is complete.')
+            batch_end = self.batch_start + actual_batch_size
+            indice = self.cur_order[self.batch_start:batch_end]
+            batch_xs = self.xs[indice, ...]
+            batch_ys = self.ys[indice, ...]
+            self.batch_start += actual_batch_size
+            return batch_xs, batch_ys
+        actual_batch_size = min(batch_size, self.n - self.batch_start)
+        if actual_batch_size < batch_size:
+            if reshuffle_after_pass:
+                self.cur_order = np.random.permutation(self.n)
+            self.batch_start = 0
+        batch_end = self.batch_start + batch_size
+        indice = self.cur_order[self.batch_start:batch_end]
+        batch_xs = self.xs[indice, ...]
+        batch_ys = self.ys[indice, ...]
+        self.batch_start += actual_batch_size
+        if get_indices:
+            return batch_xs, batch_ys, indice
+        else:
+            return batch_xs, batch_ys
+
+    def get_full_order(self):
+        return self.cur_order
+

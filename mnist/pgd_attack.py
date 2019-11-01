@@ -12,116 +12,116 @@ import numpy as np
 
 
 class LinfPGDAttack:
-  def __init__(self, model, epsilon, num_steps, step_size, random_start, loss_func):
-    """Attack parameter initialization. The attack performs k steps of
-       size a, while always staying within epsilon from the initial
-       point."""
-    self.model = model
-    self.epsilon = epsilon
-    self.num_steps = num_steps
-    self.step_size = step_size
-    self.rand = random_start
+    def __init__(self, model, epsilon, num_steps, step_size, random_start, loss_func):
+        """Attack parameter initialization. The attack performs k steps of
+           size a, while always staying within epsilon from the initial
+           point."""
+        self.model = model
+        self.epsilon = epsilon
+        self.num_steps = num_steps
+        self.step_size = step_size
+        self.rand = random_start
 
-    if loss_func == 'xent':
-      loss = model.xent
-    elif loss_func == 'cw':
-      label_mask = tf.one_hot(model.y_input,
-                              10,
-                              on_value=1.0,
-                              off_value=0.0,
-                              dtype=tf.float32)
-      correct_logit = tf.reduce_sum(label_mask * model.pre_softmax, axis=1)
-      wrong_logit = tf.reduce_max((1-label_mask) * model.pre_softmax
-                                  - 1e4*label_mask, axis=1)
-      loss = -tf.nn.relu(correct_logit - wrong_logit + 50)
-    else:
-      print('Unknown loss function. Defaulting to cross-entropy')
-      loss = model.xent
+        if loss_func == 'xent':
+            loss = model.xent
+        elif loss_func == 'cw':
+            label_mask = tf.one_hot(model.y_input,
+                                    10,
+                                    on_value=1.0,
+                                    off_value=0.0,
+                                    dtype=tf.float32)
+            correct_logit = tf.reduce_sum(label_mask * model.pre_softmax, axis=1)
+            wrong_logit = tf.reduce_max((1-label_mask) * model.pre_softmax
+                                        - 1e4*label_mask, axis=1)
+            loss = -tf.nn.relu(correct_logit - wrong_logit + 50)
+        else:
+            print('Unknown loss function. Defaulting to cross-entropy')
+            loss = model.xent
 
-    self.grad = tf.gradients(loss, model.x_input)[0]
+        self.grad = tf.gradients(loss, model.x_input)[0]
 
-  def perturb(self, x_nat, y, sess, rand=False, step_size=None, num_steps=None):
-    """Given a set of examples (x_nat, y), returns a set of adversarial
-       examples within epsilon of x_nat in l_infinity norm."""
+    def perturb(self, x_nat, y, sess, rand=False, step_size=None, num_steps=None):
+        """Given a set of examples (x_nat, y), returns a set of adversarial
+           examples within epsilon of x_nat in l_infinity norm."""
 
-    if not step_size:
-      step_size = self.step_size
-    if not num_steps:
-      num_steps = self.num_steps
+        if not step_size:
+            step_size = self.step_size
+        if not num_steps:
+            num_steps = self.num_steps
 
-    if rand or self.rand:
-      x = x_nat + np.random.uniform(-self.epsilon, self.epsilon, x_nat.shape)
-      x = np.clip(x, 0, 1) # ensure valid pixel range
-    else:
-      x = np.copy(x_nat)
+        if rand or self.rand:
+            x = x_nat + np.random.uniform(-self.epsilon, self.epsilon, x_nat.shape)
+            x = np.clip(x, 0, 1) # ensure valid pixel range
+        else:
+            x = np.copy(x_nat)
 
-    for i in range(self.num_steps):
-      grad = sess.run(self.grad, feed_dict={self.model.x_input: x,
-                                            self.model.y_input: y})
+        for i in range(self.num_steps):
+            grad = sess.run(self.grad, feed_dict={self.model.x_input: x,
+                                                  self.model.y_input: y})
 
-      x += self.step_size * np.sign(grad)
+            x += self.step_size * np.sign(grad)
 
-      x = np.clip(x, x_nat - self.epsilon, x_nat + self.epsilon) 
-      x = np.clip(x, 0, 1) # ensure valid pixel range
+            x = np.clip(x, x_nat - self.epsilon, x_nat + self.epsilon)
+            x = np.clip(x, 0, 1) # ensure valid pixel range
 
-    return x, None
+        return x, None
 
 
 if __name__ == '__main__':
-  import json
-  import sys
-  import math
+    import json
+    import sys
+    import math
 
-  from tensorflow.examples.tutorials.mnist import input_data
+    from tensorflow.examples.tutorials.mnist import input_data
 
-  from model import Model
+    from model import Model
 
-  with open('config.json') as config_file:
-    config = json.load(config_file)
+    with open('config.json') as config_file:
+        config = json.load(config_file)
 
-  model_file = tf.train.latest_checkpoint(config['model_dir'])
-  if model_file is None:
-    print('No model found')
-    sys.exit()
+    model_file = tf.train.latest_checkpoint(config['model_dir'])
+    if model_file is None:
+        print('No model found')
+        sys.exit()
 
-  model = Model()
-  attack = LinfPGDAttack(model,
-                         config['epsilon'],
-                         config['k'],
-                         config['a'],
-                         config['random_start'],
-                         config['loss_func'])
-  saver = tf.train.Saver()
+    model = Model()
+    attack = LinfPGDAttack(model,
+                           config['epsilon'],
+                           config['k'],
+                           config['a'],
+                           config['random_start'],
+                           config['loss_func'])
+    saver = tf.train.Saver()
 
-  mnist = input_data.read_data_sets('MNIST_data', one_hot=False)
+    mnist = input_data.read_data_sets('MNIST_data', one_hot=False)
 
-  with tf.Session() as sess:
-    # Restore the checkpoint
-    saver.restore(sess, model_file)
+    with tf.Session() as sess:
+        # Restore the checkpoint
+        saver.restore(sess, model_file)
 
-    # Iterate over the samples batch-by-batch
-    num_eval_examples = config['num_eval_examples']
-    eval_batch_size = config['eval_batch_size']
-    num_batches = int(math.ceil(num_eval_examples / eval_batch_size))
+        # Iterate over the samples batch-by-batch
+        num_eval_examples = config['num_eval_examples']
+        eval_batch_size = config['eval_batch_size']
+        num_batches = int(math.ceil(num_eval_examples / eval_batch_size))
 
-    x_adv = [] # adv accumulator
+        x_adv = [] # adv accumulator
 
-    print('Iterating over {} batches'.format(num_batches))
+        print('Iterating over {} batches'.format(num_batches))
 
-    for ibatch in range(num_batches):
-      bstart = ibatch * eval_batch_size
-      bend = min(bstart + eval_batch_size, num_eval_examples)
-      print('batch size: {}'.format(bend - bstart))
+        for ibatch in range(num_batches):
+            bstart = ibatch * eval_batch_size
+            bend = min(bstart + eval_batch_size, num_eval_examples)
+            print('batch size: {}'.format(bend - bstart))
 
-      x_batch = mnist.test.images[bstart:bend, :]
-      y_batch = mnist.test.labels[bstart:bend]
+            x_batch = mnist.test.images[bstart:bend, :]
+            y_batch = mnist.test.labels[bstart:bend]
 
-      x_batch_adv = attack.perturb(x_batch, y_batch, sess)
+            x_batch_adv = attack.perturb(x_batch, y_batch, sess)
 
-      x_adv.append(x_batch_adv)
+            x_adv.append(x_batch_adv)
 
-    print('Storing examples')
-    path = config['store_adv_path']
-    x_adv = np.concatenate(x_adv, axis=0)
-    np.save(path, x_adv)
-    print('Examples stored in {}'.format(path))
+        print('Storing examples')
+        path = config['store_adv_path']
+        x_adv = np.concatenate(x_adv, axis=0)
+        np.save(path, x_adv)
+        print('Examples stored in {}'.format(path))
