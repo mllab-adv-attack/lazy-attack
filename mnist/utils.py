@@ -39,8 +39,6 @@ def infer_file_name(args):
         + '_' + str(args.num_steps) \
         + '_' + str(args.step_size)
     meta_name += '_fdim' + str(args.f_dim)
-    meta_name += '_nblk' + str(args.n_blocks)
-    meta_name += '_ndwn' + str(args.n_down)
     meta_name += '_unet' if args.unet else ''
     meta_name += ('_drop' + str(args.dropout_rate)) if args.dropout else ''
     meta_name += '_nolc' if args.no_lc else ''
@@ -51,7 +49,6 @@ def infer_file_name(args):
         meta_name += '_dlr' + str(args.d_lr)
         meta_name += '_g' + str(args.g_weight)
         meta_name += '_d' + str(args.d_weight)
-        meta_name += '_patch' if args.patch else ''
     meta_name += ('_lo' + str(args.l1_weight)) if args.l1_loss else ''
     meta_name += ('_lt' + str(args.l2_weight)) if args.l2_loss else ''
     meta_name += ('_lp' + str(args.lp_weight)) if args.lp_loss else ''

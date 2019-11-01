@@ -3,7 +3,7 @@
 
 import tensorflow as tf
 from discriminator import Discriminator
-from generator import generator
+from generator import generator_v2 as generator
 
 
 def PGD(x, y, model_fn, attack_params):
@@ -52,8 +52,6 @@ class Model(object):
         self.unet = args.unet
         self.use_advG = args.use_advG
         self.f_dim = args.f_dim
-        self.n_down = args.n_down
-        self.n_blocks = args.n_blocks
         self.drop = 0 if not args.dropout else args.dropout_rate
         self.lp_loss = args.lp_loss
 
@@ -88,10 +86,10 @@ class Model(object):
                                                       drop=self.drop, is_training=is_train)
                 self.x_safe_adv = self.x_safe + self.delta * self.adv_generator(self.x_safe)
                 self.x_safe_adv = tf.clip_by_value(self.x_safe_adv, self.bounds[0], self.bounds[1])
-                self.x_safe_pgd = PGD(self.x_safe, self.y_input, self.model.fprop, self.attack_params)
+                self.x_safe_pgd = PGD(self.x_safe, self.y_input, self.model, self.attack_params)
             else:
                 # use PGD as attacker
-                self.x_safe_adv = PGD(self.x_safe, self.y_input, self.model.fprop, self.attack_params)
+                self.x_safe_adv = PGD(self.x_safe, self.y_input, self.model, self.attack_params)
                 self.x_safe_pgd = self.x_safe_adv
 
             diff = self.x_safe_adv - self.x_safe
@@ -99,7 +97,7 @@ class Model(object):
             x_safe_adv_fo = self.x_safe + diff
 
             # eval original image
-            orig_pre_softmax = self.model.fprop(self.x_input)
+            orig_pre_softmax = self.model(self.x_input)
 
             orig_predictions = tf.argmax(orig_pre_softmax, 1)
             orig_correct_prediction = tf.equal(orig_predictions, self.y_input)
@@ -111,7 +109,7 @@ class Model(object):
             self.orig_mean_xent = tf.reduce_mean(orig_y_xent)
  
             # eval safe image
-            self.safe_pre_softmax = self.model.fprop(self.x_safe)
+            self.safe_pre_softmax = self.model(self.x_safe)
 
             safe_predictions = tf.argmax(self.safe_pre_softmax, 1)
             safe_correct_prediction = tf.equal(safe_predictions, self.y_input)
@@ -124,10 +122,10 @@ class Model(object):
 
             # eval attacked safe image
             if self.use_advG:
-                safe_adv_pre_softmax = self.model.fprop(self.x_safe_adv)
+                safe_adv_pre_softmax = self.model(self.x_safe_adv)
             else:
                 # use first order for PGD attack
-                safe_adv_pre_softmax = self.model.fprop(x_safe_adv_fo)
+                safe_adv_pre_softmax = self.model(x_safe_adv_fo)
 
             safe_adv_predictions = tf.argmax(safe_adv_pre_softmax, 1)
             safe_adv_correct_prediction = tf.equal(safe_adv_predictions, self.y_input)
@@ -140,7 +138,7 @@ class Model(object):
 
             # eval PGD attacked safe image
             if self.use_advG:
-                safe_pgd_pre_softmax = self.model.fprop(self.x_safe_pgd)
+                safe_pgd_pre_softmax = self.model(self.x_safe_pgd)
 
                 safe_pgd_predictions = tf.argmax(safe_pgd_pre_softmax, 1)
                 safe_pgd_correct_prediction = tf.equal(safe_pgd_predictions, self.y_input)
@@ -155,7 +153,7 @@ class Model(object):
                 self.safe_pgd_mean_xent = self.safe_adv_mean_xent
 
             # eval alg image
-            self.alg_pre_softmax = self.model.fprop(self.x_input_alg)
+            self.alg_pre_softmax = self.model(self.x_input_alg)
 
             alg_predictions = tf.argmax(self.alg_pre_softmax, 1)
             alg_correct_prediction = tf.equal(alg_predictions, self.y_input)

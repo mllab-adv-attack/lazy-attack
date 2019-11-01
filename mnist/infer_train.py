@@ -37,14 +37,14 @@ if __name__ == '__main__':
     parser.add_argument('--tf_random_seed', default=451760341, type=int)
     parser.add_argument('--np_random_seed', default=216105420, type=int)
     parser.add_argument('--max_num_training_steps', default=100000, type=int)
-    parser.add_argument('--num_output_steps', default=1, type=int)
+    parser.add_argument('--num_output_steps', default=100, type=int)
     parser.add_argument('--num_summary_steps', default=100, type=int)
     parser.add_argument('--num_checkpoint_steps', default=300, type=int)
     parser.add_argument('--g_lr', default=1e-3, type=float)
     parser.add_argument('--training_batch_size', default=50, type=int)
     parser.add_argument('--eval_batch_size', default=100, type=int)
     parser.add_argument('--eval_on_cpu', action='store_true')
-    parser.add_argument('--delta', default=0.3, type=int)
+    parser.add_argument('--delta', default=0.3, type=float)
 
     # GAN settings
     parser.add_argument('--dropout', action='store_true')
@@ -357,7 +357,7 @@ with tf.Session() as sess:
         assert 0 <= np.amin(x_safe) and np.amax(x_safe) <= 1.0
         if not args.no_lc:
             assert 0 <= np.amin(x_safe_adv) and np.amax(x_safe_adv) <= 1.0
-        assert np.amax(np.abs(x_safe-x_batch)) <= args.delta
+        assert np.amax(np.abs(x_safe-x_batch)) <= args.delta + 1e-6
 
         training_time += end - start
 

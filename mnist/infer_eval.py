@@ -13,7 +13,7 @@ import numpy as np
 
 from tensorflow.examples.tutorials.mnist import input_data
 
-from generator import generator as Generator
+from generator import generator_v2 as Generator
 from discriminator import Discriminator
 from model import Model as Model
 
