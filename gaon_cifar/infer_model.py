@@ -49,6 +49,7 @@ class Model(object):
 
         self.noise_only = args.noise_only
         self.use_d = args.use_d
+        self.revG = args.revG
         self.unet = args.unet
         self.use_advG = args.use_advG
         self.f_dim = args.f_dim
@@ -100,6 +101,15 @@ class Model(object):
             diff = self.x_safe_adv - self.x_safe
             diff = tf.stop_gradient(diff)
             x_safe_adv_fo = self.x_safe + diff
+
+            if self.revG:
+                self.rev_generator = tf.make_template('rev_generator', generator, f_dim=self.f_dim, c_dim=3,
+                                                      n_down=self.n_down, n_blocks=self.n_blocks, unet=self.unet,
+                                                      drop=self.drop, is_training=is_train)
+
+                self.x_rev_safe = self.rev_generator(self.x_safe) * 0.5 + 0.5
+                self.x_rev_alg = self.rev_generator(self.x_input_alg) * 0.5 + 0.5
+
 
             # eval original image
             orig_pre_softmax = self.model.fprop(self.x_input)

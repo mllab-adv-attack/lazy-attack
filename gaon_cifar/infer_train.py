@@ -48,6 +48,7 @@ if __name__ == '__main__':
     parser.add_argument('--delta', default=40, type=int)
 
     # GAN settings
+    parser.add_argument('--revG', action='store_true')
     parser.add_argument('--dropout', action='store_true')
     parser.add_argument('--dropout_rate', default=0.3, type=float)
     parser.add_argument('--f_dim', default=64, type=int)
@@ -59,6 +60,7 @@ if __name__ == '__main__':
     parser.add_argument('--use_advG', action='store_true')
     parser.add_argument('--no_lc', action='store_true')
     parser.add_argument('--advG_lr', default=1e-3, type=float)
+    parser.add_argument('--revG_lr', default=1e-3, type=float)
     parser.add_argument('--d_lr', default=1e-3, type=float)
     parser.add_argument('--patch', action='store_true', help='use patch discriminator, (2x2)')
     parser.add_argument('--l1_loss', action='store_true', help='use l1 loss on infer(x) and maml(x)')
@@ -66,6 +68,7 @@ if __name__ == '__main__':
     parser.add_argument('--lp_loss', action='store_true', help='use logit pairing loss on infer(x) and maml(x)')
     parser.add_argument('--g_weight', default=1, type=float, help='loss weight for generator')
     parser.add_argument('--d_weight', default=1, type=float, help='loss weight for discriminator')
+    parser.add_argument('--revG_weight', default=1, type=float, help='loss weight for reverse generator')
     parser.add_argument('--l1_weight', default=1, type=float, help='loss weight for l1')
     parser.add_argument('--l2_weight', default=1, type=float, help='loss weight for l2')
     parser.add_argument('--lp_weight', default=1, type=float, help='loss weight for logit pairing')
@@ -81,7 +84,7 @@ if __name__ == '__main__':
     for key, val in vars(args).items():
         print('{}={}'.format(key, val))
 
-USE_ALG = True if (args.use_d or args.l1_loss or args.l2_loss or args.lp_loss) else False
+USE_ALG = True if (args.use_d or args.l1_loss or args.l2_loss or args.lp_loss or args.revG) else False
 
 # seeding randomness
 tf.set_random_seed(args.tf_random_seed)
@@ -95,6 +98,7 @@ num_checkpoint_steps = args.num_checkpoint_steps
 g_lr = args.g_lr
 d_lr = args.d_lr
 advG_lr = args.advG_lr
+revG_lr = args.revG_lr
 data_path = args.data_path
 training_batch_size = args.training_batch_size
 eval_batch_size = args.eval_batch_size
@@ -132,6 +136,12 @@ advG_learning_rate = tf.train.piecewise_constant(
     boundaries,
     advG_values)
 
+revG_values = [revG_lr, revG_lr/10, revG_lr/100]
+revG_learning_rate = tf.train.piecewise_constant(
+    tf.cast(global_step, tf.int32),
+    boundaries,
+    revG_values)
+
 # set up metrics
 safe_adv_loss = full_model.safe_adv_mean_xent
 safe_pgd_loss = full_model.safe_pgd_mean_xent
@@ -140,7 +150,9 @@ l1_loss = tf.losses.absolute_difference(full_model.x_input_alg/255, full_model.x
 l2_loss = tf.losses.mean_squared_error(full_model.x_input_alg/255, full_model.x_safe/255)
 #l2_loss = tf.reduce_mean(tf.sqrt(tf.reduce_sum(tf.square((full_model.x_input_alg-full_model.x_safe)/255), axis=[1, 2, 3])))
 lp_loss = tf.losses.mean_squared_error(full_model.safe_pre_softmax, full_model.alg_pre_softmax)
-
+# eval rev loss
+rev_safe_loss = tf.losses.mean_squared_error(full_model.x_rev_safe, full_model.x_input)
+rev_alg_loss = tf.losses.mean_squared_error(full_model.x_rev_alg, full_model.x_input)
 
 if args.no_lc:
     total_loss = 0
@@ -155,6 +167,9 @@ if args.lp_loss:
     total_loss += args.lp_weight * lp_loss
 if args.use_advG:
     total_loss += safe_loss
+if args.revG:
+    total_loss += args.revG_weight * rev_safe_loss
+    total_rev_loss = rev_safe_loss + rev_alg_loss
 if args.use_d:
     d_loss = full_model.d_loss
     g_loss = full_model.g_loss
@@ -212,6 +227,10 @@ if USE_ALG:
     train_summaries.append(tf.summary.scalar('l2 loss', l2_loss))
     train_summaries.append(tf.summary.scalar('lp loss', lp_loss))
     train_summaries.append(tf.summary.scalar('total loss', total_loss))
+if args.revG:
+    train_summaries.append(tf.summary.scalar('rev_safe loss', rev_safe_loss))
+    train_summaries.append(tf.summary.scalar('rev_alg loss', rev_alg_loss))
+    train_summaries.append(tf.summary.scalar('total rev loss', total_rev_loss))
 
 train_merged_summaries = tf.summary.merge(train_summaries)
 
@@ -269,12 +288,15 @@ with tf.Session() as sess:
                                                                  'discriminator' in var.name)]
     variables_to_train_advG = [var for var in trainable_variables if (var.name not in restore_vars_name_list and
                                                                    'adv_generator' in var.name)]
+    variables_to_train_revG = [var for var in trainable_variables if (var.name not in restore_vars_name_list and
+                                                                      'rev_generator' in var.name)]
 
     print(np.sum([np.prod(v.get_shape().as_list()) for v in restore_vars]))
     print(np.sum([np.prod(v.get_shape().as_list()) for v in variables_to_train]))
     print(np.sum([np.prod(v.get_shape().as_list()) for v in variables_to_train_g]))
     print(np.sum([np.prod(v.get_shape().as_list()) for v in variables_to_train_d]))
     print(np.sum([np.prod(v.get_shape().as_list()) for v in variables_to_train_advG]))
+    print(np.sum([np.prod(v.get_shape().as_list()) for v in variables_to_train_revG]))
 
     train_step_g = tf.train.AdamOptimizer(g_learning_rate).minimize(
         total_loss if not args.use_d else total_g_loss,
@@ -290,6 +312,11 @@ with tf.Session() as sess:
         train_step_advG = tf.train.AdamOptimizer(advG_learning_rate).minimize(
             -safe_adv_loss,
             var_list=variables_to_train_advG)
+
+    if args.use_revG:
+        train_step_revG = tf.train.AdamOptimizer(revG_learning_rate).minimize(
+            total_rev_loss,
+            var_list=variables_to_train_revG)
 
     sess.run(tf.global_variables_initializer())
     opt_saver = tf.train.Saver(restore_vars)
@@ -374,6 +401,11 @@ with tf.Session() as sess:
                           full_model.x_safe, full_model.x_safe_adv, l2_dist],
                          feed_dict=nat_dict)
 
+        if args.revG:
+            _, rev_safe_loss_batch, rev_alg_loss_batch, total_rev_loss_batch = \
+                sess.run([train_step_revG, rev_safe_loss, rev_alg_loss, total_rev_loss],
+                         feed_dict=nat_dict)
+
         if args.use_d:
             _, d_loss_batch, g_loss_batch, d_alg_out_batch, d_safe_out_batch = \
                 sess.run([train_step_d, d_loss, g_loss,
@@ -409,6 +441,10 @@ with tf.Session() as sess:
                 print('    l1 loss {:.6}'.format(l1_loss_batch))
                 print('    l2 loss {:.6}'.format(l2_loss_batch))
                 print('    lp loss {:.6}'.format(lp_loss_batch))
+            if args.revG:
+                print('    rev(safe) loss {:.6}'.format(rev_safe_loss_batch))
+                print('    rev(alg) loss {:.6}'.format(rev_alg_loss_batch))
+                print('    rev(total) loss {:.6}'.format(total_rev_loss_batch))
             if ii != 0:
                 print('    {} examples per second'.format(
                     num_output_steps * training_batch_size / training_time))

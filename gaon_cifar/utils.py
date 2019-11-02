@@ -47,6 +47,8 @@ def infer_file_name(args):
     meta_name += '_noise' if args.noise_only else ''
     if args.use_advG:
         meta_name += '_advGlr' + str(args.advG_lr)
+    if args.use_revG:
+        meta_name += '_revGlr' + str(args.revG_lr)
     if args.use_d:
         meta_name += '_dlr' + str(args.d_lr)
         meta_name += '_g' + str(args.g_weight)
