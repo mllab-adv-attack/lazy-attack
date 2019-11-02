@@ -169,7 +169,7 @@ def generator(x, f_dim=64, c_dim=3, n_down=2, n_blocks=6, drop=0, unet=False, is
     if unet:
         unet_li.append(inputs)
 
-    get_shape(inputs)
+    #get_shape(inputs)
 
     n_downsampling = n_down
     for i in range(n_downsampling):
@@ -181,7 +181,7 @@ def generator(x, f_dim=64, c_dim=3, n_down=2, n_blocks=6, drop=0, unet=False, is
         if unet and i != (n_downsampling-1):
             unet_li.append(inputs)
         
-        get_shape(inputs)
+        #get_shape(inputs)
 
     mult = 2**n_downsampling
     inputs = block_layer(
@@ -190,7 +190,7 @@ def generator(x, f_dim=64, c_dim=3, n_down=2, n_blocks=6, drop=0, unet=False, is
           strides=1, drop=drop, training=is_training,
           name='block_layer_G{}'.format(1), data_format=data_format)
     
-    get_shape(inputs)
+    #get_shape(inputs)
 
     for i in range(n_downsampling):
         mult = 2**(n_downsampling-i)
@@ -203,13 +203,13 @@ def generator(x, f_dim=64, c_dim=3, n_down=2, n_blocks=6, drop=0, unet=False, is
         inputs = batch_norm(inputs, is_training, data_format)
         inputs = tf.nn.relu(inputs)
         
-        get_shape(inputs)
+        #get_shape(inputs)
 
     inputs = tf.layers.conv2d(inputs, filters=c_dim, kernel_size=3, strides=1,
       padding='same', use_bias=True, kernel_initializer=tf.truncated_normal_initializer(0.0, 0.02), data_format=data_format)
     inputs = tf.nn.tanh(inputs)
     
-    get_shape(inputs)
+    #get_shape(inputs)
 
     if data_format=='channels_first':
         inputs = tf.transpose(inputs, [0, 2, 3, 1])

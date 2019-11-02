@@ -94,40 +94,41 @@ if __name__ == '__main__':
     parser.add_argument('--imp_adagrad', action='store_true')
     parser.add_argument('--imp_no_sign', action='store_true')
     parser.add_argument('--label_infer', action='store_true')
+    parser.add_argument('--eval_batch_size', default=100, type=int)
     # PGD (evaluation)
     parser.add_argument('--val_step_per', default=0, help="validation per val_step. =< 0 means no eval", type=int)
     parser.add_argument('--val_eps', default=0.3, help='Evaluation eps', type=float)
     parser.add_argument('--val_num_steps', default=100, help="validation PGD number of steps per PGD", type=int)
     parser.add_argument('--val_step_size', default=0.01, type=float)
     parser.add_argument('--val_restarts', default=20, help="validation PGD restart numbers per eps", type=int)
-    params = parser.parse_args()
-    for key, val in vars(params).items():
+    args = parser.parse_args()
+    for key, val in vars(args).items():
         print('{}={}'.format(key, val))
 
-    assert not (params.corr_only and params.fail_only)
-    assert not (params.imp_rep and params.imp_pp)
-    assert not (params.imp_adam and params.imp_rms)
+    assert not (args.corr_only and args.fail_only)
+    assert not (args.imp_rep and args.imp_pp)
+    assert not (args.imp_adam and args.imp_rms)
 
     # numpy options
     np.set_printoptions(precision=6, suppress=True)
     
-    if params.imp_random_start > 0:
-        np.random.seed(params.imp_random_seed)
-        print('random seed set to:', params.imp_random_seed)
+    if args.imp_random_start > 0:
+        np.random.seed(args.imp_random_seed)
+        print('random seed set to:', args.imp_random_seed)
 
     # make file name
-    meta_name = imp_file_name(params)
+    meta_name = imp_file_name(args)
 
     from model import Model
 
-    model_file = tf.train.latest_checkpoint('models/' + params.model_dir)
+    model_file = tf.train.latest_checkpoint('models/' + args.model_dir)
     if model_file is None:
         print('No model found')
         sys.exit()
 
     model = Model()
     impenet = Impenetrable(model,
-                           params)
+                           args)
     saver = tf.train.Saver()
 
     mnist = input_data.read_data_sets('MNIST_data', one_hot=False, validation_size=0, reshape=False)
@@ -139,23 +140,23 @@ if __name__ == '__main__':
         saver.restore(sess, model_file)
 
         # Set number of examples to evaluate
-        num_eval_examples = params.sample_size
+        num_eval_examples = args.sample_size
 
-        if params.corr_only:
-            if params.model_dir == 'naturally_trained':
-                indices = np.load('/data/home/gaon/lazy-attack/mnist/mnist_data/nat_sucess_indices.npy')
+        if args.corr_only:
+            if args.model_dir == 'naturally_trained':
+                indices = np.load('/data/home/gaon/lazy-attack/mnist/mnist_data/nat_success_indices.npy')
             else:
-                indices = np.load('/data/home/gaon/lazy-attack/mnist/mnist_data/adv_sucess_indices.npy')
-        elif params.fail_only:
-            if params.model_dir == 'naturally_trained':
+                indices = np.load('/data/home/gaon/lazy-attack/mnist/mnist_data/adv_success_indices.npy')
+        elif args.fail_only:
+            if args.model_dir == 'naturally_trained':
                 indices = np.load('/data/home/gaon/lazy-attack/mnist/mnist_data/nat_fail_indices.npy')
             else:
                 indices = np.load('/data/home/gaon/lazy-attack/mnist/mnist_data/adv_fail_indices.npy')
         else:
-            indices = [i for i in range(params.sample_size + params.bstart)]
+            indices = [i for i in range(args.sample_size + args.bstart)]
 
         # load data
-        bstart = params.bstart
+        bstart = args.bstart
         while True:
             '''
             x_candid = cifar.eval_data.xs[indices[bstart:bstart + 100]]
@@ -167,7 +168,7 @@ if __name__ == '__main__':
             y_masked = y_candid[mask]
             logit_masked = logits[mask]
             print(len(x_masked))
-            if bstart == params.bstart:
+            if bstart == args.bstart:
                 x_full_batch = x_masked[:min(num_eval_examples, len(x_masked))]
                 y_full_batch = y_masked[:min(num_eval_examples, len(y_masked))]
                 logit_full_batch = logit_masked[:min(num_eval_examples, len(logit_masked))]
@@ -187,11 +188,11 @@ if __name__ == '__main__':
                                     feed_dict={model.x_input: x_candid,
                                                model.y_input: y_candid})
             print(sum(mask))
-            if params.corr_only and (np.mean(mask) < 1.0 - 1E-6):
+            if args.corr_only and (np.mean(mask) < 1.0 - 1E-6):
                 raise Exception
-            if params.fail_only and (np.mean(mask) > 0.0 + 1E-6):
+            if args.fail_only and (np.mean(mask) > 0.0 + 1E-6):
                 raise Exception
-            if bstart == params.bstart:
+            if bstart == args.bstart:
                 x_full_batch = x_candid[:min(num_eval_examples, len(x_candid))]
                 y_full_batch = y_candid[:min(num_eval_examples, len(y_candid))]
                 logit_full_batch = logits[:min(num_eval_examples, len(logits))]
@@ -207,8 +208,8 @@ if __name__ == '__main__':
         # Adjust num_eval_examples. Iterate over the samples batch-by-batch
         num_eval_examples = len(x_full_batch)
 
-        eval_batch_size = min(100, num_eval_examples)
-        assert num_eval_examples < 100 or num_eval_examples%100==0
+        eval_batch_size = min(args.eval_batch_size, num_eval_examples)
+        assert num_eval_examples < args.eval_batch_size or num_eval_examples%args.eval_batch_size==0
 
         num_batches = int(math.ceil(num_eval_examples / eval_batch_size))
 
@@ -237,7 +238,7 @@ if __name__ == '__main__':
 
             # run our algorithm
             print('fortifying image ', bstart)
-            x_batch_imp, mask_batch_imp = impenet.fortify(x_batch, y_pred_batch if params.label_infer else y_batch, sess)
+            x_batch_imp, mask_batch_imp = impenet.fortify(x_batch, y_pred_batch if args.label_infer else y_batch, sess)
             print()
 
             # evaluation
@@ -260,7 +261,7 @@ if __name__ == '__main__':
 
         # save image
         folder_name = './arr' + '_main' + '/'
-        batch_name = '_' + str(params.bstart) + '_' + str(params.sample_size)
+        batch_name = '_' + str(args.bstart) + '_' + str(args.sample_size)
         common_name = folder_name + meta_name + batch_name
         
         np.save(common_name + '_x_org', x_full_batch)

@@ -150,9 +150,6 @@ l1_loss = tf.losses.absolute_difference(full_model.x_input_alg/255, full_model.x
 l2_loss = tf.losses.mean_squared_error(full_model.x_input_alg/255, full_model.x_safe/255)
 #l2_loss = tf.reduce_mean(tf.sqrt(tf.reduce_sum(tf.square((full_model.x_input_alg-full_model.x_safe)/255), axis=[1, 2, 3])))
 lp_loss = tf.losses.mean_squared_error(full_model.safe_pre_softmax, full_model.alg_pre_softmax)
-# eval rev loss
-rev_safe_loss = tf.losses.mean_squared_error(full_model.x_rev_safe, full_model.x_input)
-rev_alg_loss = tf.losses.mean_squared_error(full_model.x_rev_alg, full_model.x_input)
 
 if args.no_lc:
     total_loss = 0
@@ -168,8 +165,10 @@ if args.lp_loss:
 if args.use_advG:
     total_loss += safe_loss
 if args.revG:
+    rev_safe_loss = tf.losses.mean_squared_error(full_model.x_rev_safe/255, full_model.x_input/255)
+    rev_alg_loss = tf.losses.mean_squared_error(full_model.x_rev_alg/255, full_model.x_input/255)
     total_loss += args.revG_weight * rev_safe_loss
-    total_rev_loss = rev_safe_loss + rev_alg_loss
+    total_rev_loss = rev_alg_loss
 if args.use_d:
     d_loss = full_model.d_loss
     g_loss = full_model.g_loss
@@ -313,7 +312,7 @@ with tf.Session() as sess:
             -safe_adv_loss,
             var_list=variables_to_train_advG)
 
-    if args.use_revG:
+    if args.revG:
         train_step_revG = tf.train.AdamOptimizer(revG_learning_rate).minimize(
             total_rev_loss,
             var_list=variables_to_train_revG)

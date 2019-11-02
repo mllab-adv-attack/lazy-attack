@@ -12,6 +12,9 @@ def get_shape(tensor):
 
 
 def generator(x, f_dim=64, c_dim=1, drop=0, unet=False, is_training=True):
+
+    # [0, 1] --> [-1, 1]
+    x = (x-0.5)*2
     ngf = f_dim
 
     net = tf.layers.conv2d(x, filters=ngf, kernel_size=5, strides=2, padding='same',

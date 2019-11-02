@@ -41,7 +41,7 @@ if __name__ == '__main__':
     parser.add_argument('--g_lr', default=1e-3, type=float)
     parser.add_argument('--eval_batch_size', default=100, type=int)
     parser.add_argument('--eval_on_cpu', action='store_true')
-    parser.add_argument('--delta', default=16, type=int)
+    parser.add_argument('--delta', default=0.3, type=float)
     parser.add_argument('--sample_size', default=1000, type=int)
     parser.add_argument('--bstart', default=0, type=int)
     parser.add_argument('--train_mode', action='store_true', help='use train mode neural nets')
@@ -90,7 +90,6 @@ tf.set_random_seed(args.tf_random_seed)
 np.random.seed(args.np_random_seed)
 
 # Setting up training parameters
-data_path = args.data_path
 eval_batch_size = args.eval_batch_size
 
 # Setting up the data and the model
@@ -194,9 +193,9 @@ with tf.Session() as sess:
 
     if args.corr_only:
         if args.model_dir == 'naturally_trained':
-            indices = np.load('/data/home/gaon/lazy-attack/mnist/mnist_data/nat_sucess_indices.npy')
+            indices = np.load('/data/home/gaon/lazy-attack/mnist/mnist_data/nat_success_indices.npy')
         else:
-            indices = np.load('/data/home/gaon/lazy-attack/mnist/mnist_data/adv_sucess_indices.npy')
+            indices = np.load('/data/home/gaon/lazy-attack/mnist/mnist_data/adv_success_indices.npy')
     elif args.fail_only:
         if args.model_dir == 'naturally_trained':
             indices = np.load('/data/home/gaon/lazy-attack/mnist/mnist_data/nat_fail_indices.npy')

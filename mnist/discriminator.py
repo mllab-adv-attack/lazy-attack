@@ -13,6 +13,9 @@ class Discriminator(object):
         with tf.variable_scope('discriminator', reuse=tf.AUTO_REUSE):
             # input_layer = tf.reshape(x, [-1, 28, 28, 1])
 
+            # [0, 1] --> [-1, 1]
+            x = (x-0.5)*2
+
             conv1 = tf.layers.conv2d(
                 inputs=x,
                 filters=8,

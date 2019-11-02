@@ -107,8 +107,8 @@ class Model(object):
                                                       n_down=self.n_down, n_blocks=self.n_blocks, unet=self.unet,
                                                       drop=self.drop, is_training=is_train)
 
-                self.x_rev_safe = self.rev_generator(self.x_safe) * 0.5 + 0.5
-                self.x_rev_alg = self.rev_generator(self.x_input_alg) * 0.5 + 0.5
+                self.x_rev_safe = (self.rev_generator(self.x_safe) * 0.5 + 0.5)*255
+                self.x_rev_alg = (self.rev_generator(self.x_input_alg) * 0.5 + 0.5)*255
 
 
             # eval original image
