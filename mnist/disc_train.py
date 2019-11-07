@@ -217,13 +217,14 @@ with tf.Session() as sess:
                                                                get_indices=True)
 
         imp_batch_li = [imp_mnist[indices, ...] for imp_mnist in imp_mnist_train_li]
-        y_fake_batch, mask_batch = full_model.generate_fakes(y_batch)
+        y_fake_batch, mask_batch, indices_batch = full_model.generate_fakes(y_batch)
 
         nat_dict = {i: d for i, d in zip(full_model.x_input_alg_li, imp_batch_li)}
         nat_dict.update({full_model.x_input: x_batch,
                          full_model.y_input: y_batch,
                          full_model.y_fake_input: y_fake_batch,
-                         full_model.mask_input: mask_batch})
+                         full_model.mask_input: mask_batch,
+                         full_model.indices_input: indices_batch})
 
         # Sanity check
         assert 0 <= np.amin(x_batch) and np.amax(x_batch) <= 1.0
@@ -268,13 +269,14 @@ with tf.Session() as sess:
             eval_x_batch, eval_y_batch, indices = mnist_test.get_next_batch(eval_batch_size, multiple_passes=True,
                                                                             get_indices=True)
             imp_batch_li = [imp_mnist[indices, ...] for imp_mnist in imp_mnist_eval_li]
-            y_fake_batch, mask_batch = full_model.generate_fakes(y_batch)
+            y_fake_batch, mask_batch, indices_batch = full_model.generate_fakes(y_batch)
 
             eval_dict = {i: d for i, d in zip(full_model.x_input_alg_li, imp_batch_li)}
             eval_dict.update({full_model.x_input: x_batch,
                               full_model.y_input: y_batch,
                               full_model.y_fake_input: y_fake_batch,
-                              full_model.mask_input: mask_batch})
+                              full_model.mask_input: mask_batch,
+                              full_model.indices_input: indices_batch})
 
             # Sanity check
             assert 0 <= np.amin(x_batch) and np.amax(x_batch) <= 1.0

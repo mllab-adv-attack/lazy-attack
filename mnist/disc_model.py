@@ -77,6 +77,7 @@ class Model(object):
         self.y_input = tf.placeholder(tf.int64, shape=None)
         self.y_fake_input = tf.placeholder(tf.int64, shape=None)
         self.mask_input = tf.placeholder(tf.int64, shape=None)
+        self.indices_input = tf.placeholder(tf.int64, shape=None)
         
         real = tf.ones_like(self.y_input)
         fake = tf.zeros_like(self.y_input)
@@ -117,8 +118,10 @@ class Model(object):
             self.y_filtered = tf.where(tf.cast(self.mask_input, tf.float64) >= half,
                                        self.y_input, self.y_fake_input)
 
-            self.alg_noise_stack = tf.stack(self.alg_noise_li)
-            self.alg_noise_filtered = tf.gather_nd(self.alg_noise_li, self.y_filtered)
+            y_filtered_with_indices = tf.stack([self.indices_input, self.y_filtered], axis=1)
+
+            self.alg_noise_stack = tf.stack(self.alg_noise_li, axis=1)
+            self.alg_noise_filtered = tf.gather_nd(self.alg_noise_stack, y_filtered_with_indices)
 
             self.d_out_train = self.discriminator(self.x_input, self.alg_noise_filtered)
 
@@ -150,6 +153,7 @@ class Model(object):
             fake = np.where(same_mask, new_fake, fake)
 
         mask = np.random.randint(2, size=np.size(y))
+        indices = np.array([i for i in range(len(mask))])
 
-        return fake, mask
+        return fake, mask, indices
 
