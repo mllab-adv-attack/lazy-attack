@@ -94,7 +94,7 @@ class pix2pixDiscriminator(object):
 
             inputs = inputs * 2 - 1
             targets = targets * 2 - 1
-            inputs = tf.concat([inputs, targets])
+            inputs = tf.concat([inputs, targets], axis=-1)
 
             inputs = encoder_layer(inputs, 32, 3, 2, batch_norm=False, is_training=self._is_training)
             inputs = encoder_layer(inputs, 64, 3, 1, is_training=self._is_training)

@@ -55,6 +55,17 @@ def infer_file_name(args):
     meta_name += ('_lp' + str(args.lp_weight)) if args.lp_loss else ''
     return meta_name
 
+def disc_file_name(args):
+    meta_name = 'nat' if args.model_dir == 'naturally_trained' else 'adv'
+    meta_name += '_lr' + str(args.d_lr)
+    meta_name += '_delta' + str(args.delta)
+    meta_name += '_pgd' + '_' + str(args.eps) \
+        + '_' + str(args.num_steps) \
+        + '_' + str(args.step_size)
+    meta_name += '_fdim' + str(args.f_dim)
+    meta_name += ('_drop' + str(args.dropout_rate)) if args.dropout else ''
+    meta_name += '_patch' if args.patch else ''
+    return meta_name
 
 def load_imp_data(args, eval_flag=False, target=-1):
     final_dir = 'imp_nat_fixed/' if args.model_dir == 'naturally_trained' else 'imp_adv_fixed/'
@@ -65,9 +76,8 @@ def load_imp_data(args, eval_flag=False, target=-1):
 
     posfix_li = [('imp_' + ('eval' if eval_flag else 'train') + '_fixed_{:.1f}_'.format(args.delta)+str(idx))
                  for idx in range(0, data_size, file_batch_size)]
-    if target >= 0:
-        posfix_li = [(filename + '_{}'.format(target)) for filename in posfix_li]
-    filename_li = [(str_idx + '_' + str(file_batch_size) + '.npy') for str_idx in posfix_li]
+    target_name = '' if target >= 0 else '_{}'.format(target)
+    filename_li = [(str_idx + '_' + str(file_batch_size) + target_name + '.npy') for str_idx in posfix_li]
     fullname_li = [(data_dir + filename) for filename in filename_li]
     data_li = [np.load(fullname) for fullname in fullname_li]
     data = np.concatenate(data_li)
