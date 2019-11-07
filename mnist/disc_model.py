@@ -2,8 +2,10 @@
 # https://github.com/tensorflow/models/blob/master/official/resnet/resnet_model.py
 
 import tensorflow as tf
-from discriminator import Discriminator
-from generator import generator_v2 as generator
+import numpy as np
+from discriminator import pix2pixDiscriminator as Discriminator
+
+NUM_CLASSES = 10
 
 
 def PGD(x, y, model_fn, attack_params):
@@ -53,6 +55,7 @@ class Model(object):
         self.use_advG = args.use_advG
         self.f_dim = args.f_dim
         self.drop = 0 if not args.dropout else args.dropout_rate
+        self.patch = args.patch
         self.lp_loss = args.lp_loss
 
         self._build_model()
@@ -61,123 +64,89 @@ class Model(object):
         assert self.mode == 'train' or self.mode == 'eval'
         is_train = True if self.mode == 'train' else False
 
-        with tf.variable_scope('infer_input', reuse=tf.AUTO_REUSE):
-            self.x_input = tf.placeholder(
-                tf.float32,
-                shape=[None, 28, 28, 1])
-            self.y_input = tf.placeholder(tf.int64, shape=None)
-            
-            self.x_input_alg = tf.placeholder(
-                tf.float32,
-                shape=[None, 28, 28, 1]
-            )
+        self.discriminator = Discriminator(self.patch, is_train)
 
+        self.x_input = tf.placeholder(
+            tf.float32,
+            shape=[None, 32, 32, 3])
+
+        self.x_input_alg = tf.placeholder(
+            tf.float32,
+            shape=[None, 32, 32, 3]
+        )
+        self.x_input_alg_li = [tf.placeholder(
+            tf.float32,
+            shape=[None, 32, 32, 3]
+        ) for _ in range(NUM_CLASSES)]
+
+        self.y_input = tf.placeholder(tf.int64, shape=None)
+        self.y_fake_input = tf.placeholder(tf.int64, shape=None)
+
+        # basic inference
         with tf.variable_scope('', reuse=tf.AUTO_REUSE):
-            self.def_generator = tf.make_template('generator', generator, f_dim=self.f_dim, c_dim=1, drop=self.drop,
-                                                  unet=self.unet, is_training=is_train)
-            self.x_safe = self.x_input + self.delta * self.def_generator(self.x_input)
-            self.x_safe = tf.clip_by_value(self.x_safe, self.bounds[0], self.bounds[1])
+            self.alg_noise = (self.x_input_alg-self.x_input)/self.delta
 
+            self.d_out_single = self.discriminator(self.x_input, self.alg_noise)
+
+            self.d_mean_out_single = tf.reduce_mean(tf.layers.flatten(self.d_out_single), axis=1)
+
+            self.d_decisions_single = tf.where(self.d_mean_out_single >= 0.5, 1, 0)
+
+            self.d_loss_single = tf.reduce_mean(tf.losses.mean_squared_error(self.d_out_single, self.y_input))
+
+        # inference & train procedure
         with tf.variable_scope('', reuse=tf.AUTO_REUSE):
-            if self.use_advG:
-                # use adv generator as attacker (PGD only when evaluation)
-                self.adv_generator = tf.make_template('adv_generator', generator, f_dim=self.f_dim, c_dim=1,
-                                                      unet=self.unet,
-                                                      drop=self.drop, is_training=is_train)
-                self.x_safe_adv = self.x_safe + self.delta * self.adv_generator(self.x_safe)
-                self.x_safe_adv = tf.clip_by_value(self.x_safe_adv, self.bounds[0], self.bounds[1])
-                self.x_safe_pgd = PGD(self.x_safe, self.y_input, self.model, self.attack_params)
-            else:
-                # use PGD as attacker
-                self.x_safe_adv = PGD(self.x_safe, self.y_input, self.model, self.attack_params)
-                self.x_safe_pgd = self.x_safe_adv
+            self.alg_noise_li = [(x_input_alg-self.x_input)/self.delta for x_input_alg in self.x_input_alg_li]
 
-            diff = self.x_safe_adv - self.x_safe
-            diff = tf.stop_gradient(diff)
-            x_safe_adv_fo = self.x_safe + diff
+            self.d_out_li = [self.discriminator(self.x_input, alg_noise) for alg_noise in self.alg_noise_li]
 
-            # eval original image
-            orig_pre_softmax = self.model(self.x_input)
+            self.d_mean_out_li = [tf.reduce_mean(tf.layers.flatten(d_out), axis=1) for d_out in self.d_out_li]
 
-            orig_predictions = tf.argmax(orig_pre_softmax, 1)
-            orig_correct_prediction = tf.equal(orig_predictions, self.y_input)
-            self.orig_accuracy = tf.reduce_mean(
-                tf.cast(orig_correct_prediction, tf.float32))
+            self.d_out_full = tf.concat(self.d_mean_out_li, axis=1)
 
-            orig_y_xent = tf.nn.sparse_softmax_cross_entropy_with_logits(
-                logits=orig_pre_softmax, labels=self.y_input)
-            self.orig_mean_xent = tf.reduce_mean(orig_y_xent)
- 
-            # eval safe image
-            self.safe_pre_softmax = self.model(self.x_safe)
+            # inference
+            self.predictions = tf.argmax(self.d_out_full, axis=1)
 
-            safe_predictions = tf.argmax(self.safe_pre_softmax, 1)
-            safe_correct_prediction = tf.equal(safe_predictions, self.y_input)
-            self.safe_accuracy = tf.reduce_mean(
-                tf.cast(safe_correct_prediction, tf.float32))
+            self.correct_predictions = tf.equal(self.predictions, self.y_input)
 
-            safe_y_xent = tf.nn.sparse_softmax_cross_entropy_with_logits(
-                logits=self.safe_pre_softmax, labels=self.y_input)
-            self.safe_mean_xent = tf.reduce_mean(safe_y_xent)
+            self.accuracy = tf.reduce_mean(tf.cast(self.correct_predictions, tf.int32))
+            self.num_correct = tf.reduce_sum(tf.cast(self.correct_predictions, tf.int32))
 
-            # eval attacked safe image
-            if self.use_advG:
-                safe_adv_pre_softmax = self.model(self.x_safe_adv)
-            else:
-                # use first order for PGD attack
-                safe_adv_pre_softmax = self.model(x_safe_adv_fo)
+            # train
+            self.random_mask = tf.random.uniform(self.y_input.shape, 0, 2, dtype=tf.int32)
 
-            safe_adv_predictions = tf.argmax(safe_adv_pre_softmax, 1)
-            safe_adv_correct_prediction = tf.equal(safe_adv_predictions, self.y_input)
-            self.safe_adv_accuracy = tf.reduce_mean(
-                tf.cast(safe_adv_correct_prediction, tf.float32))
+            self.y_filtered = tf.where(self.random_mask >= 0.5, self.y_input, self.y_fake_input)
 
-            safe_adv_y_xent = tf.nn.sparse_softmax_cross_entropy_with_logits(
-                logits=safe_adv_pre_softmax, labels=self.y_input)
-            self.safe_adv_mean_xent = tf.reduce_mean(safe_adv_y_xent)
+            self.alg_noise_stack = tf.stack(self.alg_noise_li)
+            self.alg_noise_filtered = self.alg_noise_li[self.y_filtered]
 
-            # eval PGD attacked safe image
-            if self.use_advG:
-                safe_pgd_pre_softmax = self.model(self.x_safe_pgd)
+            self.d_out_train = self.discriminator(self.x_input, self.alg_noise_filtered)
 
-                safe_pgd_predictions = tf.argmax(safe_pgd_pre_softmax, 1)
-                safe_pgd_correct_prediction = tf.equal(safe_pgd_predictions, self.y_input)
-                self.safe_pgd_accuracy = tf.reduce_mean(
-                    tf.cast(safe_pgd_correct_prediction, tf.float32))
+            self.d_loss_train = tf.reduce_mean(tf.losses.mean_squared_error(self.d_out_train, self.random_mask))
 
-                safe_pgd_y_xent = tf.nn.sparse_softmax_cross_entropy_with_logits(
-                    logits=safe_pgd_pre_softmax, labels=self.y_input)
-                self.safe_pgd_mean_xent = tf.reduce_mean(safe_pgd_y_xent)
-            else:
-                self.safe_pgd_accuracy = self.safe_adv_accuracy
-                self.safe_pgd_mean_xent = self.safe_adv_mean_xent
+            self.d_mean_out_train = tf.reduce_mean(tf.layers.flatten(self.d_out_train), axis=1)
 
-            # eval alg image
-            self.alg_pre_softmax = self.model(self.x_input_alg)
+            self.d_decisions_train = tf.where(self.d_mean_out_single >= 0.5, 1, 0)
 
-            alg_predictions = tf.argmax(self.alg_pre_softmax, 1)
-            alg_correct_prediction = tf.equal(alg_predictions, self.y_input)
-            self.alg_accuracy = tf.reduce_mean(
-                tf.cast(alg_correct_prediction, tf.float32))
+            self.num_correct_train_real = tf.reduce_sum(self.d_decisions_train * self.random_mask)
+            self.num_correct_train_fake = tf.reduce_sum((1-self.d_decisions_train) * (1-self.random_mask))
 
-            alg_y_xent = tf.nn.sparse_softmax_cross_entropy_with_logits(
-                logits=self.alg_pre_softmax, labels=self.y_input)
-            self.alg_mean_xent = tf.reduce_mean(alg_y_xent)
+            self.accuracy_train_real = self.num_correct_train_real / tf.reduce_sum(self.random_mask)
+            self.accuracy_train_fake = self.num_correct_train_fake / tf.reduce_sum(1-self.random_mask)
 
-        if self.use_d:
-            self.discriminator = Discriminator()
+            self.num_correct_train = self.num_correct_train_real + self.num_correct_train_fake
+            self.accuracy_train = tf.reduce_mean(self.d_decisions_train * self.random_mask)
 
-            if self.noise_only:
-                self.d_alg_out = self.discriminator((self.x_input_alg-self.x_input)/self.delta)
-                self.d_safe_out = self.discriminator((self.x_safe-self.x_input)/self.delta)
-            else:
-                self.d_alg_out = self.discriminator(self.x_input_alg)
-                self.d_safe_out = self.discriminator(self.x_safe)
 
-            real = tf.ones_like(self.d_alg_out)
-            fake = tf.zeros_like(self.d_alg_out)
+    def generate_fake_labels(self, y):
+        # generate always not-equal random labels
+        fake = np.copy(y)
 
-            self.d_loss = tf.reduce_mean(tf.losses.mean_squared_error(self.d_alg_out, real) +
-                                         tf.losses.mean_squared_error(self.d_safe_out, fake))
-            self.g_loss = tf.reduce_mean(tf.losses.mean_squared_error(self.d_safe_out, real))
+        while np.sum(fake == y) > 0:
+            same_mask = np.where(fake == y)
+            new_fake = np.random.randint(NUM_CLASSES, size=np.size(y))
+
+            fake = np.where(same_mask, new_fake, fake)
+
+        return fake
 
