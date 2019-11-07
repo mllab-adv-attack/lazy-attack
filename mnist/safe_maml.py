@@ -81,11 +81,11 @@ if __name__ == '__main__':
     parser.add_argument('--pgd_random_start', action='store_true')
     parser.add_argument('--pgd_restarts', default=20, help="training PGD restart numbers per eps", type=int)
     # impenetrable
-    parser.add_argument('--imp_delta', default=0, help='<= 0 for no imp delta', type=float)
+    parser.add_argument('--imp_delta', default=0.3, help='<= 0 for no imp delta', type=float)
     parser.add_argument('--imp_random_start', default=0, help='eps for random start of image', type=float)
     parser.add_argument('--imp_random_seed', default=0, help='random seed for random start of image', type=int)
     parser.add_argument('--imp_gray_start', action='store_true')
-    parser.add_argument('--imp_num_steps', default=500, help='0 for until convergence', type=int)
+    parser.add_argument('--imp_num_steps', default=100, help='0 for until convergence', type=int)
     parser.add_argument('--imp_step_size', default=0.01, type=float)
     parser.add_argument('--imp_rep', action='store_true', help='use reptile instead of MAML')
     parser.add_argument('--imp_pp', default=0, help='step intervals to sum PGD gradients. <= 0 for pure MAML', type=int)
