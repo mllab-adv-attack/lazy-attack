@@ -95,14 +95,13 @@ model = Target_model()
 full_model = Safe_model('train', model, args)
 
 # set up metrics
-d_loss = full_model.d_loss_train
+d_loss = full_model.d_loss
 
 total_loss = d_loss
 
-accuracy_infer = full_model.accuracy
-accuracy_train = full_model.accuracy_train
-accuracy_train_real = full_model.accuracy_train_real
-accuracy_train_fake = full_model.accuracy_train_fake
+accuracy_train = full_model.accuracy
+accuracy_train_real = full_model.accuracy_real
+accuracy_train_fake = full_model.accuracy_fake
 
 
 # Setting up the Tensorboard and checkpoint outputs
@@ -131,7 +130,6 @@ if args.save:
 saver = tf.train.Saver()
 
 train_summaries = [
-    tf.summary.scalar('acc (infer)', accuracy_infer),
     tf.summary.scalar('acc (train)', accuracy_train),
     tf.summary.scalar('acc (train-real)', accuracy_train_real),
     tf.summary.scalar('acc (train-fake)', accuracy_train_fake),
@@ -142,7 +140,6 @@ train_summaries = [
 train_merged_summaries = tf.summary.merge(train_summaries)
 
 eval_summaries = [
-    tf.summary.scalar('eval acc (infer)', accuracy_infer),
     tf.summary.scalar('eval acc (train)', accuracy_train),
     tf.summary.scalar('eval acc (train-real)', accuracy_train_real),
     tf.summary.scalar('eval acc (train-fake)', accuracy_train_fake),
@@ -217,14 +214,11 @@ with tf.Session() as sess:
                                                                get_indices=True)
 
         imp_batch_li = [imp_mnist[indices, ...] for imp_mnist in imp_mnist_train_li]
-        y_fake_batch, mask_batch, indices_batch = full_model.generate_fakes(y_batch)
+        y_fake_batch, mask_batch, x_input_alg_fake_batch = full_model.generate_fakes(y_batch, imp_batch_li)
 
-        nat_dict = {i: d for i, d in zip(full_model.x_input_alg_li, imp_batch_li)}
-        nat_dict.update({full_model.x_input: x_batch,
-                         full_model.y_input: y_batch,
-                         full_model.y_fake_input: y_fake_batch,
-                         full_model.mask_input: mask_batch,
-                         full_model.indices_input: indices_batch})
+        nat_dict = {full_model.x_input: x_batch,
+                    full_model.x_input_alg: x_input_alg_fake_batch,
+                    full_model.mask_input: mask_batch}
 
         # Sanity check
         assert 0 <= np.amin(x_batch) and np.amax(x_batch) <= 1.0
@@ -235,13 +229,15 @@ with tf.Session() as sess:
         # Train
         start = timer()
 
-        _, _, accuracy_infer_batch, accuracy_train_batch, \
+        _, _, accuracy_train_batch, \
             accuracy_train_real_batch, accuracy_train_fake_batch, d_loss_batch, \
             train_merged_summaries_batch = \
-            sess.run([train_step_d, extra_update_ops, accuracy_infer, accuracy_train,
+            sess.run([train_step_d, extra_update_ops, accuracy_train,
                       accuracy_train_real, accuracy_train_fake, d_loss,
                       train_merged_summaries],
                      feed_dict=nat_dict)
+
+        accuracy_infer_batch = np.mean(full_model.infer(sess, x_batch, imp_batch_li) == y_batch)
 
         end = timer()
         training_time += end - start
@@ -264,19 +260,20 @@ with tf.Session() as sess:
         if ii % num_summary_steps == 0:
             if args.save:
                 summary_writer.add_summary(train_merged_summaries_batch, global_step.eval(sess))
+                infer_summary = tf.Summary()
+                infer_summary.value.add(tag='acc infer', simple_value=accuracy_infer_batch)
+                summary_writer.add_summary(infer_summary, global_step.eval(sess))
+
             # evaluate on test set
 
-            eval_x_batch, eval_y_batch, indices = mnist_test.get_next_batch(eval_batch_size, multiple_passes=True,
-                                                                            get_indices=True)
+            eval_x_batch, eval_y_batch = mnist_test.get_next_batch(eval_batch_size, multiple_passes=True,
+                                                                   get_indices=True)
             imp_batch_li = [imp_mnist[indices, ...] for imp_mnist in imp_mnist_eval_li]
-            y_fake_batch, mask_batch, indices_batch = full_model.generate_fakes(y_batch)
+            y_fake_batch, mask_batch, x_input_alg_fake_batch = full_model.generate_fakes(y_batch, imp_batch_li)
 
-            eval_dict = {i: d for i, d in zip(full_model.x_input_alg_li, imp_batch_li)}
-            eval_dict.update({full_model.x_input: x_batch,
-                              full_model.y_input: y_batch,
-                              full_model.y_fake_input: y_fake_batch,
-                              full_model.mask_input: mask_batch,
-                              full_model.indices_input: indices_batch})
+            eval_dict = {full_model.x_input: eval_x_batch,
+                         full_model.x_input_alg: x_input_alg_fake_batch,
+                         full_model.mask_input: mask_batch}
 
             # Sanity check
             assert 0 <= np.amin(x_batch) and np.amax(x_batch) <= 1.0
@@ -284,13 +281,15 @@ with tf.Session() as sess:
                 assert 0 <= np.amin(imp_batch) and np.amax(imp_batch) <= 1.0
                 assert np.amax(np.abs(imp_batch-x_batch)) <= args.delta + 1e-6
 
-            _, _, accuracy_infer_batch, accuracy_train_batch, \
+            _, _, accuracy_train_batch, \
                 accuracy_train_real_batch, accuracy_train_fake_batch, d_loss_batch, \
                 eval_merged_summaries_batch = \
-                sess.run([train_step_d, extra_update_ops, accuracy_infer, accuracy_train,
+                sess.run([train_step_d, extra_update_ops, accuracy_train,
                           accuracy_train_real, accuracy_train_fake, d_loss,
                           eval_merged_summaries],
                          feed_dict=eval_dict)
+
+            accuracy_infer_batch = np.mean(full_model.infer(sess, x_batch, imp_batch_li) == y_batch)
 
             print('    acc infer (eval) {:.4}%'.format(accuracy_infer_batch * 100))
             print('    acc train (eval) {:.4}%'.format(accuracy_train_batch * 100))
@@ -300,6 +299,9 @@ with tf.Session() as sess:
 
             if args.save:
                 summary_writer.add_summary(eval_merged_summaries_batch, global_step.eval(sess))
+                infer_summary = tf.Summary()
+                infer_summary.value.add(tag='acc infer (eval)', simple_value=accuracy_infer_batch)
+                summary_writer.add_summary(infer_summary, global_step.eval(sess))
 
         # Write a checkpoint
         if ii % num_checkpoint_steps == 0 and args.save:

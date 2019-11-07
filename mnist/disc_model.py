@@ -69,80 +69,35 @@ class Model(object):
             tf.float32,
             shape=[None, 32, 32, 3]
         )
-        self.x_input_alg_li = [tf.placeholder(
-            tf.float32,
-            shape=[None, 32, 32, 3]
-        ) for _ in range(NUM_CLASSES)]
 
-        self.y_input = tf.placeholder(tf.int64, shape=None)
-        self.y_fake_input = tf.placeholder(tf.int64, shape=None)
         self.mask_input = tf.placeholder(tf.int64, shape=None)
-        self.indices_input = tf.placeholder(tf.int64, shape=None)
-        
-        real = tf.ones_like(self.y_input)
-        fake = tf.zeros_like(self.y_input)
+
+        real = tf.ones_like(self.mask_input)
+        fake = tf.zeros_like(self.mask_input)
         half = (real + fake) / 2
 
         # basic inference
         with tf.variable_scope('', reuse=tf.AUTO_REUSE):
             self.alg_noise = (self.x_input_alg-self.x_input)/self.delta
 
-            self.d_out_single = self.discriminator(self.x_input, self.alg_noise)
+            self.d_out = self.discriminator(self.x_input, self.alg_noise)
 
-            self.d_mean_out_single = tf.reduce_mean(tf.layers.flatten(self.d_out_single), axis=1)
+            self.d_mean_out = tf.reduce_mean(tf.layers.flatten(self.d_out), axis=1)
 
+            self.d_decisions = tf.where(self.d_mean_out >= 0.5, real, fake)
 
-            self.d_decisions_single = tf.where(self.d_mean_out_single >= 0.5, real, fake)
+            self.d_loss = tf.reduce_mean(tf.losses.mean_squared_error(self.d_out, self.mask_input))
 
-            self.d_loss_single = tf.reduce_mean(tf.losses.mean_squared_error(self.d_out_single, self.y_input))
+            self.num_correct_real = tf.reduce_sum(self.d_decisions * self.mask_input)
+            self.num_correct_fake = tf.reduce_sum((1-self.d_decisions) * (1-self.mask_input))
 
-        # inference & train procedure
-        with tf.variable_scope('', reuse=tf.AUTO_REUSE):
-            self.alg_noise_li = [(x_input_alg-self.x_input)/self.delta for x_input_alg in self.x_input_alg_li]
+            self.accuracy_real = self.num_correct_real / tf.reduce_sum(self.mask_input)
+            self.accuracy_fake = self.num_correct_fake / tf.reduce_sum(1-self.mask_input)
 
-            self.d_out_li = [self.discriminator(self.x_input, alg_noise) for alg_noise in self.alg_noise_li]
+            self.num_correct = self.num_correct_real + self.num_correct_fake
+            self.accuracy = tf.reduce_mean(self.d_decisions * self.mask_input)
 
-            self.d_mean_out_li = [tf.reduce_mean(tf.layers.flatten(d_out), axis=1, keepdims=True) for d_out in self.d_out_li]
-
-            self.d_out_full = tf.concat(self.d_mean_out_li, axis=1)
-
-            # inference
-            self.predictions = tf.argmax(self.d_out_full, axis=1)
-
-            self.correct_predictions = tf.equal(self.predictions, self.y_input)
-
-            self.accuracy = tf.reduce_mean(tf.cast(self.correct_predictions, tf.int32))
-            self.num_correct = tf.reduce_sum(tf.cast(self.correct_predictions, tf.int32))
-
-            # train
-            self.y_filtered = tf.where(tf.cast(self.mask_input, tf.float64) >= half,
-                                       self.y_input, self.y_fake_input)
-
-            y_filtered_with_indices = tf.stack([self.indices_input, self.y_filtered], axis=1)
-
-            self.alg_noise_stack = tf.stack(self.alg_noise_li, axis=1)
-            self.alg_noise_filtered = tf.gather_nd(self.alg_noise_stack, y_filtered_with_indices)
-
-            self.d_out_train = self.discriminator(self.x_input, self.alg_noise_filtered)
-
-            self.d_loss_train = tf.reduce_mean(tf.losses.mean_squared_error(self.d_out_train, self.mask_input))
-
-            self.d_mean_out_train = tf.reduce_mean(tf.layers.flatten(self.d_out_train), axis=1)
-
-            self.d_decisions_train = tf.where(tf.cast(self.d_mean_out_single, tf.float64) >= half,
-                                              real, fake)
-
-            self.num_correct_train_real = tf.reduce_sum(self.d_decisions_train * self.mask_input)
-            self.num_correct_train_fake = tf.reduce_sum((1-self.d_decisions_train) * (1-self.mask_input))
-
-            self.accuracy_train_real = self.num_correct_train_real / tf.reduce_sum(self.mask_input)
-            self.accuracy_train_fake = self.num_correct_train_fake / tf.reduce_sum(1-self.mask_input)
-
-            self.num_correct_train = self.num_correct_train_real + self.num_correct_train_fake
-            self.accuracy_train = tf.reduce_mean(self.d_decisions_train * self.mask_input)
-
-
-    def generate_fakes(self, y):
+    def generate_fakes(self, y, x_input_alg_li):
         # generate always not-equal random labels
         fake = np.copy(y)
 
@@ -153,7 +108,25 @@ class Model(object):
             fake = np.where(same_mask, new_fake, fake)
 
         mask = np.random.randint(2, size=np.size(y))
-        indices = np.array([i for i in range(len(mask))])
 
-        return fake, mask, indices
+        half_fake = np.where(mask > 0, y, fake)
 
+        x_input_alg_half_fake = np.copy(x_input_alg_li[0])
+        for i in range(len(y)):
+            x_input_alg_half_fake[i] = x_input_alg_li[half_fake[i]][i]
+
+        return half_fake, mask, x_input_alg_half_fake
+
+    def infer(self, sess, x_input, x_input_alg_li):
+        d_outs = []
+        for i in range(NUM_CLASSES):
+            feed_dict = {self.x_input: x_input,
+                         self.x_input_alg: x_input_alg_li[i]}
+            d_out_batch = sess.run(self.d_mean_out,
+                                   feed_dict=feed_dict)
+            d_outs.append(d_out_batch)
+
+        d_outs = np.concatenate(d_outs)
+        d_preds = np.argmax(d_outs, axis=1)
+
+        return d_preds
