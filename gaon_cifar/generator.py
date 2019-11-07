@@ -147,7 +147,7 @@ def block_layer(inputs, filters, bottleneck, block_fn, blocks, strides,
   return tf.identity(inputs, name)
 
 
-def generator(x, f_dim=64, c_dim=3, n_down=2, n_blocks=6, drop=0, unet=False, is_training=True):
+def generator(x, f_dim=64, c_dim=3, n_down=2, n_blocks=6, drop=0, unet=False, tanh=False, is_training=True):
     ngf = f_dim
     inputs = x
     data_format='channels_last'
@@ -207,7 +207,8 @@ def generator(x, f_dim=64, c_dim=3, n_down=2, n_blocks=6, drop=0, unet=False, is
 
     inputs = tf.layers.conv2d(inputs, filters=c_dim, kernel_size=3, strides=1,
       padding='same', use_bias=True, kernel_initializer=tf.truncated_normal_initializer(0.0, 0.02), data_format=data_format)
-    inputs = tf.nn.tanh(inputs)
+    if tanh:
+        inputs = tf.nn.tanh(inputs)
     
     #get_shape(inputs)
 

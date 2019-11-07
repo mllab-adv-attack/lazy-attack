@@ -48,6 +48,7 @@ if __name__ == '__main__':
     parser.add_argument('--delta', default=40, type=int)
 
     # GAN settings
+    parser.add_argument('--tanh', action='store_true')
     parser.add_argument('--revG', action='store_true')
     parser.add_argument('--dropout', action='store_true')
     parser.add_argument('--dropout_rate', default=0.3, type=float)
@@ -168,7 +169,7 @@ if args.revG:
     rev_safe_loss = tf.losses.mean_squared_error(full_model.x_rev_safe/255, full_model.x_input/255)
     rev_alg_loss = tf.losses.mean_squared_error(full_model.x_rev_alg/255, full_model.x_input/255)
     total_loss += args.revG_weight * rev_safe_loss
-    total_rev_loss = rev_alg_loss
+    total_rev_loss = rev_alg_loss - rev_safe_loss
 if args.use_d:
     d_loss = full_model.d_loss
     g_loss = full_model.g_loss
@@ -214,7 +215,7 @@ train_summaries = [
     tf.summary.scalar('safe adv loss', safe_adv_loss),
     tf.summary.scalar('safe pgd loss', safe_pgd_loss),
     tf.summary.scalar('l2 dist', l2_dist),
-    tf.summary.image('safe image', full_model.x_safe),
+    tf.summary.image('safe image', tf.clip_by_value(full_model.x_safe, 0, 255)),
     tf.summary.image('orig image', full_model.x_input),
 ]
 if args.use_d:
@@ -241,7 +242,7 @@ eval_summaries = [
     tf.summary.scalar('safe adv loss (eval)', safe_adv_loss),
     tf.summary.scalar('safe pgd loss (eval)', safe_pgd_loss),
     tf.summary.scalar('l2 dist (eval)', l2_dist),
-    tf.summary.image('safe image (eval)', full_model.x_safe),
+    tf.summary.image('safe image (eval)', tf.clip_by_value(full_model.x_safe, 0, 255)),
     tf.summary.image('orig image (eval)', full_model.x_input),
 ]
 eval_merged_summaries = tf.summary.merge(eval_summaries)
@@ -416,7 +417,8 @@ with tf.Session() as sess:
         assert 0 <= np.amin(x_safe) and np.amax(x_safe) <= 255.0
         if not args.no_lc:
             assert 0 <= np.amin(x_safe_adv) and np.amax(x_safe_adv) <= 255.0
-        assert np.amax(np.abs(x_safe-x_batch)) <= args.delta
+        #assert np.amax(np.abs(x_safe-x_batch)) <= args.delta
+        print(np.amax(np.abs(x_safe-x_batch)))
 
         training_time += end - start
 

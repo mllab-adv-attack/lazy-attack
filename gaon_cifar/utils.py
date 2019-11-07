@@ -45,10 +45,12 @@ def infer_file_name(args):
     meta_name += ('_drop' + str(args.dropout_rate)) if args.dropout else ''
     meta_name += '_nolc' if args.no_lc else ''
     meta_name += '_noise' if args.noise_only else ''
+    meta_name += '_notanh' if not args.tanh else ''
     if args.use_advG:
         meta_name += '_advGlr' + str(args.advG_lr)
     if args.revG:
         meta_name += '_revGlr' + str(args.revG_lr)
+        meta_name += '_rev' + str(args.revG_weight)
     if args.use_d:
         meta_name += '_dlr' + str(args.d_lr)
         meta_name += '_g' + str(args.g_weight)

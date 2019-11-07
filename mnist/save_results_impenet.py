@@ -54,39 +54,39 @@ if __name__ == '__main__':
     parser.add_argument('--imp_adagrad', action='store_true')
     parser.add_argument('--imp_no_sign', action='store_true')
     parser.add_argument('--label_infer', action='store_true')
+    parser.add_argument('--target', default=-1, type=int, help='set target label if >= 0')
     # PGD (evaluation)
     parser.add_argument('--val_step_per', default=0, help="validation per val_step. =< 0 means no eval", type=int)
     parser.add_argument('--val_eps', default=0.3, help='Evaluation eps', type=float)
     parser.add_argument('--val_num_steps', default=100, help="validation PGD number of steps per PGD", type=int)
     parser.add_argument('--val_restarts', default=0.01, help="validation PGD restart numbers per eps", type=int)
-    params = parser.parse_args()
-    for key, val in vars(params).items():
+    args = parser.parse_args()
+    for key, val in vars(args).items():
         print('{}={}'.format(key, val))
 
-    assert not (params.corr_only and params.fail_only)
-    assert not (params.imp_rep and params.imp_pp)
+    assert not (args.corr_only and args.fail_only)
+    assert not (args.imp_rep and args.imp_pp)
 
     # numpy options
     np.set_printoptions(precision=6, suppress=True)
     
-    if params.imp_random_start > 0:
-        np.random.seed(params.imp_random_seed)
-        print('random seed set to:', params.imp_random_seed)
+    if args.imp_random_start > 0:
+        np.random.seed(args.imp_random_seed)
+        print('random seed set to:', args.imp_random_seed)
 
     with open('config.json') as config_file:
         config = json.load(config_file)
 
-    model_file = tf.train.latest_checkpoint('models/' + params.model_dir)
+    model_file = tf.train.latest_checkpoint('models/' + args.model_dir)
     if model_file is None:
         print('No model found')
         sys.exit()
 
-    model = Model(mode='eval')
+    model = Model()
     impenet = Impenetrable(model,
-                           params)
+                           args)
     saver = tf.train.Saver()
 
-    data_path = config['data_path']
     mnist = input_data.read_data_sets('MNIST_data', one_hot=False, validation_size=0, reshape=False)
 
     configs = tf.ConfigProto()
@@ -96,12 +96,12 @@ if __name__ == '__main__':
         saver.restore(sess, model_file)
 
         # Set number of examples to evaluate
-        num_eval_examples = params.sample_size
+        num_eval_examples = args.sample_size
 
-        indices = [i for i in range(params.sample_size + params.bstart)]
+        indices = [i for i in range(args.sample_size + args.bstart)]
 
         # load data
-        bstart = params.bstart
+        bstart = args.bstart
         while True:
             '''
             x_candid = cifar.eval_data.xs[indices[bstart:bstart + 100]]
@@ -113,7 +113,7 @@ if __name__ == '__main__':
             y_masked = y_candid[mask]
             logit_masked = logits[mask]
             print(len(x_masked))
-            if bstart == params.bstart:
+            if bstart == args.bstart:
                 x_full_batch = x_masked[:min(num_eval_examples, len(x_masked))]
                 y_full_batch = y_masked[:min(num_eval_examples, len(y_masked))]
                 logit_full_batch = logit_masked[:min(num_eval_examples, len(logit_masked))]
@@ -126,7 +126,7 @@ if __name__ == '__main__':
             if (len(x_full_batch) >= num_eval_examples) or bstart >= 10000:
                 break
             '''
-            if params.eval:
+            if args.eval:
                 x_candid = mnist.test.images[indices[bstart:bstart + 100]]
                 y_candid = mnist.test.labels[indices[bstart:bstart + 100]]
             else:
@@ -136,11 +136,11 @@ if __name__ == '__main__':
                                     feed_dict={model.x_input: x_candid,
                                                model.y_input: y_candid})
             print(sum(mask))
-            if params.corr_only and (np.mean(mask) < 1.0 - 1E-6):
+            if args.corr_only and (np.mean(mask) < 1.0 - 1E-6):
                 raise Exception
-            if params.fail_only and (np.mean(mask) > 0.0 + 1E-6):
+            if args.fail_only and (np.mean(mask) > 0.0 + 1E-6):
                 raise Exception
-            if bstart == params.bstart:
+            if bstart == args.bstart:
                 x_full_batch = x_candid[:min(num_eval_examples, len(x_candid))]
                 y_full_batch = y_candid[:min(num_eval_examples, len(y_candid))]
                 logit_full_batch = logits[:min(num_eval_examples, len(logits))]
@@ -166,7 +166,7 @@ if __name__ == '__main__':
         x_full_batch = x_full_batch.astype(np.float32)
 
         x_imp = []  # imp accumulator
-        step_imp = []  # num steps accumulator
+        mask_imp = []  # num steps accumulator
         l2_li = [] # l2 distance accumulator
 
         for ibatch in range(num_batches):
@@ -179,7 +179,8 @@ if __name__ == '__main__':
 
             # run our algorithm
             print('fortifying image {} - {}'.format(bstart, bend-1))
-            x_batch_imp, step_batch_imp = impenet.fortify(x_batch, y_batch, sess)
+            x_batch_imp, mask_batch_imp = impenet.fortify(x_batch, y_batch if args.target < 0 else
+                                                          np.ones_like(y_batch).astype(int) * args.target, sess)
             print()
 
             # evaluation
@@ -189,7 +190,7 @@ if __name__ == '__main__':
             # suc_flag = impenet.validation(x_batch_imp, y_batch, y_batch_hard)
 
             x_imp.append(x_batch_imp)
-            step_imp.append(np.array([step_batch_imp]))
+            mask_imp.append(mask_batch_imp)
             l2_li.append(np.linalg.norm(x_batch_imp - x_batch))
             print('l2 distance (curr):', np.linalg.norm(x_batch_imp - x_batch))
             print('l2 distance (total):', np.mean(l2_li))
@@ -198,16 +199,20 @@ if __name__ == '__main__':
             print('------------------------------------------------------------------------------')
 
         x_imp = np.concatenate(x_imp)
-        step_imp = np.concatenate(step_imp)
+        mask_imp = np.concatenate(mask_imp)
 
         # save image
-        folder_name = './mnist_data/imp_adv_fixed/' if params.model_dir == 'adv_trained' \
-            else './cifar10_data/imp_nat_fixed/'
-        file_name = 'imp_' + ('eval' if params.eval else 'train') + '_fixed' + '_' + str(params.imp_delta)
-        batch_name = '_' + str(params.bstart) + '_' + str(params.sample_size)
-        common_name = folder_name + file_name + batch_name
+        folder_name = './mnist_data/imp_adv_fixed/' if args.model_dir == 'adv_trained' \
+            else './mnist_data/imp_nat_fixed/'
+        file_name = 'imp_' + ('eval' if args.eval else 'train') + '_fixed' + '_' + str(args.imp_delta)
+        batch_name = '_' + str(args.bstart) + '_' + str(args.sample_size)
+        target_name = '' if args.target < 0 else '_' + str(args.target)
+        common_name = folder_name + file_name + batch_name + target_name
         
         np.save(common_name, x_imp)
+
+        print('total success rate: {:.2f}% ({}/{})'.format(np.mean(mask_imp)*100,
+                                                           np.sum(mask_imp), np.size(mask_imp)))
 
         # sanity check
         if np.amax(x_imp) > 1.0001 or \

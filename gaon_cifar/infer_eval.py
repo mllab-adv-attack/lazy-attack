@@ -50,6 +50,7 @@ if __name__ == '__main__':
     parser.add_argument('--eval_imp', action='store_true', help='also evaluate S_maml results')
 
     # GAN settings
+    parser.add_argument('--tanh', action='store_true')
     parser.add_argument('--dropout', action='store_true')
     parser.add_argument('--dropout_rate', default=0.3, type=float)
     parser.add_argument('--f_dim', default=64, type=int)
@@ -58,9 +59,11 @@ if __name__ == '__main__':
     parser.add_argument('--noise_only', action='store_true')
     parser.add_argument('--unet', action='store_true')
     parser.add_argument('--use_d', action='store_true')
+    parser.add_argument('--revG', action='store_true')
     parser.add_argument('--use_advG', action='store_true')
     parser.add_argument('--no_lc', action='store_true')
     parser.add_argument('--advG_lr', default=1e-3, type=float)
+    parser.add_argument('--revG_lr', default=1e-3, type=float)
     parser.add_argument('--d_lr', default=1e-3, type=float)
     parser.add_argument('--patch', action='store_true', help='use patch discriminator, (2x2)')
     parser.add_argument('--l1_loss', action='store_true', help='use l1 loss on infer(x) and maml(x)')
@@ -68,6 +71,7 @@ if __name__ == '__main__':
     parser.add_argument('--lp_loss', action='store_true', help='use logit pairing loss on infer(x) and maml(x)')
     parser.add_argument('--g_weight', default=1, type=float, help='loss weight for generator')
     parser.add_argument('--d_weight', default=1, type=float, help='loss weight for discriminator')
+    parser.add_argument('--revG_weight', default=1, type=float, help='loss weight for reverse generator')
     parser.add_argument('--l1_weight', default=1, type=float, help='loss weight for l1')
     parser.add_argument('--l2_weight', default=1, type=float, help='loss weight for l2')
     parser.add_argument('--lp_weight', default=1, type=float, help='loss weight for logit pairing')
@@ -112,7 +116,8 @@ y_input = tf.placeholder(
 )
 
 generator = tf.make_template('generator', Generator, f_dim=args.f_dim, c_dim=3,
-                             n_down=args.n_down, n_blocks=args.n_blocks, is_training=args.train_mode)
+                             n_down=args.n_down, n_blocks=args.n_blocks,
+                             unet=args.unet, tanh=args.tanh, is_training=args.train_mode)
 
 if args.use_d:
     discriminator = Discriminator(args.patch, is_training=False)
@@ -316,6 +321,7 @@ with tf.Session() as sess:
             print('disc value: {}'.format(np.mean(disc_out)))
 
         assert np.amin(x_batch_safe) >= (0-1e-3) and np.amax(x_batch_safe) <= (255.0+1e-3)
+        print(np.amax(np.abs(x_batch_safe-x_batch)))
         assert np.amax(np.abs(x_batch_safe-x_batch)) <= args.delta+1e-3
 
         l2_dist_batch = np.mean(np.linalg.norm((x_batch_safe-x_batch).reshape(x_batch.shape[0], -1)/255, axis=1))

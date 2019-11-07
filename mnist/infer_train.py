@@ -307,7 +307,7 @@ with tf.Session() as sess:
         assert 0 <= np.amin(x_batch) and np.amax(x_batch) <= 1.0
         if USE_ALG:
             assert 0 <= np.amin(imp_batch) and np.amax(imp_batch) <= 1.0
-            assert np.amax(np.abs(imp_batch-x_batch)) <= args.delta
+            assert np.amax(np.abs(imp_batch-x_batch)) <= args.delta + 1e-6
 
         # Train
         start = timer()

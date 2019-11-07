@@ -11,7 +11,7 @@ def get_shape(tensor):
     print(tensor.get_shape().as_list())
 
 
-def generator(x, f_dim=64, c_dim=1, drop=0, unet=False, is_training=True):
+def generator(x, f_dim=64, c_dim=1, drop=0, unet=False, tanh=True, is_training=True):
 
     # [0, 1] --> [-1, 1]
     x = (x-0.5)*2
@@ -19,21 +19,22 @@ def generator(x, f_dim=64, c_dim=1, drop=0, unet=False, is_training=True):
 
     net = tf.layers.conv2d(x, filters=ngf, kernel_size=5, strides=2, padding='same',
                            kernel_initializer=tf.variance_scaling_initializer(scale=2))
-    net = tf.layers.batch_normalization(net, training=True)
+    net = tf.layers.batch_normalization(net, training=is_training)
     net = tf.nn.relu(net)
     net = tf.layers.conv2d(net, filters=ngf * 2, kernel_size=5, strides=2, padding='same',
                            kernel_initializer=tf.variance_scaling_initializer(scale=2))
-    net = tf.layers.batch_normalization(net, training=True)
+    net = tf.layers.batch_normalization(net, training=is_training)
     net = tf.nn.relu(net)
 
     net = tf.layers.conv2d_transpose(net, filters=ngf, kernel_size=5, strides=2, padding='same', use_bias=False,
                                      kernel_initializer=tf.variance_scaling_initializer(scale=2))
-    net = tf.layers.batch_normalization(net, training=True)
+    net = tf.layers.batch_normalization(net, training=is_training)
     net = tf.nn.relu(net)
     net = tf.layers.conv2d_transpose(net, filters=c_dim, kernel_size=5, strides=2, padding='same', use_bias=False,
                                      kernel_initializer=tf.variance_scaling_initializer(scale=2))
 
-    net = tf.nn.tanh(net)
+    if tanh:
+        net = tf.nn.tanh(net)
 
     return net
 

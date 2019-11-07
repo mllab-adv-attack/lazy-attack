@@ -198,7 +198,7 @@ class Impenetrable(object):
 
             step += 1
 
-        return x, step
+        return x, mask
 
     def reset_pgd(self):
         self.pgd.epsilon = self.pgd_eps

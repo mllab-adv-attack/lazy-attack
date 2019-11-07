@@ -51,6 +51,7 @@ class Model(object):
         self.use_d = args.use_d
         self.revG = args.revG
         self.unet = args.unet
+        self.tanh = args.tanh
         self.use_advG = args.use_advG
         self.f_dim = args.f_dim
         self.n_down = args.n_down
@@ -79,7 +80,7 @@ class Model(object):
         with tf.variable_scope('', reuse=tf.AUTO_REUSE):
             self.def_generator = tf.make_template('generator', generator, f_dim=self.f_dim, c_dim=3, drop=self.drop,
                                                   n_down=self.n_down, n_blocks=self.n_blocks, unet=self.unet,
-                                                  is_training=is_train)
+                                                  tanh=self.tanh, is_training=is_train)
             self.x_safe = self.x_input + self.delta * self.def_generator(self.x_input)
             self.x_safe = tf.clip_by_value(self.x_safe, self.bounds[0], self.bounds[1])
 
@@ -88,7 +89,7 @@ class Model(object):
                 # use adv generator as attacker (PGD only when evaluation)
                 self.adv_generator = tf.make_template('adv_generator', generator, f_dim=self.f_dim, c_dim=3,
                                                       n_down=self.n_down, n_blocks=self.n_blocks, unet=self.unet,
-                                                      drop=self.drop, is_training=is_train)
+                                                      tanh=self.tanh, drop=self.drop, is_training=is_train)
                 #self.x_safe_adv = self.x_safe + self.attack_params['eps'] * self.adv_generator(self.x_safe)
                 self.x_safe_adv = self.x_safe + self.delta * self.adv_generator(self.x_safe)
                 self.x_safe_adv = tf.clip_by_value(self.x_safe_adv, self.bounds[0], self.bounds[1])
@@ -105,7 +106,7 @@ class Model(object):
             if self.revG:
                 self.rev_generator = tf.make_template('rev_generator', generator, f_dim=self.f_dim, c_dim=3,
                                                       n_down=self.n_down, n_blocks=self.n_blocks, unet=self.unet,
-                                                      drop=self.drop, is_training=is_train)
+                                                      tanh=self.tanh, drop=self.drop, is_training=is_train)
 
                 self.x_rev_safe = (self.rev_generator(self.x_safe) * 0.5 + 0.5)*255
                 self.x_rev_alg = (self.rev_generator(self.x_input_alg) * 0.5 + 0.5)*255

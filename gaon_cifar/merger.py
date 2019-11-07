@@ -66,7 +66,7 @@ def merge(params):
     return x_org, x_imp, y, final_name
 
 
-def safe_validation(x, y, model, sess, start_eps=8, end_eps=8, val_num=20):
+def safe_validation(x, y, model, sess, start_eps=8, end_eps=8, val_num=1):
 
     cur_eps = start_eps
 
@@ -74,10 +74,11 @@ def safe_validation(x, y, model, sess, start_eps=8, end_eps=8, val_num=20):
     mean_loss = []
 
     while cur_eps <= end_eps:
-        pgd = LinfPGDAttack(model, cur_eps, num_steps=20, step_size=cur_eps/4, random_start=True, loss_func='xent')
+        pgd = LinfPGDAttack(model, cur_eps, num_steps=20, step_size=cur_eps/4,
+                            random_start=False if val_num <=1 else True, loss_func='xent')
 
         for i in range(val_num):
-            x_adv, _ = pgd.perturb(x, y, sess, rand=True)
+            x_adv, _ = pgd.perturb(x, y, sess)
 
             corr_mask, loss = sess.run([model.correct_prediction, model.y_xent],
                                 feed_dict={model.x_input: x_adv,

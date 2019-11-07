@@ -3,7 +3,8 @@ import numpy as np
 LOAD_DATA_DIR = '/data/home/gaon/lazy-attack/mnist/mnist_data/'
 MNIST_TRAIN_DATA_SIZE = 60000
 MNIST_EVAL_DATA_SIZE = 10000
-FILE_BATCH_SIZE = 1000
+TRAIN_BATCH_SIZE = 10000
+EVAL_BATCH_SIZE = 1000
 
 
 def imp_file_name(args):
@@ -55,14 +56,18 @@ def infer_file_name(args):
     return meta_name
 
 
-def load_imp_data(args, eval=False):
+def load_imp_data(args, eval_flag=False, target=-1):
     final_dir = 'imp_nat_fixed/' if args.model_dir == 'naturally_trained' else 'imp_adv_fixed/'
 
     data_dir = LOAD_DATA_DIR + final_dir
+    data_size = MNIST_EVAL_DATA_SIZE if eval_flag else MNIST_TRAIN_DATA_SIZE
+    file_batch_size = EVAL_BATCH_SIZE if eval_flag else TRAIN_BATCH_SIZE
 
-    posfix_li = [('imp_' + ('eval' if eval else 'train') + '_fixed_{:.1f}_'.format(args.delta)+str(idx))
-                 for idx in range(0, MNIST_EVAL_DATA_SIZE if eval else MNIST_TRAIN_DATA_SIZE, FILE_BATCH_SIZE)]
-    filename_li = [(str_idx + '_' + str(FILE_BATCH_SIZE) + '.npy') for str_idx in posfix_li]
+    posfix_li = [('imp_' + ('eval' if eval_flag else 'train') + '_fixed_{:.1f}_'.format(args.delta)+str(idx))
+                 for idx in range(0, data_size, file_batch_size)]
+    if target >= 0:
+        posfix_li = [(filename + '_{}'.format(target)) for filename in posfix_li]
+    filename_li = [(str_idx + '_' + str(file_batch_size) + '.npy') for str_idx in posfix_li]
     fullname_li = [(data_dir + filename) for filename in filename_li]
     data_li = [np.load(fullname) for fullname in fullname_li]
     data = np.concatenate(data_li)
