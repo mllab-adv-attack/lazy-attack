@@ -84,8 +84,10 @@ class Model(object):
             self.d_mean_out = tf.reduce_mean(tf.layers.flatten(self.d_out), axis=1)
 
             self.d_decisions = tf.where(self.d_mean_out >= 0.5, real, fake)
+            self.c_predictions = tf.nn.sigmoid(self.d_mean_out)
 
             self.d_loss = tf.reduce_mean(tf.losses.mean_squared_error(self.d_out, self.mask_input))
+            self.c_loss = tf.nn.sigmoid_cross_entropy_with_logits(labels=self.mask_input, logits=self.d_mean_out)
 
             self.num_correct_real = tf.reduce_sum(self.d_decisions * self.mask_input)
             self.num_correct_fake = tf.reduce_sum((1-self.d_decisions) * (1-self.mask_input))

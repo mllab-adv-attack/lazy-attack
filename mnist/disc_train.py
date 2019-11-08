@@ -51,6 +51,7 @@ if __name__ == '__main__':
     parser.add_argument('--dropout_rate', default=0.3, type=float)
     parser.add_argument('--f_dim', default=64, type=int)
     parser.add_argument('--d_lr', default=1e-3, type=float)
+    parser.add_argument('--c_loss', action='store_true')
     parser.add_argument('--patch', action='store_true')
 
     # pgd settings
@@ -94,9 +95,13 @@ model = Target_model()
 full_model = Safe_model('train', model, args)
 
 # set up metrics
-d_loss = full_model.d_loss
+d_loss = full_model.c_loss
+c_loss = full_model.d_loss
 
-total_loss = d_loss
+if args.c_loss:
+    total_loss = c_loss
+else:
+    total_loss = d_loss
 
 accuracy_train = full_model.accuracy
 accuracy_train_real = full_model.accuracy_real
@@ -132,7 +137,7 @@ train_summaries = [
     tf.summary.scalar('acc (train)', accuracy_train),
     tf.summary.scalar('acc (train-real)', accuracy_train_real),
     tf.summary.scalar('acc (train-fake)', accuracy_train_fake),
-    tf.summary.scalar('d loss', d_loss),
+    tf.summary.scalar('total loss', total_loss),
     tf.summary.scalar('total loss', total_loss),
 ]
 
@@ -142,7 +147,7 @@ eval_summaries = [
     tf.summary.scalar('eval acc (train)', accuracy_train),
     tf.summary.scalar('eval acc (train-real)', accuracy_train_real),
     tf.summary.scalar('eval acc (train-fake)', accuracy_train_fake),
-    tf.summary.scalar('eval d loss', d_loss),
+    tf.summary.scalar('eval total loss', total_loss),
     tf.summary.scalar('eval total loss', total_loss),
 ]
 eval_merged_summaries = tf.summary.merge(eval_summaries)
@@ -229,10 +234,10 @@ with tf.Session() as sess:
         start = timer()
 
         _, _, accuracy_train_batch, \
-            accuracy_train_real_batch, accuracy_train_fake_batch, d_loss_batch, \
+            accuracy_train_real_batch, accuracy_train_fake_batch, total_loss_batch, \
             train_merged_summaries_batch = \
             sess.run([train_step_d, extra_update_ops, accuracy_train,
-                      accuracy_train_real, accuracy_train_fake, d_loss,
+                      accuracy_train_real, accuracy_train_fake, total_loss,
                       train_merged_summaries],
                      feed_dict=nat_dict)
 
@@ -248,7 +253,7 @@ with tf.Session() as sess:
             print('    acc train {:.4}%'.format(accuracy_train_batch * 100))
             print('    acc train - real {:.4}%'.format(accuracy_train_real_batch * 100))
             print('    acc train - fake {:.4}%'.format(accuracy_train_fake_batch * 100))
-            print('    d loss {:.6}'.format(d_loss_batch))
+            print('    total loss {:.6}'.format(total_loss_batch))
             if ii != 0:
                 print('    {} examples per second'.format(
                     num_output_steps * training_batch_size / training_time))
@@ -281,10 +286,10 @@ with tf.Session() as sess:
                 assert np.amax(np.abs(imp_batch-eval_x_batch)) <= args.delta + 1e-6
 
             _, _, accuracy_train_batch, \
-                accuracy_train_real_batch, accuracy_train_fake_batch, d_loss_batch, \
+                accuracy_train_real_batch, accuracy_train_fake_batch, total_loss_batch, \
                 eval_merged_summaries_batch = \
                 sess.run([train_step_d, extra_update_ops, accuracy_train,
-                          accuracy_train_real, accuracy_train_fake, d_loss,
+                          accuracy_train_real, accuracy_train_fake, total_loss,
                           eval_merged_summaries],
                          feed_dict=eval_dict)
 
@@ -294,7 +299,7 @@ with tf.Session() as sess:
             print('    acc train (eval) {:.4}%'.format(accuracy_train_batch * 100))
             print('    acc train - real (eval) {:.4}%'.format(accuracy_train_real_batch * 100))
             print('    acc train - fake (eval) {:.4}%'.format(accuracy_train_fake_batch * 100))
-            print('    d loss (eval) {:.6}'.format(d_loss_batch))
+            print('    total loss (eval) {:.6}'.format(total_loss_batch))
 
             if args.save:
                 summary_writer.add_summary(eval_merged_summaries_batch, global_step.eval(sess))

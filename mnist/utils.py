@@ -55,6 +55,7 @@ def infer_file_name(args):
     meta_name += ('_lp' + str(args.lp_weight)) if args.lp_loss else ''
     return meta_name
 
+
 def disc_file_name(args):
     meta_name = 'nat' if args.model_dir == 'naturally_trained' else 'adv'
     meta_name += '_lr' + str(args.d_lr)
@@ -65,7 +66,9 @@ def disc_file_name(args):
     meta_name += '_fdim' + str(args.f_dim)
     meta_name += ('_drop' + str(args.dropout_rate)) if args.dropout else ''
     meta_name += '_patch' if args.patch else ''
+    meta_name += '_c' if args.c_loss else ''
     return meta_name
+
 
 def load_imp_data(args, eval_flag=False, target=-1):
     final_dir = 'imp_nat_fixed/' if args.model_dir == 'naturally_trained' else 'imp_adv_fixed/'
