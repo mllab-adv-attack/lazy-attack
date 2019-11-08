@@ -79,7 +79,7 @@ def load_imp_data(args, eval_flag=False, target=-1):
 
     posfix_li = [('imp_' + ('eval' if eval_flag else 'train') + '_fixed_{:.1f}_'.format(args.delta)+str(idx))
                  for idx in range(0, data_size, file_batch_size)]
-    target_name = '' if target >= 0 else '_{}'.format(target)
+    target_name = '' if target < 0 else '_{}'.format(target)
     filename_li = [(str_idx + '_' + str(file_batch_size) + target_name + '.npy') for str_idx in posfix_li]
     fullname_li = [(data_dir + filename) for filename in filename_li]
     data_li = [np.load(fullname) for fullname in fullname_li]

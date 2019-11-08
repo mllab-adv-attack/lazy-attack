@@ -82,15 +82,20 @@ class Model(object):
             self.alg_noise = (self.x_input_alg-self.x_input)/self.delta
 
             self.d_out = self.discriminator(self.x_input, self.alg_noise)
+            #print(self.d_out.get_shape().as_list())
 
             self.d_mean_out = tf.reduce_mean(tf.layers.flatten(self.d_out), axis=1)
+            #print(self.d_mean_out.get_shape().as_list())
             
-            self.d_loss = tf.reduce_mean(tf.losses.mean_squared_error(self.d_out, self.mask_input))
+            self.d_loss = tf.reduce_mean(tf.losses.mean_squared_error(self.d_mean_out, self.mask_input))
             self.c_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=self.mask_input, logits=self.d_mean_out))
 
             self.d_decisions = tf.where(self.d_mean_out >= 0.5, real, fake)
+            #print(self.d_decisions.get_shape().as_list())
             self.c_predictions = tf.nn.sigmoid(self.d_mean_out)
+            #print(self.c_predictions.get_shape().as_list())
             self.c_decisions = tf.where(self.c_predictions >= 0.5, real, fake)
+            #print(self.c_decisions.get_shape().as_list())
 
             # d accuracy
             self.d_num_correct_real = tf.reduce_sum(self.d_decisions * self.mask_input)

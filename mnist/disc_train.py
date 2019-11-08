@@ -222,13 +222,12 @@ with tf.Session() as sess:
                                                                get_indices=True)
 
         imp_batch_li = [imp_mnist[indices, ...] for imp_mnist in imp_mnist_train_li]
-        imp_batch_gt = imp_mnist_train_gt[indices, ...]
+        #imp_batch_gt = imp_mnist_train_gt[indices, ...]
         y_fake_batch, mask_batch, x_input_alg_fake_batch = full_model.generate_fakes(y_batch, imp_batch_li)
 
         # Sanity check
-        assert np.amax(np.abs((imp_batch_gt - x_input_alg_fake_batch) * mask_batch)) <= 1e-6
-        assert np.amax(np.abs((imp_batch_gt - x_input_alg_fake_batch) * (1-mask_batch))) > 1e-6
-        assert np.mean(y_fake_batch == mask_batch)
+        #assert np.amax(np.abs((imp_batch_gt - x_input_alg_fake_batch) * mask_batch.reshape(-1, 1, 1, 1))) <= 1e-6
+        #assert np.amax(np.abs((imp_batch_gt - x_input_alg_fake_batch) * (1-mask_batch.reshape(-1, 1, 1, 1)))) > 1e-6
         assert 0 <= np.amin(x_batch) and np.amax(x_batch) <= 1.0
         for imp_batch in imp_batch_li:
             assert 0 <= np.amin(imp_batch) and np.amax(imp_batch) <= 1.0
@@ -258,7 +257,7 @@ with tf.Session() as sess:
         # Output to stdout
         if ii % num_output_steps == 0:
             print('Step {}:    ({})'.format(ii, datetime.now()))
-            print('    acc orig {:.4}%'.format(orig_model_acc_batch * 100))
+            #print('    acc orig {:.4}%'.format(orig_model_acc_batch * 100))
             print('    acc infer {:.4}%'.format(accuracy_infer_batch * 100))
             print('    acc train {:.4}%'.format(accuracy_train_batch * 100))
             print('    acc train - real {:.4}%'.format(accuracy_train_real_batch * 100))
@@ -283,7 +282,7 @@ with tf.Session() as sess:
             eval_x_batch, eval_y_batch, indices = mnist_test.get_next_batch(eval_batch_size, multiple_passes=True,
                                                                             get_indices=True)
             imp_batch_li = [imp_mnist[indices, ...] for imp_mnist in imp_mnist_eval_li]
-            imp_batch_gt = imp_mnist_eval_gt[indices, ...]
+            #imp_batch_gt = imp_mnist_eval_gt[indices, ...]
             y_fake_batch, mask_batch, x_input_alg_fake_batch = full_model.generate_fakes(eval_y_batch, imp_batch_li)
 
             eval_dict = {full_model.x_input: eval_x_batch,
@@ -292,9 +291,8 @@ with tf.Session() as sess:
                          full_model.mask_input: mask_batch}
 
             # Sanity check
-            assert np.amax(np.abs((imp_batch_gt - x_input_alg_fake_batch) * mask_batch)) <= 1e-6
-            assert np.amax(np.abs((imp_batch_gt - x_input_alg_fake_batch) * (1-mask_batch))) > 1e-6
-            assert np.mean(y_fake_batch == mask_batch)
+            #assert np.amax(np.abs((imp_batch_gt - x_input_alg_fake_batch) * mask_batch)) <= 1e-6
+            #assert np.amax(np.abs((imp_batch_gt - x_input_alg_fake_batch) * (1-mask_batch))) > 1e-6
             assert 0 <= np.amin(eval_x_batch) and np.amax(eval_x_batch) <= 1.0
             for imp_batch in imp_batch_li:
                 assert 0 <= np.amin(imp_batch) and np.amax(imp_batch) <= 1.0
@@ -310,7 +308,7 @@ with tf.Session() as sess:
 
             accuracy_infer_batch = np.mean(full_model.infer(sess, eval_x_batch, imp_batch_li) == eval_y_batch)
 
-            print('    acc orig (eval) {:.4}%'.format(orig_model_acc_batch * 100))
+            #print('    acc orig (eval) {:.4}%'.format(orig_model_acc_batch * 100))
             print('    acc infer (eval) {:.4}%'.format(accuracy_infer_batch * 100))
             print('    acc train (eval) {:.4}%'.format(accuracy_train_batch * 100))
             print('    acc train - real (eval) {:.4}%'.format(accuracy_train_real_batch * 100))
