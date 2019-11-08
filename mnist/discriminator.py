@@ -80,14 +80,12 @@ def encoder_layer(inputs,
 
 # PatchGAN
 class pix2pixDiscriminator(object):
-    def __init__(self, patch, is_training, stddev=0.02, center=True, scale=True):
+    def __init__(self, patch, is_training, f_dim=32):
         self.patch = patch
         self._is_training = is_training
-        self._stddev = stddev
 
-        self._center = center
-        self._scale = scale
         self._prob = 0.5  # constant from pix2pix paper
+        self.f_dim = f_dim
 
     def __call__(self, inputs, noises):
         with tf.variable_scope('discriminator', reuse=tf.AUTO_REUSE):
@@ -95,10 +93,10 @@ class pix2pixDiscriminator(object):
             inputs = inputs * 2 - 1
             inputs = tf.concat([inputs, noises], axis=-1)
 
-            inputs = encoder_layer(inputs, 32, 3, 2, batch_norm=False, is_training=self._is_training)
-            inputs = encoder_layer(inputs, 64, 3, 1, is_training=self._is_training)
-            inputs = encoder_layer(inputs, 128, 3, 1, is_training=self._is_training)
-            inputs = encoder_layer(inputs, 256, 3, 1, is_training=self._is_training)
+            inputs = encoder_layer(inputs, self.f_dim, 3, 2, batch_norm=False, is_training=self._is_training)
+            inputs = encoder_layer(inputs, self.f_dim*2, 3, 1, is_training=self._is_training)
+            inputs = encoder_layer(inputs, self.f_dim*4, 3, 1, is_training=self._is_training)
+            inputs = encoder_layer(inputs, self.f_dim*8, 3, 1, is_training=self._is_training)
 
             if self.patch:
                 inputs = tf.layers.conv2d(inputs, 1, kernel_size=[3, 3], strides=[1, 1], padding='same')

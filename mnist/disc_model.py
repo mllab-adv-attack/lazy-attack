@@ -60,7 +60,7 @@ class Model(object):
         assert self.mode == 'train' or self.mode == 'eval'
         is_train = True if self.mode == 'train' else False
 
-        self.discriminator = Discriminator(self.patch, is_train)
+        self.discriminator = Discriminator(self.patch, is_train, self.f_dim)
 
         self.x_input = tf.placeholder(
             tf.float32,
