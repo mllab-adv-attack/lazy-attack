@@ -117,7 +117,7 @@ class Model(object):
 
             self.c_num_correct = self.c_num_correct_real + self.c_num_correct_fake
             self.c_accuracy = tf.reduce_mean(self.c_decisions * self.mask_input +
-                                           (1-self.c_decisions) * (1-self.mask_input))
+                                             (1-self.c_decisions) * (1-self.mask_input))
 
         # sanity check
         with tf.variable_scope('', reuse=tf.AUTO_REUSE):
@@ -158,7 +158,7 @@ class Model(object):
 
         return half_fake, mask, x_input_alg_half_fake
 
-    def infer(self, sess, x_input, x_input_alg_li):
+    def infer(self, sess, x_input, x_input_alg_li, return_images=False):
         d_outs = []
         for i in range(NUM_CLASSES):
             feed_dict = {self.x_input: x_input,
@@ -169,5 +169,12 @@ class Model(object):
 
         d_outs = np.stack(d_outs, axis=-1)
         d_preds = np.argmax(d_outs, axis=1)
+
+        if return_images:
+            infer_alg = np.copy(x_input_alg_li[0])
+            for i in range(np.size(y)):
+                infer_alg[i] = x_input_alg_li[d_preds[i]][i]
+
+            return d_preds, infer_alg
 
         return d_preds

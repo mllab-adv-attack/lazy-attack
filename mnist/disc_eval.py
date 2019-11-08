@@ -13,9 +13,8 @@ import numpy as np
 
 from tensorflow.examples.tutorials.mnist import input_data
 
-from generator import generator_v2 as Generator
-from discriminator import Discriminator
-from model import Model as Model
+from disc_model import Model as Safe_model
+from model import Model as Target_model
 
 from utils import infer_file_name, load_imp_data
 
@@ -24,6 +23,7 @@ import argparse
 from pgd_attack import LinfPGDAttack
 
 MODEL_PATH = './models/'
+NUM_CLASSES = 10
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -38,39 +38,24 @@ if __name__ == '__main__':
     # eval parameters
     parser.add_argument('--tf_random_seed', default=451760341, type=int)
     parser.add_argument('--np_random_seed', default=216105420, type=int)
-    parser.add_argument('--g_lr', default=1e-3, type=float)
     parser.add_argument('--eval_batch_size', default=100, type=int)
     parser.add_argument('--eval_on_cpu', action='store_true')
     parser.add_argument('--delta', default=0.3, type=float)
     parser.add_argument('--sample_size', default=1000, type=int)
     parser.add_argument('--bstart', default=0, type=int)
     parser.add_argument('--train_mode', action='store_true', help='use train mode neural nets')
-    parser.add_argument('--comp_imp', action='store_true', help='compare distance with S_maml results')
-    parser.add_argument('--eval_imp', action='store_true', help='also evaluate S_maml results')
 
     # GAN settings
     parser.add_argument('--dropout', action='store_true')
     parser.add_argument('--dropout_rate', default=0.3, type=float)
     parser.add_argument('--f_dim', default=64, type=int)
-    parser.add_argument('--noise_only', action='store_true')
-    parser.add_argument('--unet', action='store_true')
-    parser.add_argument('--use_d', action='store_true')
-    parser.add_argument('--use_advG', action='store_true')
-    parser.add_argument('--no_lc', action='store_true')
-    parser.add_argument('--advG_lr', default=1e-4, type=float)
-    parser.add_argument('--d_lr', default=1e-4, type=float)
-    parser.add_argument('--l1_loss', action='store_true', help='use l1 loss on infer(x) and maml(x)')
-    parser.add_argument('--l2_loss', action='store_true', help='use l2 loss on infer(x) and maml(x)')
-    parser.add_argument('--lp_loss', action='store_true', help='use logit pairing loss on infer(x) and maml(x)')
-    parser.add_argument('--g_weight', default=1, type=float, help='loss weight for generator')
-    parser.add_argument('--d_weight', default=1, type=float, help='loss weight for discriminator')
-    parser.add_argument('--l1_weight', default=1, type=float, help='loss weight for l1')
-    parser.add_argument('--l2_weight', default=1, type=float, help='loss weight for l2')
-    parser.add_argument('--lp_weight', default=1, type=float, help='loss weight for logit pairing')
+    parser.add_argument('--d_lr', default=1e-3, type=float)
+    parser.add_argument('--c_loss', action='store_true')
+    parser.add_argument('--patch', action='store_true')
 
     # pgd (filename) settings
     parser.add_argument('--eps', default=0.3, type=float)
-    parser.add_argument('--num_steps', default=40, type=int)
+    parser.add_argument('--num_steps', default=100, type=int)
     parser.add_argument('--step_size', default=0.01, type=float)
 
     # pgd (eval) settings
@@ -95,27 +80,22 @@ eval_batch_size = args.eval_batch_size
 # Setting up the data and the model
 global_step = tf.train.get_or_create_global_step()
 
-model = Model()
+model = Target_model()
+full_model = Safe_model('eval', model, args)
 
-x_input = tf.placeholder(
-    tf.float32,
-    shape=[None, 28, 28, 1]
-)
-y_input = tf.placeholder(
-    tf.int64,
-    shape=None
-)
+# set up metrics
+if args.c_loss:
+    total_loss = full_model.c_loss
+    accuracy_train = full_model.c_accuracy
+    accuracy_train_real = full_model.c_accuracy_real
+    accuracy_train_fake = full_model.c_accuracy_fake
+else:
+    total_loss = full_model.d_loss
+    accuracy_train = full_model.d_accuracy
+    accuracy_train_real = full_model.d_accuracy_real
+    accuracy_train_fake = full_model.d_accuracy_fake
 
-generator = tf.make_template('generator', Generator, f_dim=args.f_dim, c_dim=3,
-                             is_training=args.train_mode)
-
-if args.use_d:
-    discriminator = Discriminator()
-    d_out = discriminator(x_input)
-
-noise = generator(x_input)
-x_safe = x_input + args.delta * noise
-x_safe_clipped = tf.clip_by_value(x_safe, 0, 1)
+orig_model_acc = full_model.orig_accuracy
 
 pgd = LinfPGDAttack(model,
                     args.val_eps,
@@ -146,11 +126,10 @@ if not os.path.exists(model_dir):
 saver = tf.train.Saver()
 if args.eval:
     mnist = input_data.read_data_sets('MNIST_data', one_hot=False, validation_size=0, reshape=False).test
+    imp_mnist_li = [load_imp_data(args, eval_flag=True, target=i) for i in range(NUM_CLASSES)]
 else:
     mnist = input_data.read_data_sets('MNIST_data', one_hot=False, validation_size=0, reshape=False).train
-
-if args.comp_imp or args.eval_imp:
-    imp_mnist = load_imp_data(args, args.eval)
+    imp_mnist_li = [load_imp_data(args, eval_flag=False, target=i) for i in range(NUM_CLASSES)]
 
 model_file = tf.train.latest_checkpoint(model_dir)
 if model_file is None:
@@ -210,11 +189,11 @@ with tf.Session() as sess:
         x_candid = mnist.images[indices[bstart:bstart + 100]]
         y_candid = mnist.labels[indices[bstart:bstart + 100]]
 
-        if args.comp_imp or args.eval_imp:
-            imp_candid = imp_mnist[indices[bstart:bstart + 100]]
+        imp_candid_li = [imp_mnist[indices[bstart:bstart + 100]] for imp_mnist in imp_mnist_li]
 
-            if np.amax(np.abs(x_candid-imp_candid)) > args.delta + 1e-3:
-                raise Exception
+        for imp_candid in imp_candid_li:
+            assert 0 <= np.amin(imp_candid) and np.amax(imp_candid) <= 1.0
+            assert np.amax(np.abs(imp_candid-x_candid)) <= args.delta + 1e-6
 
         mask, logits = sess.run([model.correct_prediction, model.pre_softmax],
                                 feed_dict={model.x_input: x_candid,
@@ -227,16 +206,13 @@ with tf.Session() as sess:
         if bstart == args.bstart:
             x_full_batch = x_candid[:min(num_eval_examples, len(x_candid))]
             y_full_batch = y_candid[:min(num_eval_examples, len(y_candid))]
-            logit_full_batch = logits[:min(num_eval_examples, len(logits))]
-            if args.comp_imp or args.eval_imp:
-                imp_full_batch = imp_candid[:min(num_eval_examples, len(imp_candid))]
+            imp_full_batch_li = [imp_candid[:min(num_eval_examples, len(imp_candid))] for imp_candid in imp_candid_li]
         else:
             index = min(num_eval_examples - len(x_full_batch), len(x_candid))
             x_full_batch = np.concatenate((x_full_batch, x_candid[:index]))
             y_full_batch = np.concatenate((y_full_batch, y_candid[:index]))
-            logit_full_batch = np.concatenate((logit_full_batch, logits[:index]))
-            if args.comp_imp or args.eval_imp:
-                imp_full_batch = np.concatenate((imp_full_batch, imp_candid[:index]))
+            imp_full_batch_li = [np.concatenate((imp_full_batch, imp_candid[:index]))
+                                 for imp_full_batch, imp_candid in zip(imp_full_batch_li, imp_candid_li)]
         bstart += 100
         if (len(x_full_batch) >= num_eval_examples) or bstart >= len(indices):
             break
@@ -256,16 +232,14 @@ with tf.Session() as sess:
     x_full_batch = x_full_batch.astype(np.float32)
 
     full_mask = []
+    safe_full_mask = []
     orig_correct_num = 0
     safe_correct_num = 0
+    acc_infer = []
+    acc_train = []
+    acc_train_real = []
+    acc_train_fake = []
     l2_dist = []
-
-    if args.comp_imp:
-        l1_loss = []
-        l2_loss = []
-    if args.eval_imp:
-        imp_correct_num = 0
-        imp_full_mask = []
 
     for ibatch in range(num_batches):
         bstart = ibatch * eval_batch_size
@@ -275,8 +249,7 @@ with tf.Session() as sess:
         x_batch = x_full_batch[bstart:bend, :]
         y_batch = y_full_batch[bstart:bend]
 
-        if args.comp_imp or args.eval_imp:
-            imp_batch = imp_full_batch[bstart: bend, :]
+        imp_batch_li = [imp_full_batch[bstart: bend, :] for imp_full_batch in imp_full_batch_li]
 
         correct_prediction = sess.run(model.correct_prediction,
                                        feed_dict={model.x_input: x_batch,
@@ -284,49 +257,58 @@ with tf.Session() as sess:
 
         print('original acc: {}'.format(np.sum(correct_prediction)))
         orig_correct_num += np.sum(correct_prediction)
-        
-        [x_batch_safe, noise_batch] = sess.run([x_safe_clipped, noise],
-                                feed_dict={x_input: x_batch})
-        
+
+        for _ in range(args.val_restarts):
+
+            x_batch_attacked, _ = pgd.perturb(x_batch, y_batch, sess)
+
+            correct_prediction = sess.run(model.correct_prediction,
+                                          feed_dict={model.x_input: x_batch_attacked,
+                                                     model.y_input: y_batch})
+
+            mask *= correct_prediction
+
+            if np.sum(mask)==0:
+                break
+
+        full_mask.append(mask)
+
+        print('orig(PGD) acc: {}'.format(np.sum(mask)/np.size(mask)))
+
+        # eval detections
+        y_fake_batch, mask_batch, x_input_alg_fake_batch = full_model.generate_fakes(y_batch, imp_batch_li)
+
+        nat_dict = {full_model.x_input: x_batch,
+                    full_model.x_input_alg: x_input_alg_fake_batch,
+                    full_model.y_input: y_batch,
+                    full_model.mask_input: mask_batch}
+
+        accuracy_batch, accuracy_real_batch, accuracy_fake_batch, \
+            total_loss_batch, orig_model_acc_batch = \
+            sess.run([accuracy_train, accuracy_train_real, accuracy_train_fake, total_loss,
+                      orig_model_acc],
+                     feed_dict=nat_dict)
+
+        print('train acc: {}'.format(accuracy_batch))
+        print('train acc - real: {}'.format(accuracy_real_batch))
+        print('train acc - fake: {}'.format(accuracy_fake_batch))
+
+        acc_train.append(accuracy_batch)
+        acc_train_real.append(accuracy_real_batch)
+        acc_train_fake.append(accuracy_fake_batch)
+
+        y_pred, x_batch_safe = full_model.infer(sess, x_batch, imp_batch_li, return_images=True)
+        accuracy_infer_batch = np.mean(y_pred == y_batch)
+        print('infer acc: {}'.format(accuracy_infer_batch))
+
+        acc_infer.append(accuracy_infer_batch)
+
         correct_prediction = sess.run(model.correct_prediction,
                                        feed_dict={model.x_input: x_batch_safe,
                                                   model.y_input: y_batch})
 
         print('safe acc: {}'.format(np.sum(correct_prediction)))
         safe_correct_num += np.sum(correct_prediction)
-
-        if args.eval_imp:
-            correct_prediction = sess.run(model.correct_prediction,
-                                          feed_dict={model.x_input: imp_batch,
-                                                     model.y_input: y_batch})
-
-            print('imp acc: {}'.format(np.sum(correct_prediction)))
-            imp_correct_num += np.sum(correct_prediction)
-
-        if args.use_d:
-            disc_out = sess.run(d_out,
-                                feed_dict={x_input: x_batch_safe})
-            #print('full disc:')
-            #print(np.mean(disc_out.reshape(disc_out.shape[0], -1), axis=1))
-            print('disc value: {}'.format(np.mean(disc_out)))
-
-        assert np.amin(x_batch_safe) >= (0-1e-3) and np.amax(x_batch_safe) <= (1.0+1e-3)
-        assert np.amax(np.abs(x_batch_safe-x_batch)) <= args.delta+1e-3
-
-        l2_dist_batch = np.mean(np.linalg.norm((x_batch_safe-x_batch).reshape(x_batch.shape[0], -1), axis=1))
-        print('l2 dist: {:.4f}'.format(l2_dist_batch))
-
-        mask = np.array([True for _ in range(len(y_batch))])
-
-        if args.comp_imp:
-            raw_dist = (imp_batch - x_batch_safe)/255
-            l1_loss_batch = np.mean(np.abs(raw_dist))
-            l2_loss_batch = np.mean(np.linalg.norm(raw_dist.reshape(raw_dist.shape[0], -1), axis=1))
-            print('l1 loss: {:.5f}'.format(l1_loss_batch))
-            print('l2 loss: {:.5f}'.format(l2_loss_batch))
-            
-            l1_loss.append(l1_loss_batch)
-            l2_loss.append(l2_loss_batch)
 
         for _ in range(args.val_restarts):
             
@@ -341,47 +323,19 @@ with tf.Session() as sess:
             if np.sum(mask)==0:
                 break
 
-        l2_dist.append(l2_dist_batch)
-        full_mask.append(mask)
+        safe_full_mask.append(mask)
 
         print('safe(PGD) acc: {}'.format(np.sum(mask)/np.size(mask)))
 
-        if args.eval_imp:
-
-            mask = np.array([True for _ in range(len(y_batch))])
-            for _ in range(args.val_restarts):
-
-                imp_batch_attacked, _ = pgd.perturb(imp_batch.astype(np.float32), y_batch, sess)
-
-                correct_prediction = sess.run(model.correct_prediction,
-                                              feed_dict={model.x_input: imp_batch_attacked,
-                                                         model.y_input: y_batch})
-
-                mask *= correct_prediction
-
-                if np.sum(mask)==0:
-                    break
-
-            imp_full_mask.append(mask)
-
-            print('imp(PGD) acc: {}'.format(np.sum(mask)/np.size(mask)))
-
-        print()
-
     full_mask = np.concatenate(full_mask)
-
-    if args.eval_imp:
-        imp_full_mask = np.concatenate(imp_full_mask)
+    safe_full_mask = np.concatenate(safe_full_mask)
 
     print("orig accuracy: {:.2f}".format(orig_correct_num/np.size(full_mask)*100))
-    print("safe accuracy: {:.2f}".format(safe_correct_num/np.size(full_mask)*100))
-    if args.eval_imp:
-        print("imp accuracy: {:.2f}".format(imp_correct_num/np.size(full_mask)*100))
-    print("safe(PGD) accuracy: {:.2f}".format(np.mean(full_mask)*100))
-    if args.eval_imp:
-        print("imp(PGD) accuracy: {:.2f}".format(np.mean(imp_full_mask)*100))
-    print("l2 dist: {:.4f}".format(np.mean(l2_dist)))
-    if args.comp_imp:
-        print("l1 loss: {:.5f}".format(np.mean(l1_loss)))
-        print("l2 loss: {:.5f}".format(np.mean(l2_loss)))
+    print("orig(PGD) accuracy: {:.2f}".format(np.mean(full_mask)*100))
+    print("train accuracy: {:.2f}".format(np.mean(acc_train)*100))
+    print("train accuracy - real: {:.2f}".format(np.mean(acc_train_real)*100))
+    print("train accuracy - fake: {:.2f}".format(np.mean(acc_train_fake)*100))
+    print("infer accuracy: {:.2f}".format(np.mean(acc_infer)*100))
+    print("safe accuracy: {:.2f}".format(safe_correct_num/np.size(safe_full_mask)*100))
+    print("safe(PGD) accuracy: {:.2f}".format(np.mean(safe_full_mask)*100))
 
