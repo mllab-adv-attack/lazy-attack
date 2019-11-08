@@ -88,6 +88,9 @@ mnist_test = CustomDataSet(mnist.test.images, mnist.test.labels)
 imp_mnist_train_li = [load_imp_data(args, eval_flag=False, target=i) for i in range(NUM_CLASSES)]
 imp_mnist_eval_li = [load_imp_data(args, eval_flag=True, target=i) for i in range(NUM_CLASSES)]
 
+imp_mnist_train_gt = load_imp_data(args, eval_flag=False, target=-1)
+imp_mnist_eval_gt = load_imp_data(args, eval_flag=True, target=-1)
+
 global_step = tf.train.get_or_create_global_step()
 
 
@@ -219,18 +222,22 @@ with tf.Session() as sess:
                                                                get_indices=True)
 
         imp_batch_li = [imp_mnist[indices, ...] for imp_mnist in imp_mnist_train_li]
+        imp_batch_gt = imp_mnist_train_gt[indices, ...]
         y_fake_batch, mask_batch, x_input_alg_fake_batch = full_model.generate_fakes(y_batch, imp_batch_li)
+
+        # Sanity check
+        assert np.amax(np.abs((imp_batch_gt - x_input_alg_fake_batch) * mask_batch)) <= 1e-6
+        assert np.amax(np.abs((imp_batch_gt - x_input_alg_fake_batch) * (1-mask_batch))) > 1e-6
+        assert np.mean(y_fake_batch == mask_batch)
+        assert 0 <= np.amin(x_batch) and np.amax(x_batch) <= 1.0
+        for imp_batch in imp_batch_li:
+            assert 0 <= np.amin(imp_batch) and np.amax(imp_batch) <= 1.0
+            assert np.amax(np.abs(imp_batch-x_batch)) <= args.delta + 1e-6
 
         nat_dict = {full_model.x_input: x_batch,
                     full_model.x_input_alg: x_input_alg_fake_batch,
                     full_model.y_input: y_batch,
                     full_model.mask_input: mask_batch}
-
-        # Sanity check
-        assert 0 <= np.amin(x_batch) and np.amax(x_batch) <= 1.0
-        for imp_batch in imp_batch_li:
-            assert 0 <= np.amin(imp_batch) and np.amax(imp_batch) <= 1.0
-            assert np.amax(np.abs(imp_batch-x_batch)) <= args.delta + 1e-6
 
         # Train
         start = timer()
@@ -276,6 +283,7 @@ with tf.Session() as sess:
             eval_x_batch, eval_y_batch, indices = mnist_test.get_next_batch(eval_batch_size, multiple_passes=True,
                                                                             get_indices=True)
             imp_batch_li = [imp_mnist[indices, ...] for imp_mnist in imp_mnist_eval_li]
+            imp_batch_gt = imp_mnist_eval_gt[indices, ...]
             y_fake_batch, mask_batch, x_input_alg_fake_batch = full_model.generate_fakes(eval_y_batch, imp_batch_li)
 
             eval_dict = {full_model.x_input: eval_x_batch,
@@ -284,6 +292,9 @@ with tf.Session() as sess:
                          full_model.mask_input: mask_batch}
 
             # Sanity check
+            assert np.amax(np.abs((imp_batch_gt - x_input_alg_fake_batch) * mask_batch)) <= 1e-6
+            assert np.amax(np.abs((imp_batch_gt - x_input_alg_fake_batch) * (1-mask_batch))) > 1e-6
+            assert np.mean(y_fake_batch == mask_batch)
             assert 0 <= np.amin(eval_x_batch) and np.amax(eval_x_batch) <= 1.0
             for imp_batch in imp_batch_li:
                 assert 0 <= np.amin(imp_batch) and np.amax(imp_batch) <= 1.0

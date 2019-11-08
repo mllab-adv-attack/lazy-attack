@@ -101,7 +101,7 @@ class Model(object):
 
             self.d_num_correct = self.d_num_correct_real + self.d_num_correct_fake
             self.d_accuracy = tf.reduce_mean(self.d_decisions * self.mask_input +
-                                           (1-self.d_decisions) * (1-self.mask_input))
+                                             (1-self.d_decisions) * (1-self.mask_input))
             
             # c accuracy
             self.c_num_correct_real = tf.reduce_sum(self.c_decisions * self.mask_input)
@@ -128,7 +128,6 @@ class Model(object):
                 logits=orig_pre_softmax, labels=self.y_input)
             self.orig_mean_xent = tf.reduce_mean(orig_y_xent)
 
-
     def generate_fakes(self, y, x_input_alg_li):
         # generate always not-equal random labels
         fake = np.copy(y)
@@ -139,12 +138,17 @@ class Model(object):
 
             fake = np.where(same_mask, new_fake, fake)
 
-        mask = np.random.randint(2, size=np.size(y))
+        assert np.sum(fake == y) < 1e-6
 
-        half_fake = np.where(mask > 0, y, fake)
+        mask_index = np.arange(np.size(y))
+        np.random.shuffle(mask_index)
+        mask_index_cut = np.split(mask_index, 2)[0]
+        mask = np.array([(1 if i in mask_index_cut else 0) for i in range(np.size(y))])
+
+        half_fake = np.where(mask > 0.5, y, fake)
 
         x_input_alg_half_fake = np.copy(x_input_alg_li[0])
-        for i in range(len(y)):
+        for i in range(np.size(y)):
             x_input_alg_half_fake[i] = x_input_alg_li[half_fake[i]][i]
 
         return half_fake, mask, x_input_alg_half_fake

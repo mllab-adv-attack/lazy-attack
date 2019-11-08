@@ -53,6 +53,7 @@ class Discriminator(object):
 
             return logits
 
+
 def lkrelu(x, slope=0.01):
     return tf.maximum(slope * x, x)
 
