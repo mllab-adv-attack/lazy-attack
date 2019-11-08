@@ -125,9 +125,9 @@ class Model(object):
             orig_pre_softmax = self.model(self.x_input)
 
             orig_predictions = tf.argmax(orig_pre_softmax, 1)
-            orig_correct_prediction = tf.equal(orig_predictions, self.y_input)
+            self.orig_correct_prediction = tf.equal(orig_predictions, self.y_input)
             self.orig_accuracy = tf.reduce_mean(
-                tf.cast(orig_correct_prediction, tf.float32))
+                tf.cast(self.orig_correct_prediction, tf.float32))
 
             orig_y_xent = tf.nn.sparse_softmax_cross_entropy_with_logits(
                 logits=orig_pre_softmax, labels=self.y_input)
@@ -151,9 +151,9 @@ class Model(object):
             alg_pre_softmax = self.model(self.x_input_alg)
 
             alg_predictions = tf.argmax(alg_pre_softmax, 1)
-            alg_correct_prediction = tf.equal(alg_predictions, self.y_input)
+            self.alg_correct_prediction = tf.equal(alg_predictions, self.y_input)
             self.alg_accuracy = tf.reduce_mean(
-                tf.cast(alg_correct_prediction, tf.float32))
+                tf.cast(self.alg_correct_prediction, tf.float32))
 
             alg_y_xent = tf.nn.sparse_softmax_cross_entropy_with_logits(
                 logits=alg_pre_softmax, labels=self.y_input)
