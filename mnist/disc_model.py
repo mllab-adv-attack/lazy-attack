@@ -72,6 +72,7 @@ class Model(object):
         )
 
         self.mask_input = tf.placeholder(tf.float32, shape=None)
+        self.y_input = tf.placeholder(tf.int64, shape=None)
 
         real = tf.ones_like(self.mask_input)
         fake = tf.zeros_like(self.mask_input)
@@ -112,6 +113,21 @@ class Model(object):
             self.c_num_correct = self.c_num_correct_real + self.c_num_correct_fake
             self.c_accuracy = tf.reduce_mean(self.c_decisions * self.mask_input +
                                            (1-self.c_decisions) * (1-self.mask_input))
+
+        # sanity check
+        with tf.variable_scope('', reuse=tf.AUTO_REUSE):
+            # eval original image
+            orig_pre_softmax = self.model(self.x_input)
+
+            orig_predictions = tf.argmax(orig_pre_softmax, 1)
+            orig_correct_prediction = tf.equal(orig_predictions, self.y_input)
+            self.orig_accuracy = tf.reduce_mean(
+                tf.cast(orig_correct_prediction, tf.float32))
+
+            orig_y_xent = tf.nn.sparse_softmax_cross_entropy_with_logits(
+                logits=orig_pre_softmax, labels=self.y_input)
+            self.orig_mean_xent = tf.reduce_mean(orig_y_xent)
+
 
     def generate_fakes(self, y, x_input_alg_li):
         # generate always not-equal random labels

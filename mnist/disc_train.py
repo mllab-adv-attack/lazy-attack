@@ -106,6 +106,8 @@ else:
     accuracy_train_real = full_model.d_accuracy_real
     accuracy_train_fake = full_model.d_accuracy_fake
 
+orig_model_acc = full_model.orig_accuracy
+
 
 
 # Setting up the Tensorboard and checkpoint outputs
@@ -138,7 +140,6 @@ train_summaries = [
     tf.summary.scalar('acc (train-real)', accuracy_train_real),
     tf.summary.scalar('acc (train-fake)', accuracy_train_fake),
     tf.summary.scalar('total loss', total_loss),
-    tf.summary.scalar('total loss', total_loss),
 ]
 
 train_merged_summaries = tf.summary.merge(train_summaries)
@@ -147,7 +148,6 @@ eval_summaries = [
     tf.summary.scalar('eval acc (train)', accuracy_train),
     tf.summary.scalar('eval acc (train-real)', accuracy_train_real),
     tf.summary.scalar('eval acc (train-fake)', accuracy_train_fake),
-    tf.summary.scalar('eval total loss', total_loss),
     tf.summary.scalar('eval total loss', total_loss),
 ]
 eval_merged_summaries = tf.summary.merge(eval_summaries)
@@ -223,6 +223,7 @@ with tf.Session() as sess:
 
         nat_dict = {full_model.x_input: x_batch,
                     full_model.x_input_alg: x_input_alg_fake_batch,
+                    full_model.y_input: y_batch,
                     full_model.mask_input: mask_batch}
 
         # Sanity check
@@ -236,10 +237,10 @@ with tf.Session() as sess:
 
         _, _, accuracy_train_batch, \
             accuracy_train_real_batch, accuracy_train_fake_batch, total_loss_batch, \
-            train_merged_summaries_batch = \
+            train_merged_summaries_batch, orig_model_acc_batch = \
             sess.run([train_step_d, extra_update_ops, accuracy_train,
                       accuracy_train_real, accuracy_train_fake, total_loss,
-                      train_merged_summaries],
+                      train_merged_summaries, orig_model_acc],
                      feed_dict=nat_dict)
 
         accuracy_infer_batch = np.mean(full_model.infer(sess, x_batch, imp_batch_li) == y_batch)
@@ -250,6 +251,7 @@ with tf.Session() as sess:
         # Output to stdout
         if ii % num_output_steps == 0:
             print('Step {}:    ({})'.format(ii, datetime.now()))
+            print('    acc orig {:.4}%'.format(orig_model_acc_batch * 100))
             print('    acc infer {:.4}%'.format(accuracy_infer_batch * 100))
             print('    acc train {:.4}%'.format(accuracy_train_batch * 100))
             print('    acc train - real {:.4}%'.format(accuracy_train_real_batch * 100))
@@ -278,6 +280,7 @@ with tf.Session() as sess:
 
             eval_dict = {full_model.x_input: eval_x_batch,
                          full_model.x_input_alg: x_input_alg_fake_batch,
+                         full_model.y_input: eval_y_batch,
                          full_model.mask_input: mask_batch}
 
             # Sanity check
@@ -288,14 +291,15 @@ with tf.Session() as sess:
 
             _, _, accuracy_train_batch, \
                 accuracy_train_real_batch, accuracy_train_fake_batch, total_loss_batch, \
-                eval_merged_summaries_batch = \
+                eval_merged_summaries_batch, orig_model_acc_batch = \
                 sess.run([train_step_d, extra_update_ops, accuracy_train,
                           accuracy_train_real, accuracy_train_fake, total_loss,
-                          eval_merged_summaries],
+                          eval_merged_summaries, orig_model_acc],
                          feed_dict=eval_dict)
 
             accuracy_infer_batch = np.mean(full_model.infer(sess, eval_x_batch, imp_batch_li) == eval_y_batch)
 
+            print('    acc orig (eval) {:.4}%'.format(orig_model_acc_batch * 100))
             print('    acc infer (eval) {:.4}%'.format(accuracy_infer_batch * 100))
             print('    acc train (eval) {:.4}%'.format(accuracy_train_batch * 100))
             print('    acc train - real (eval) {:.4}%'.format(accuracy_train_real_batch * 100))
