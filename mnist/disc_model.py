@@ -52,6 +52,7 @@ class Model(object):
         self.f_dim = args.f_dim
         self.drop = 0 if not args.dropout else args.dropout_rate
         self.patch = args.patch
+        self.c_loss = args.c_loss
 
         self._build_model()
 
@@ -82,22 +83,35 @@ class Model(object):
             self.d_out = self.discriminator(self.x_input, self.alg_noise)
 
             self.d_mean_out = tf.reduce_mean(tf.layers.flatten(self.d_out), axis=1)
+            
+            self.d_loss = tf.reduce_mean(tf.losses.mean_squared_error(self.d_out, self.mask_input))
+            self.c_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=self.mask_input, logits=self.d_mean_out))
 
             self.d_decisions = tf.where(self.d_mean_out >= 0.5, real, fake)
             self.c_predictions = tf.nn.sigmoid(self.d_mean_out)
+            self.c_decisions = tf.where(self.c_predictions >= 0.5, real, fake)
 
-            self.d_loss = tf.reduce_mean(tf.losses.mean_squared_error(self.d_out, self.mask_input))
-            self.c_loss = tf.nn.sigmoid_cross_entropy_with_logits(labels=self.mask_input, logits=self.d_mean_out)
+            # d accuracy
+            self.d_num_correct_real = tf.reduce_sum(self.d_decisions * self.mask_input)
+            self.d_num_correct_fake = tf.reduce_sum((1-self.d_decisions) * (1-self.mask_input))
 
-            self.num_correct_real = tf.reduce_sum(self.d_decisions * self.mask_input)
-            self.num_correct_fake = tf.reduce_sum((1-self.d_decisions) * (1-self.mask_input))
+            self.d_accuracy_real = self.d_num_correct_real / tf.reduce_sum(self.mask_input)
+            self.d_accuracy_fake = self.d_num_correct_fake / tf.reduce_sum(1-self.mask_input)
 
-            self.accuracy_real = self.num_correct_real / tf.reduce_sum(self.mask_input)
-            self.accuracy_fake = self.num_correct_fake / tf.reduce_sum(1-self.mask_input)
-
-            self.num_correct = self.num_correct_real + self.num_correct_fake
-            self.accuracy = tf.reduce_mean(self.d_decisions * self.mask_input +
+            self.d_num_correct = self.d_num_correct_real + self.d_num_correct_fake
+            self.d_accuracy = tf.reduce_mean(self.d_decisions * self.mask_input +
                                            (1-self.d_decisions) * (1-self.mask_input))
+            
+            # c accuracy
+            self.c_num_correct_real = tf.reduce_sum(self.c_decisions * self.mask_input)
+            self.c_num_correct_fake = tf.reduce_sum((1-self.c_decisions) * (1-self.mask_input))
+
+            self.c_accuracy_real = self.c_num_correct_real / tf.reduce_sum(self.mask_input)
+            self.c_accuracy_fake = self.c_num_correct_fake / tf.reduce_sum(1-self.mask_input)
+
+            self.c_num_correct = self.c_num_correct_real + self.c_num_correct_fake
+            self.c_accuracy = tf.reduce_mean(self.c_decisions * self.mask_input +
+                                           (1-self.c_decisions) * (1-self.mask_input))
 
     def generate_fakes(self, y, x_input_alg_li):
         # generate always not-equal random labels

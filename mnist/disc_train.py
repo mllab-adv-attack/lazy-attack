@@ -95,17 +95,17 @@ model = Target_model()
 full_model = Safe_model('train', model, args)
 
 # set up metrics
-d_loss = full_model.c_loss
-c_loss = full_model.d_loss
-
 if args.c_loss:
-    total_loss = c_loss
+    total_loss = full_model.c_loss
+    accuracy_train = full_model.c_accuracy
+    accuracy_train_real = full_model.c_accuracy_real
+    accuracy_train_fake = full_model.c_accuracy_fake
 else:
-    total_loss = d_loss
+    total_loss = full_model.d_loss
+    accuracy_train = full_model.d_accuracy
+    accuracy_train_real = full_model.d_accuracy_real
+    accuracy_train_fake = full_model.d_accuracy_fake
 
-accuracy_train = full_model.accuracy
-accuracy_train_real = full_model.accuracy_real
-accuracy_train_fake = full_model.accuracy_fake
 
 
 # Setting up the Tensorboard and checkpoint outputs
@@ -192,6 +192,7 @@ with tf.Session() as sess:
 
     train_step_d = tf.train.AdamOptimizer(args.d_lr).minimize(
         total_loss,
+        global_step=global_step,
         var_list=variables_to_train_d)
 
     sess.run(tf.global_variables_initializer())
