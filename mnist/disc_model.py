@@ -63,18 +63,17 @@ class Model(object):
 
         self.x_input = tf.placeholder(
             tf.float32,
-            shape=[None, 32, 32, 3])
+            shape=[None, 28, 28, 1])
 
         self.x_input_alg = tf.placeholder(
             tf.float32,
-            shape=[None, 32, 32, 3]
+            shape=[None, 28, 28, 1]
         )
 
-        self.mask_input = tf.placeholder(tf.int64, shape=None)
+        self.mask_input = tf.placeholder(tf.float32, shape=None)
 
         real = tf.ones_like(self.mask_input)
         fake = tf.zeros_like(self.mask_input)
-        half = (real + fake) / 2
 
         # basic inference
         with tf.variable_scope('', reuse=tf.AUTO_REUSE):
@@ -95,14 +94,15 @@ class Model(object):
             self.accuracy_fake = self.num_correct_fake / tf.reduce_sum(1-self.mask_input)
 
             self.num_correct = self.num_correct_real + self.num_correct_fake
-            self.accuracy = tf.reduce_mean(self.d_decisions * self.mask_input)
+            self.accuracy = tf.reduce_mean(self.d_decisions * self.mask_input +
+                                           (1-self.d_decisions) * (1-self.mask_input))
 
     def generate_fakes(self, y, x_input_alg_li):
         # generate always not-equal random labels
         fake = np.copy(y)
 
         while np.sum(fake == y) > 0:
-            same_mask = np.where(fake == y)
+            same_mask = fake == y
             new_fake = np.random.randint(NUM_CLASSES, size=np.size(y))
 
             fake = np.where(same_mask, new_fake, fake)
@@ -126,7 +126,7 @@ class Model(object):
                                    feed_dict=feed_dict)
             d_outs.append(d_out_batch)
 
-        d_outs = np.concatenate(d_outs)
+        d_outs = np.stack(d_outs, axis=-1)
         d_preds = np.argmax(d_outs, axis=1)
 
         return d_preds

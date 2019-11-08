@@ -18,7 +18,7 @@ from tensorflow.examples.tutorials.mnist import input_data
 from disc_model import Model as Safe_model
 from infer_target import Model as Target_model
 
-from utils import infer_file_name, load_imp_data, CustomDataSet
+from utils import disc_file_name, load_imp_data, CustomDataSet
 
 import argparse
 
@@ -41,7 +41,6 @@ if __name__ == '__main__':
     parser.add_argument('--num_output_steps', default=100, type=int)
     parser.add_argument('--num_summary_steps', default=100, type=int)
     parser.add_argument('--num_checkpoint_steps', default=300, type=int)
-    parser.add_argument('--g_lr', default=1e-3, type=float)
     parser.add_argument('--training_batch_size', default=50, type=int)
     parser.add_argument('--eval_batch_size', default=100, type=int)
     parser.add_argument('--eval_on_cpu', action='store_true')
@@ -51,7 +50,7 @@ if __name__ == '__main__':
     parser.add_argument('--dropout', action='store_true')
     parser.add_argument('--dropout_rate', default=0.3, type=float)
     parser.add_argument('--f_dim', default=64, type=int)
-    parser.add_argument('--d_lr', default=1e-4, type=float)
+    parser.add_argument('--d_lr', default=1e-3, type=float)
     parser.add_argument('--patch', action='store_true')
 
     # pgd settings
@@ -105,7 +104,7 @@ accuracy_train_fake = full_model.accuracy_fake
 
 
 # Setting up the Tensorboard and checkpoint outputs
-meta_name = infer_file_name(args)
+meta_name = disc_file_name(args)
 
 model_dir = MODEL_PATH + args.model_dir
 if args.save:
@@ -266,20 +265,20 @@ with tf.Session() as sess:
 
             # evaluate on test set
 
-            eval_x_batch, eval_y_batch = mnist_test.get_next_batch(eval_batch_size, multiple_passes=True,
-                                                                   get_indices=True)
+            eval_x_batch, eval_y_batch, indices = mnist_test.get_next_batch(eval_batch_size, multiple_passes=True,
+                                                                            get_indices=True)
             imp_batch_li = [imp_mnist[indices, ...] for imp_mnist in imp_mnist_eval_li]
-            y_fake_batch, mask_batch, x_input_alg_fake_batch = full_model.generate_fakes(y_batch, imp_batch_li)
+            y_fake_batch, mask_batch, x_input_alg_fake_batch = full_model.generate_fakes(eval_y_batch, imp_batch_li)
 
             eval_dict = {full_model.x_input: eval_x_batch,
                          full_model.x_input_alg: x_input_alg_fake_batch,
                          full_model.mask_input: mask_batch}
 
             # Sanity check
-            assert 0 <= np.amin(x_batch) and np.amax(x_batch) <= 1.0
+            assert 0 <= np.amin(eval_x_batch) and np.amax(eval_x_batch) <= 1.0
             for imp_batch in imp_batch_li:
                 assert 0 <= np.amin(imp_batch) and np.amax(imp_batch) <= 1.0
-                assert np.amax(np.abs(imp_batch-x_batch)) <= args.delta + 1e-6
+                assert np.amax(np.abs(imp_batch-eval_x_batch)) <= args.delta + 1e-6
 
             _, _, accuracy_train_batch, \
                 accuracy_train_real_batch, accuracy_train_fake_batch, d_loss_batch, \
@@ -289,7 +288,7 @@ with tf.Session() as sess:
                           eval_merged_summaries],
                          feed_dict=eval_dict)
 
-            accuracy_infer_batch = np.mean(full_model.infer(sess, x_batch, imp_batch_li) == y_batch)
+            accuracy_infer_batch = np.mean(full_model.infer(sess, eval_x_batch, imp_batch_li) == eval_y_batch)
 
             print('    acc infer (eval) {:.4}%'.format(accuracy_infer_batch * 100))
             print('    acc train (eval) {:.4}%'.format(accuracy_train_batch * 100))

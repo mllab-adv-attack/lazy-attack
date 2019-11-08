@@ -89,12 +89,11 @@ class pix2pixDiscriminator(object):
         self._scale = scale
         self._prob = 0.5  # constant from pix2pix paper
 
-    def __call__(self, inputs, targets):
+    def __call__(self, inputs, noises):
         with tf.variable_scope('discriminator', reuse=tf.AUTO_REUSE):
 
             inputs = inputs * 2 - 1
-            targets = targets * 2 - 1
-            inputs = tf.concat([inputs, targets], axis=-1)
+            inputs = tf.concat([inputs, noises], axis=-1)
 
             inputs = encoder_layer(inputs, 32, 3, 2, batch_norm=False, is_training=self._is_training)
             inputs = encoder_layer(inputs, 64, 3, 1, is_training=self._is_training)
