@@ -121,7 +121,7 @@ class Model(object):
 
         # sanity check
         with tf.variable_scope('', reuse=tf.AUTO_REUSE):
-            # eval original image
+            # eval original image (clean)
             orig_pre_softmax = self.model(self.x_input)
 
             orig_predictions = tf.argmax(orig_pre_softmax, 1)
@@ -132,6 +132,46 @@ class Model(object):
             orig_y_xent = tf.nn.sparse_softmax_cross_entropy_with_logits(
                 logits=orig_pre_softmax, labels=self.y_input)
             self.orig_mean_xent = tf.reduce_mean(orig_y_xent)
+
+            # eval original image (PGD)
+            x_input_pgd = PGD(self.x_input, self.y_input, self.model, self.attack_params)
+            
+            orig_pgd_pre_softmax = self.model(x_input_pgd)
+
+            orig_pgd_predictions = tf.argmax(orig_pgd_pre_softmax, 1)
+            self.orig_pgd_correct_prediction = tf.equal(orig_pgd_predictions, self.y_input)
+            self.orig_pgd_accuracy = tf.reduce_mean(
+                tf.cast(self.orig_pgd_correct_prediction, tf.float32))
+
+            orig_pgd_y_xent = tf.nn.sparse_softmax_cross_entropy_with_logits(
+                logits=orig_pgd_pre_softmax, labels=self.y_input)
+            self.orig_pgd_mean_xent = tf.reduce_mean(orig_pgd_y_xent)
+            
+            # eval alg image (clean)
+            alg_pre_softmax = self.model(self.x_input_alg)
+
+            alg_predictions = tf.argmax(alg_pre_softmax, 1)
+            alg_correct_prediction = tf.equal(alg_predictions, self.y_input)
+            self.alg_accuracy = tf.reduce_mean(
+                tf.cast(alg_correct_prediction, tf.float32))
+
+            alg_y_xent = tf.nn.sparse_softmax_cross_entropy_with_logits(
+                logits=alg_pre_softmax, labels=self.y_input)
+            self.alg_mean_xent = tf.reduce_mean(alg_y_xent)
+
+            # eval alg image (PGD)
+            x_input_pgd = PGD(self.x_input_alg, self.y_input, self.model, self.attack_params)
+            
+            alg_pgd_pre_softmax = self.model(x_input_pgd)
+
+            alg_pgd_predictions = tf.argmax(alg_pgd_pre_softmax, 1)
+            self.alg_pgd_correct_prediction = tf.equal(alg_pgd_predictions, self.y_input)
+            self.alg_pgd_accuracy = tf.reduce_mean(
+                tf.cast(self.alg_pgd_correct_prediction, tf.float32))
+
+            alg_pgd_y_xent = tf.nn.sparse_softmax_cross_entropy_with_logits(
+                logits=alg_pgd_pre_softmax, labels=self.y_input)
+            self.alg_pgd_mean_xent = tf.reduce_mean(alg_pgd_y_xent)
 
     def generate_fakes(self, y, x_input_alg_li):
         # generate always not-equal random labels
@@ -172,7 +212,7 @@ class Model(object):
 
         if return_images:
             infer_alg = np.copy(x_input_alg_li[0])
-            for i in range(np.size(y)):
+            for i in range(np.size(d_preds)):
                 infer_alg[i] = x_input_alg_li[d_preds[i]][i]
 
             return d_preds, infer_alg

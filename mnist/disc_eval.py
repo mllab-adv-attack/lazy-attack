@@ -14,13 +14,11 @@ import numpy as np
 from tensorflow.examples.tutorials.mnist import input_data
 
 from disc_model import Model as Safe_model
-from model import Model as Target_model
+from infer_target import Model as Model
 
-from utils import infer_file_name, load_imp_data
+from utils import disc_file_name, load_imp_data
 
 import argparse
-
-from pgd_attack import LinfPGDAttack
 
 MODEL_PATH = './models/'
 NUM_CLASSES = 10
@@ -28,8 +26,8 @@ NUM_CLASSES = 10
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     # save & load path
-    parser.add_argument('--model_dir', default='naturally_trained', type=str)
-    parser.add_argument('--save_dir', default='safe_net', type=str, help='safe_net saved folder')
+    parser.add_argument('--model_dir', default='adv_trained', type=str)
+    parser.add_argument('--save_dir', default='safe_net_2', type=str, help='safe_net saved folder')
     parser.add_argument('--corr_only', action='store_true')
     parser.add_argument('--fail_only', action='store_true')
     parser.add_argument('--eval', action='store_true', help='use test set data. else use train set data.')
@@ -57,6 +55,7 @@ if __name__ == '__main__':
     parser.add_argument('--eps', default=0.3, type=float)
     parser.add_argument('--num_steps', default=100, type=int)
     parser.add_argument('--step_size', default=0.01, type=float)
+    parser.add_argument('--random_start', action='store_true')
 
     # pgd (eval) settings
     parser.add_argument('--val_eps', default=0.3, type=float)
@@ -80,7 +79,7 @@ eval_batch_size = args.eval_batch_size
 # Setting up the data and the model
 global_step = tf.train.get_or_create_global_step()
 
-model = Target_model()
+model = Model()
 full_model = Safe_model('eval', model, args)
 
 # set up metrics
@@ -97,18 +96,11 @@ else:
 
 orig_model_acc = full_model.orig_accuracy
 
-pgd = LinfPGDAttack(model,
-                    args.val_eps,
-                    args.val_num_steps,
-                    args.val_step_size,
-                    random_start=(True if args.val_restarts > 1 else args.val_rand),
-                    loss_func='xent')
-
 # Setting up the Tensorboard and checkpoint outputs
 if args.force_path:
     meta_name = args.force_path
 else:
-    meta_name = infer_file_name(args)
+    meta_name = disc_file_name(args)
 print(meta_name)
 
 model_dir = MODEL_PATH + args.save_dir + '/' + meta_name
@@ -260,11 +252,9 @@ with tf.Session() as sess:
 
         for _ in range(args.val_restarts):
 
-            x_batch_attacked, _ = pgd.perturb(x_batch, y_batch, sess)
-
-            correct_prediction = sess.run(model.correct_prediction,
-                                          feed_dict={model.x_input: x_batch_attacked,
-                                                     model.y_input: y_batch})
+            correct_predictions = sess.run(full_model.orig_pgd_correct_prediction,
+                                           feed_dict={full_model.x_input: x_batch,
+                                                      full_model.y_input: y_batch})
 
             mask *= correct_prediction
 
@@ -289,9 +279,9 @@ with tf.Session() as sess:
                       orig_model_acc],
                      feed_dict=nat_dict)
 
-        print('train acc: {}'.format(accuracy_batch))
-        print('train acc - real: {}'.format(accuracy_real_batch))
-        print('train acc - fake: {}'.format(accuracy_fake_batch))
+        print("train acc: {:.2f}".format(accuracy_batch*100))
+        print("train acc - real: {:.2f}".format(accuracy_real_batch*100))
+        print("train acc - fake: {:.2f}".format(accuracy_fake_batch*100))
 
         acc_train.append(accuracy_batch)
         acc_train_real.append(accuracy_real_batch)
