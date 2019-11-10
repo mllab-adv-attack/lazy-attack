@@ -10,6 +10,7 @@ from __future__ import print_function
 # from PIL import Image
 
 import math
+import time
 import tensorflow as tf
 import numpy as np
 import cifar10_input
@@ -29,8 +30,6 @@ if __name__ == '__main__':
     parser.add_argument('--sample_size', default=1000, help='sample size', type=int)
     parser.add_argument('--bstart', default=0, type=int)
     parser.add_argument('--model_dir', default='naturally_trained', type=str)
-    parser.add_argument('--corr_only', action='store_true')
-    parser.add_argument('--fail_only', action='store_true')
     parser.add_argument('--eval', action='store_true')
     parser.add_argument('--loss_func', default='xent', type=str)
     # PGD (training)
@@ -42,15 +41,13 @@ if __name__ == '__main__':
     # impenetrable
     parser.add_argument('--imp_delta', default=0, help='<= 0 for no imp eps', type=float)
     parser.add_argument('--imp_num_steps', default=100, help='0 for until convergence', type=int)
-    parser.add_argument('--imp_step_size', default=0.5, type=float)
+    parser.add_argument('--imp_step_size', default=2, type=float)
     parser.add_argument('--label_infer', action='store_true')
     parser.add_argument('--target', default=-1, type=int, help='set target label if >= 0')
     args = parser.parse_args()
     for key, val in vars(args).items():
         print('{}={}'.format(key, val))
 
-    assert not (args.corr_only and args.fail_only)
-    assert not (args.imp_rep and args.imp_pp)
 
     # numpy options
     np.set_printoptions(precision=6, suppress=True)
@@ -128,10 +125,6 @@ if __name__ == '__main__':
                                     feed_dict={x_input: x_candid,
                                                y_input: y_candid})
             print(sum(mask))
-            if args.corr_only and (np.mean(mask) < 1.0 - 1E-6):
-                raise Exception
-            if args.fail_only and (np.mean(mask) > 0.0 + 1E-6):
-                raise Exception
             if bstart == args.bstart:
                 x_full_batch = x_candid[:min(num_eval_examples, len(x_candid))]
                 y_full_batch = y_candid[:min(num_eval_examples, len(y_candid))]
@@ -172,6 +165,11 @@ if __name__ == '__main__':
             # run our algorithm
             print('fortifying image {} - {}'.format(bstart, bend-1))
 
+            correct_predictions = sess.run(correct_prediction,
+                                           feed_dict={x_input: x_batch,
+                                                      y_input: y_batch})
+            print('original accuracy: {}'.format(np.mean(correct_predictions)*100))
+
             # set rms parameters
             rho = 0.9
             rms_v = np.zeros_like(x_batch)
@@ -179,6 +177,7 @@ if __name__ == '__main__':
             x = np.copy(x_batch)
 
             for i in range(args.imp_num_steps):
+                start = time.time()
                 correct_mask = np.array([True for _ in range(np.size(y_batch))])
                 grads = np.zeros_like(x)
                 losses = 0
@@ -198,9 +197,15 @@ if __name__ == '__main__':
 
                 # update image
                 rms_v = rho * rms_v + (1-rho) * (grads**2)
-                x_res = x - args.imp_step_size * grads / (np.sqrt(rms_v + 1e-7))
+                x = x - args.imp_step_size * grads / (np.sqrt(rms_v + 1e-7))
+                
+                x = np.clip(x, 0, 255)
 
-                print("step: {}, acc: {}, loss: {:.6f}".format(i, accuracy, losses))
+                if args.imp_delta > 0:
+                    x = np.clip(x, x_batch - args.imp_delta, x_batch + args.imp_delta)
+                end = time.time()
+
+                print("step: {}, acc: {}, loss: {:.6f}, train time: {:.4f}".format(i, accuracy*100, losses, end-start))
 
 
             print()

@@ -48,33 +48,33 @@ class Model(object):
 
     # Update hps.num_residual_units to 9
 
-    with tf.variable_scope('unit_1_0'):
+    with tf.variable_scope('unit_1_0', reuse=tf.AUTO_REUSE):
       x = res_func(x, filters[0], filters[1], self._stride_arr(strides[0]),
                    activate_before_residual[0])
     for i in range(1, 5):
-      with tf.variable_scope('unit_1_%d' % i):
+      with tf.variable_scope('unit_1_%d' % i, reuse=tf.AUTO_REUSE):
         x = res_func(x, filters[1], filters[1], self._stride_arr(1), False)
 
-    with tf.variable_scope('unit_2_0'):
+    with tf.variable_scope('unit_2_0', reuse=tf.AUTO_REUSE):
       x = res_func(x, filters[1], filters[2], self._stride_arr(strides[1]),
                    activate_before_residual[1])
     for i in range(1, 5):
-      with tf.variable_scope('unit_2_%d' % i):
+      with tf.variable_scope('unit_2_%d' % i, reuse=tf.AUTO_REUSE):
         x = res_func(x, filters[2], filters[2], self._stride_arr(1), False)
 
-    with tf.variable_scope('unit_3_0'):
+    with tf.variable_scope('unit_3_0', reuse=tf.AUTO_REUSE):
       x = res_func(x, filters[2], filters[3], self._stride_arr(strides[2]),
                    activate_before_residual[2])
     for i in range(1, 5):
-      with tf.variable_scope('unit_3_%d' % i):
+      with tf.variable_scope('unit_3_%d' % i, reuse=tf.AUTO_REUSE):
         x = res_func(x, filters[3], filters[3], self._stride_arr(1), False)
 
-    with tf.variable_scope('unit_last'):
+    with tf.variable_scope('unit_last', reuse=tf.AUTO_REUSE):
       x = self._batch_norm('final_bn', x)
       x = self._relu(x, 0.1)
       x = self._global_avg_pool(x)
    
-    with tf.variable_scope('logit'):
+    with tf.variable_scope('logit', reuse=tf.AUTO_REUSE):
       self.pre_softmax = self._fully_connected(x, 10)
       self.softmax = tf.nn.softmax(self.pre_softmax)
    

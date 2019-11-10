@@ -56,8 +56,6 @@ class Impenetrable(object):
         self.pgd_restarts = args.pgd_restarts
         self.pgd_random_start = args.pgd_random_start or (self.pgd_restarts > 1)
         self.imp_step_size = args.imp_step_size
-        self.adam = args.imp_adam
-        self.rms = args.imp_rms
 
         self.bounds = (0, 255)
 
@@ -72,15 +70,12 @@ class Impenetrable(object):
         self._build_model()
 
     def _build_model(self):
-        self.x_input = tf.placeholder(
-            tf.float32,
-            shape=[None, 32, 32, 3])
-        self.y_input = tf.placeholder(tf.int64, shape=None)
-
-        lower_bound = tf.maximum(self.x_input-self.imp_delta, self.bounds[0])
-        upper_bound = tf.minimum(self.x_input+self.imp_delta, self.bounds[1])
-
         with tf.variable_scope('', reuse=tf.AUTO_REUSE):
+            self.x_input = tf.placeholder(
+                tf.float32,
+                shape=[None, 32, 32, 3])
+            self.y_input = tf.placeholder(tf.int64, shape=None)
+
             self.x_pgd = PGD(self.x_input, self.y_input, self.model.fprop, self.attack_params)
             logits = self.model.fprop(self.x_pgd)
             y_xent = tf.nn.sparse_softmax_cross_entropy_with_logits(
