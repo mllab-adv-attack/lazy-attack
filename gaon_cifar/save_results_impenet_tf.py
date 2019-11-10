@@ -43,8 +43,6 @@ if __name__ == '__main__':
     parser.add_argument('--imp_delta', default=0, help='<= 0 for no imp eps', type=float)
     parser.add_argument('--imp_num_steps', default=100, help='0 for until convergence', type=int)
     parser.add_argument('--imp_step_size', default=0.5, type=float)
-    parser.add_argument('--imp_adam', action='store_true')
-    parser.add_argument('--imp_rms', action='store_true')
     parser.add_argument('--label_infer', action='store_true')
     parser.add_argument('--target', default=-1, type=int, help='set target label if >= 0')
     args = parser.parse_args()
@@ -82,13 +80,6 @@ if __name__ == '__main__':
 
     data_path = config['data_path']
     cifar = cifar10_input.CIFAR10Data(data_path)
-
-    if args.imp_adam:
-        optimizer = tf.train.AdamOptimizer(args.imp_step_size)
-    else:
-        optimizer = tf.train.RMSPropOptimizer(args.imp_step_size)
-    train_step = optimizer.minimize(impenet.mean_xent,
-                                    var_list=impenet.x)
 
     configs = tf.ConfigProto()
     configs.gpu_options.allow_growth = True
@@ -181,18 +172,35 @@ if __name__ == '__main__':
             # run our algorithm
             print('fortifying image {} - {}'.format(bstart, bend-1))
 
-            sess.run(impenet.init_op, feed_dict={impenet.x_input: x_batch})
-            sess.run(tf.variables_initializer(optimizer))
+            # set rms parameters
+            rho = 0.9
+            rms_v = np.zeros_like(x_batch)
+
+            x = np.copy(x_batch)
 
             for i in range(args.imp_num_steps):
-                _, loss, accuracy, x_batch_imp, mask_batch_imp = \
-                    sess.run([train_step, impenet.mean_xent, impenet.mean_corrects,
-                              impenet.x, impenet.corrects],
-                             feed_dict={impenet.y_input: y_batch})
-                _ = sess.run(impenet.clip_op, feed_dict={impenet.x_input: x_batch,
-                                                         impenet.y_input: y_batch})
+                correct_mask = np.array([True for _ in range(np.size(y_batch))])
+                grads = np.zeros_like(x)
+                losses = 0
+                for j in range(args.pgd_restarts):
+                    loss, corrects, grad = \
+                        sess.run([impenet.xent, impenet.corrects, impenet.grad],
+                                 feed_dict={impenet.x_input: x,
+                                            impenet.y_input: y_batch})
 
-                print("step: {}, acc: {}, loss: {:.6f}".format(i, accuracy, loss))
+                    grads += grad
+                    correct_mask *= corrects
+                    losses += loss
+
+                accuracy = np.mean(correct_mask)
+                grads = grads / args.pgd_restarts
+                losses = losses / args.pgd_restarts
+
+                # update image
+                rms_v = rho * rms_v + (1-rho) * (grads**2)
+                x_res = x - args.imp_step_size * grads / (np.sqrt(rms_v + 1e-7))
+
+                print("step: {}, acc: {}, loss: {:.6f}".format(i, accuracy, losses))
 
 
             print()
@@ -203,10 +211,10 @@ if __name__ == '__main__':
 
             # suc_flag = impenet.validation(x_batch_imp, y_batch, y_batch_hard)
 
-            x_imp.append(x_batch_imp)
-            mask_imp.append(mask_batch_imp)
-            l2_li.append(np.linalg.norm((x_batch_imp - x_batch)/255))
-            print('l2 distance (curr):', np.linalg.norm(x_batch_imp - x_batch)/255)
+            x_imp.append(x)
+            mask_imp.append(correct_mask)
+            l2_li.append(np.linalg.norm((x - x_batch)/255))
+            print('l2 distance (curr):', np.linalg.norm(x - x_batch)/255)
             print('l2 distance (total):', np.mean(l2_li))
             print()
             print('------------------------------------------------------------------------------')

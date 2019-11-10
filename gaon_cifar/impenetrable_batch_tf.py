@@ -77,35 +77,22 @@ class Impenetrable(object):
             shape=[None, 32, 32, 3])
         self.y_input = tf.placeholder(tf.int64, shape=None)
 
-        self.x = tf.get_variable(name='safe_spot', shape=[None, 32, 32, 3], dtype=tf.float32)
-        self.correct_mask = tf.get_variable(name='correct mask', shape=[None], dtype=tf.bool)
-
-        self.init_op = tf.assign(self.x, self.x_input)
-
         lower_bound = tf.maximum(self.x_input-self.imp_delta, self.bounds[0])
         upper_bound = tf.minimum(self.x_input+self.imp_delta, self.bounds[1])
 
-        x_clipped = tf.clip_by_value(self.x, lower_bound, upper_bound)
-        self.clip_op = tf.assign(self.x, x_clipped)
-
-        xents = 0
-
-        corrects = tf.ones_like(self.y_input, dtype=bool)
-
         with tf.variable_scope('', reuse=tf.AUTO_REUSE):
-            for _ in range(self.pgd_random_start):
-                self.x_pgd = PGD(self.x, self.y_input, self.model.fprop, self.attack_params)
-                logits = self.model.fprop(self.x_pgd)
-                y_xent = tf.nn.sparse_softmax_cross_entropy_with_logits(
-                    logits=logits, labels=self.y_input
-                )
-                predictions = tf.argmax(logits, 1)
-                correct_prediction = tf.equal(self.y_input, predictions)
-                corrects *= correct_prediction
+            self.x_pgd = PGD(self.x_input, self.y_input, self.model.fprop, self.attack_params)
+            logits = self.model.fprop(self.x_pgd)
+            y_xent = tf.nn.sparse_softmax_cross_entropy_with_logits(
+                logits=logits, labels=self.y_input
+            )
+            predictions = tf.argmax(logits, 1)
+            correct_prediction = tf.equal(self.y_input, predictions)
 
-                xents += y_xent
+            self.xent = tf.reduce_mean(y_xent)
+            self.corrects = correct_prediction
+            self.grad = tf.gradients(y_xent, self.x_input)[0]
 
-            self.mean_xent = xents / self.pgd_random_start
-            self.corrects = corrects
-            self.mean_corrects = tf.reduce_mean(tf.cast(self.corrects, dtype=tf.float32))
+
+
 
