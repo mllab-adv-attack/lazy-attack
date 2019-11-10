@@ -54,6 +54,7 @@ if __name__ == '__main__':
     parser.add_argument('--imp_adagrad', action='store_true')
     parser.add_argument('--imp_no_sign', action='store_true')
     parser.add_argument('--label_infer', action='store_true')
+    parser.add_argument('--source', default=-1, type=int, help='set source label if >= 0')
     parser.add_argument('--target', default=-1, type=int, help='set target label if >= 0')
     # PGD (evaluation)
     parser.add_argument('--val_step_per', default=0, help="validation per val_step. =< 0 means no eval", type=int)
@@ -98,7 +99,7 @@ if __name__ == '__main__':
         # Set number of examples to evaluate
         num_eval_examples = args.sample_size
 
-        indices = [i for i in range(args.sample_size + args.bstart)]
+        indices = [i for i in range(max(args.sample_size + args.bstart, 10000))]
 
         # load data
         bstart = args.bstart
@@ -149,6 +150,11 @@ if __name__ == '__main__':
                 x_full_batch = np.concatenate((x_full_batch, x_candid[:index]))
                 y_full_batch = np.concatenate((y_full_batch, y_candid[:index]))
                 logit_full_batch = np.concatenate((logit_full_batch, logits[:index]))
+
+            if args.source >= 0:
+                mask = y_full_batch == args.source
+                x_full_batch = x_full_batch[mask]
+                y_full_batch = y_full_batch[mask]
             bstart += 100
             if (len(x_full_batch) >= num_eval_examples) or bstart >= len(indices):
                 break
