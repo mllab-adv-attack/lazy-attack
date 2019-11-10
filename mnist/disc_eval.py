@@ -187,7 +187,7 @@ with tf.Session() as sess:
             assert 0 <= np.amin(imp_candid) and np.amax(imp_candid) <= 1.0
             assert np.amax(np.abs(imp_candid-x_candid)) <= args.delta + 1e-6
 
-        mask = sess.run([full_model.orig_correct_prediction],
+        mask = sess.run(full_model.orig_correct_prediction,
                         feed_dict={full_model.x_input: x_candid,
                                    full_model.y_input: y_candid})
         print(sum(mask))
@@ -250,6 +250,7 @@ with tf.Session() as sess:
         print('original acc: {}'.format(np.sum(correct_prediction)))
         orig_correct_num += np.sum(correct_prediction)
 
+        mask = np.array([True for _ in range(len(y_batch))])
         for _ in range(args.val_restarts):
 
             correct_prediction = sess.run(full_model.orig_pgd_correct_prediction,
@@ -263,7 +264,7 @@ with tf.Session() as sess:
 
         full_mask.append(mask)
 
-        print('orig(PGD) acc: {}'.format(np.sum(mask)/np.size(mask)))
+        print('orig(PGD) acc: {:.2f}'.format(np.sum(mask)/np.size(mask)*100))
 
         # eval detections
         y_fake_batch, mask_batch, x_input_alg_fake_batch = full_model.generate_fakes(y_batch, imp_batch_li)
@@ -289,20 +290,25 @@ with tf.Session() as sess:
 
         y_pred, x_batch_safe = full_model.infer(sess, x_batch, imp_batch_li, return_images=True)
         accuracy_infer_batch = np.mean(y_pred == y_batch)
-        print('infer acc: {}'.format(accuracy_infer_batch))
+        print('infer acc: {:.2f}'.format(accuracy_infer_batch*100))
 
         acc_infer.append(accuracy_infer_batch)
+        
+        safe_dict = {full_model.x_input: x_batch,
+                    full_model.x_input_alg: x_batch_safe,
+                    full_model.y_input: y_batch}
 
         correct_prediction = sess.run(full_model.alg_correct_prediction,
-                                      feed_dict=nat_dict)
+                                      feed_dict=safe_dict)
 
         print('safe acc: {}'.format(np.sum(correct_prediction)))
         safe_correct_num += np.sum(correct_prediction)
 
+        mask = np.array([True for _ in range(len(y_batch))])
         for _ in range(args.val_restarts):
 
             correct_prediction = sess.run(full_model.alg_pgd_correct_prediction,
-                                          feed_dict=nat_dict)
+                                          feed_dict=safe_dict)
 
             mask *= correct_prediction
 
@@ -311,7 +317,9 @@ with tf.Session() as sess:
 
         safe_full_mask.append(mask)
 
-        print('safe(PGD) acc: {}'.format(np.sum(mask)/np.size(mask)))
+        print('safe(PGD) acc: {:.2f}'.format(np.sum(mask)/np.size(mask)*100))
+
+        print()
 
     full_mask = np.concatenate(full_mask)
     safe_full_mask = np.concatenate(safe_full_mask)
