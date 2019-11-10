@@ -12,7 +12,7 @@ from __future__ import print_function
 import tensorflow as tf
 import numpy as np
 from pgd_attack import LinfPGDAttack
-#import time
+import time
 
 # import os
 
@@ -116,6 +116,7 @@ class Impenetrable(object):
         step = 1
         while self.imp_num_steps <= 0 or step <= self.imp_num_steps:
             print("step:", step)
+            start = time.time()
 
             # attack image
             grad_li = []
@@ -180,6 +181,9 @@ class Impenetrable(object):
             print("restored accuracy: {:.2f}%".format(res_corr/num_images*100))
             print("l2 distance: {:.2f}".format(l2_dist))
             print("res loss: {:.20f}".format(res_loss/num_images))
+
+            end = time.time()
+            print("train time: {:.4f}".format(end-start))
 
             x = x_res
 

@@ -13,7 +13,7 @@ import numpy as np
 
 from tensorflow.examples.tutorials.mnist import input_data
 
-from disc_model import Model as Safe_model
+from disc_model import Model_full as Safe_model
 from infer_target import Model as Model
 
 from utils import disc_file_name, load_imp_data
@@ -32,7 +32,6 @@ if __name__ == '__main__':
     parser.add_argument('--fail_only', action='store_true')
     parser.add_argument('--eval', action='store_true', help='use test set data. else use train set data.')
     parser.add_argument('--force_path', default='', type=str, help='if you want to manually select the folder')
-    parser.add_argument('--multi_class', action='store_true')
 
     # eval parameters
     parser.add_argument('--tf_random_seed', default=451760341, type=int)
@@ -85,15 +84,11 @@ full_model = Safe_model('eval', model, args)
 
 # set up metrics
 if args.c_loss:
-    total_loss = full_model.c_loss
-    accuracy_train = full_model.c_accuracy
-    accuracy_train_real = full_model.c_accuracy_real
-    accuracy_train_fake = full_model.c_accuracy_fake
+    total_loss = full_model.xent
+    accuracy_train = full_model.accuracy
 else:
-    total_loss = full_model.d_loss
-    accuracy_train = full_model.d_accuracy
-    accuracy_train_real = full_model.d_accuracy_real
-    accuracy_train_fake = full_model.d_accuracy_fake
+    total_loss = full_model.xent
+    accuracy_train = full_model.accuracy
 
 orig_model_acc = full_model.orig_accuracy
 
@@ -101,7 +96,7 @@ orig_model_acc = full_model.orig_accuracy
 if args.force_path:
     meta_name = args.force_path
 else:
-    meta_name = disc_file_name(args, multi_class=args.multi_class)
+    meta_name = disc_file_name(args, multi_class=True)
 print(meta_name)
 
 model_dir = MODEL_PATH + args.save_dir + '/' + meta_name
@@ -268,38 +263,31 @@ with tf.Session() as sess:
         print('orig(PGD) acc: {:.2f}'.format(np.sum(mask)/np.size(mask)*100))
 
         # eval detections
-        y_fake_batch, mask_batch, x_input_alg_fake_batch = full_model.generate_fakes(y_batch, imp_batch_li)
+        alg_batch_full = np.concatenate(imp_batch_li, axis=-1)
 
         nat_dict = {full_model.x_input: x_batch,
-                    full_model.x_input_alg: x_input_alg_fake_batch,
-                    full_model.y_input: y_batch,
-                    full_model.mask_input: mask_batch}
+                    full_model.x_input_alg: alg_batch_full,
+                    full_model.y_input: y_batch}
 
-        accuracy_batch, accuracy_real_batch, accuracy_fake_batch, \
+        accuracy_batch, \
             total_loss_batch, orig_model_acc_batch = \
-            sess.run([accuracy_train, accuracy_train_real, accuracy_train_fake, total_loss,
+            sess.run([accuracy_train, total_loss,
                       orig_model_acc],
                      feed_dict=nat_dict)
 
         print("train acc: {:.2f}".format(accuracy_batch*100))
-        print("train acc - real: {:.2f}".format(accuracy_real_batch*100))
-        print("train acc - fake: {:.2f}".format(accuracy_fake_batch*100))
 
         acc_train.append(accuracy_batch)
-        acc_train_real.append(accuracy_real_batch)
-        acc_train_fake.append(accuracy_fake_batch)
-
         y_pred, x_batch_safe = full_model.infer(sess, x_batch, imp_batch_li, return_images=True)
         accuracy_infer_batch = np.mean(y_pred == y_batch)
         print('infer acc: {:.2f}'.format(accuracy_infer_batch*100))
 
         acc_infer.append(accuracy_infer_batch)
         
-        safe_dict = {full_model.x_input: x_batch,
-                    full_model.x_input_alg: x_batch_safe,
+        safe_dict = {full_model.x_input: x_batch_safe,
                     full_model.y_input: y_batch}
 
-        correct_prediction = sess.run(full_model.alg_correct_prediction,
+        correct_prediction = sess.run(full_model.orig_correct_prediction,
                                       feed_dict=safe_dict)
 
         print('safe acc: {}'.format(np.sum(correct_prediction)))
@@ -307,8 +295,8 @@ with tf.Session() as sess:
 
         mask = np.array([True for _ in range(len(y_batch))])
         for _ in range(args.val_restarts):
-
-            correct_prediction = sess.run(full_model.alg_pgd_correct_prediction,
+            
+            correct_prediction = sess.run(full_model.orig_pgd_correct_prediction,
                                           feed_dict=safe_dict)
 
             mask *= correct_prediction
@@ -328,8 +316,5 @@ with tf.Session() as sess:
     print("orig accuracy: {:.2f}".format(orig_correct_num/np.size(full_mask)*100))
     print("orig(PGD) accuracy: {:.2f}".format(np.mean(full_mask)*100))
     print("train accuracy: {:.2f}".format(np.mean(acc_train)*100))
-    print("train accuracy - real: {:.2f}".format(np.mean(acc_train_real)*100))
-    print("train accuracy - fake: {:.2f}".format(np.mean(acc_train_fake)*100))
-    print("infer accuracy: {:.2f}".format(np.mean(acc_infer)*100))
     print("safe accuracy: {:.2f}".format(safe_correct_num/np.size(safe_full_mask)*100))
     print("safe(PGD) accuracy: {:.2f}".format(np.mean(safe_full_mask)*100))

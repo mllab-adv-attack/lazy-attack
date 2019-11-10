@@ -100,4 +100,4 @@ class Impenetrable(object):
             rho = 0.9
             self.new_rms_v = rho * self.rms_v + (1-rho) * tf.pow(self.grads, 2)
             self.new_x = self.x_input - self.imp_step_size * self.grads / (tf.sqrt(self.new_rms_v + 1e-7))
-            self.new_x = tf.clip_by_value(self.new_x)
+            self.new_x = tf.clip_by_value(self.new_x, 0, 255)

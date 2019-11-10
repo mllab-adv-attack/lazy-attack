@@ -56,7 +56,7 @@ def infer_file_name(args):
     return meta_name
 
 
-def disc_file_name(args):
+def disc_file_name(args, multi_class=False):
     meta_name = 'nat' if args.model_dir == 'naturally_trained' else 'adv'
     meta_name += '_lr' + str(args.d_lr)
     meta_name += '_delta' + str(args.delta)
@@ -67,6 +67,7 @@ def disc_file_name(args):
     meta_name += ('_drop' + str(args.dropout_rate)) if args.dropout else ''
     meta_name += '_patch' if args.patch else ''
     meta_name += '_c' if args.c_loss else ''
+    meta_name += '_multiclass' if multi_class else ''
     return meta_name
 
 

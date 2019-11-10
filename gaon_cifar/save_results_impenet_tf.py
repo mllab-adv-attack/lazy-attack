@@ -141,7 +141,7 @@ if __name__ == '__main__':
         # Adjust num_eval_examples. Iterate over the samples batch-by-batch
         num_eval_examples = len(x_full_batch)
 
-        eval_batch_size = min(100, num_eval_examples)
+        eval_batch_size = min(1, num_eval_examples)
         assert num_eval_examples < 100 or num_eval_examples%100==0
 
         num_batches = int(math.ceil(num_eval_examples / eval_batch_size))
