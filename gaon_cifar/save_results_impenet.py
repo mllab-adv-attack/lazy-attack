@@ -99,7 +99,7 @@ if __name__ == '__main__':
         # Set number of examples to evaluate
         num_eval_examples = args.sample_size
 
-        indices = [i for i in range(args.sample_size + args.bstart)]
+        indices = [i for i in range(max(args.sample_size + args.bstart, 10000))]
 
         # load data
         bstart = args.bstart
