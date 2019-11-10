@@ -175,6 +175,8 @@ if __name__ == '__main__':
             rms_v = np.zeros_like(x_batch)
 
             x = np.copy(x_batch)
+            x_lower = x_batch - args.imp_delta
+            x_upper = x_batch + args.imp_delta
 
             for i in range(args.imp_num_steps):
                 start = time.time()
@@ -196,13 +198,13 @@ if __name__ == '__main__':
                 losses = losses / args.pgd_restarts
 
                 # update image
-                rms_v = rho * rms_v + (1-rho) * (grads**2)
-                x = x - args.imp_step_size * grads / (np.sqrt(rms_v + 1e-7))
-                
-                x = np.clip(x, 0, 255)
+                x, rms_v = sess.run([impenet.new_x, impenet.new_rms_v],
+                                    feed_dict={impenet.x_input: x,
+                                               impenet.rms_v: rms_v,
+                                               impenet.grads: grads})
 
                 if args.imp_delta > 0:
-                    x = np.clip(x, x_batch - args.imp_delta, x_batch + args.imp_delta)
+                    x = np.clip(x, x_lower, x_upper)
                 end = time.time()
 
                 print("step: {}, acc: {}, loss: {:.6f}, train time: {:.4f}".format(i, accuracy*100, losses, end-start))
