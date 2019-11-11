@@ -15,6 +15,7 @@ import numpy as np
 from utils import imp_file_name
 
 from tensorflow.examples.tutorials.mnist import input_data
+from model import Model
 
 # import os
 
@@ -118,8 +119,6 @@ if __name__ == '__main__':
 
     # make file name
     meta_name = imp_file_name(args)
-
-    from model import Model
 
     model_file = tf.train.latest_checkpoint('models/' + args.model_dir)
     if model_file is None:

@@ -39,7 +39,7 @@ if __name__ == '__main__':
     parser.add_argument('--eval_batch_size', default=100, type=int)
     parser.add_argument('--eval_on_cpu', action='store_true')
     parser.add_argument('--delta', default=0.3, type=float)
-    parser.add_argument('--sample_size', default=1000, type=int)
+    parser.add_argument('--sample_size', default=10000, type=int)
     parser.add_argument('--bstart', default=0, type=int)
     parser.add_argument('--train_mode', action='store_true', help='use train mode neural nets')
 

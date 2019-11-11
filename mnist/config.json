@@ -1,6 +1,9 @@
 {
   "_comment": "===== MODEL CONFIGURATION =====",
   "model_dir": "models/a_very_robust_model",
+  
+  "_comment": "===== MODEL CONFIGURATION =====",
+  "mixup_model_dir": "models/mixup",
 
   "_comment": "===== TRAINING CONFIGURATION =====",
   "random_seed": 4557077,
