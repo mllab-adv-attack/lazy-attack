@@ -95,6 +95,7 @@ if __name__ == '__main__':
     parser.add_argument('--imp_adagrad', action='store_true')
     parser.add_argument('--imp_no_sign', action='store_true')
     parser.add_argument('--label_infer', action='store_true')
+    parser.add_argument('--nat_label_infer', action='store_true', help='label infer with natural model')
     parser.add_argument('--eval_batch_size', default=100, type=int)
     # PGD (evaluation)
     parser.add_argument('--val_step_per', default=0, help="validation per val_step. =< 0 means no eval", type=int)
@@ -124,6 +125,11 @@ if __name__ == '__main__':
     if model_file is None:
         print('No model found')
         sys.exit()
+    
+    nat_model_file = tf.train.latest_checkpoint('models/' + 'naturally_trained')
+    if nat_model_file is None:
+        print('No model found')
+        sys.exit()
 
     model = Model()
     impenet = Impenetrable(model,
@@ -136,7 +142,10 @@ if __name__ == '__main__':
     configs.gpu_options.allow_growth = True
     with tf.Session(config=configs) as sess:
         # Restore the checkpoint
-        saver.restore(sess, model_file)
+        if args.nat_label_infer:
+            saver.restore(sess, nat_model_file)
+        else:
+            saver.restore(sess, model_file)
 
         # Set number of examples to evaluate
         num_eval_examples = args.sample_size
@@ -183,7 +192,7 @@ if __name__ == '__main__':
             x_candid = mnist.test.images[indices[bstart:bstart + 100]]
             y_candid = mnist.test.labels[indices[bstart:bstart + 100]]
 
-            mask, logits = sess.run([model.correct_prediction, model.pre_softmax],
+            y_pred, mask, logits = sess.run([model.predictions, model.correct_prediction, model.pre_softmax],
                                     feed_dict={model.x_input: x_candid,
                                                model.y_input: y_candid})
             print(sum(mask))
@@ -194,11 +203,13 @@ if __name__ == '__main__':
             if bstart == args.bstart:
                 x_full_batch = x_candid[:min(num_eval_examples, len(x_candid))]
                 y_full_batch = y_candid[:min(num_eval_examples, len(y_candid))]
+                y_pred_full_batch = y_pred[:min(num_eval_examples, len(y_pred))]
                 logit_full_batch = logits[:min(num_eval_examples, len(logits))]
             else:
                 index = min(num_eval_examples - len(x_full_batch), len(x_candid))
                 x_full_batch = np.concatenate((x_full_batch, x_candid[:index]))
                 y_full_batch = np.concatenate((y_full_batch, y_candid[:index]))
+                y_pred_full_batch = np.concatenate((y_pred_full_batch, y_pred[:index]))
                 logit_full_batch = np.concatenate((logit_full_batch, logits[:index]))
             bstart += 100
             if (len(x_full_batch) >= num_eval_examples) or bstart >= len(indices):
@@ -211,6 +222,10 @@ if __name__ == '__main__':
         assert num_eval_examples < args.eval_batch_size or num_eval_examples%args.eval_batch_size==0
 
         num_batches = int(math.ceil(num_eval_examples / eval_batch_size))
+        
+        # return to original model
+        if args.nat_label_infer:
+            saver.restore(sess, model_file)
 
         print('Iterating over {} batches'.format(num_batches))
 
@@ -227,17 +242,17 @@ if __name__ == '__main__':
 
             x_batch = x_full_batch[bstart:bend, :]
             y_batch = y_full_batch[bstart:bend]
+            y_pred_batch = y_pred_full_batch[bstart:bend]
+            cur_corr = y_pred_batch == y_batch
 
             dict_orig = {model.x_input: x_batch,
                         model.y_input: y_batch}
-            cur_corr, y_pred_batch = sess.run([model.num_correct, model.predictions],
-                                              feed_dict=dict_orig)
 
-            print('original Accuracy: {:.2f}%'.format(100.0 * cur_corr/len(x_batch)))
+            print('original Accuracy: {:.2f}%'.format(100.0 * np.mean(cur_corr)))
 
             # run our algorithm
             print('fortifying image ', bstart)
-            x_batch_imp, mask_batch_imp = impenet.fortify(x_batch, y_pred_batch if args.label_infer else y_batch, sess)
+            x_batch_imp, mask_batch_imp = impenet.fortify(x_batch, y_pred_batch if (args.label_infer or args.nat_label_infer) else y_batch, sess)
             print()
 
             # evaluation

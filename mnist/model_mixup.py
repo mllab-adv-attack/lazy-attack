@@ -26,7 +26,7 @@ class Model(object):
         y_one_hot = tf.one_hot(self.y_input, 10, on_value=1.0, off_value=0.0, dtype=tf.float32)
 
         # mixup
-        x, y_one_hot = self._auto_mixup(self.x_input, y_one_hot, layer_mix, lam)
+        x, y_one_hot = self._auto_mixup(self.x_input, y_one_hot, 0, layer_mix, lam)
 
         #self.x_image = tf.reshape(self.x_input, [-1, 28, 28, 1])
         self.x_image = self.x_input
@@ -39,7 +39,7 @@ class Model(object):
         h_pool1 = self._max_pool_2x2(h_conv1)
         
         # mixup
-        h_mix1, y_one_hot = self._auto_mixup(h_pool1, y_one_hot, layer_mix, lam)
+        h_mix1, y_one_hot = self._auto_mixup(h_pool1, y_one_hot, 1, layer_mix, lam)
 
         # second convolutional layer
         W_conv2 = self._weight_variable([5,5,32,64])
@@ -49,7 +49,7 @@ class Model(object):
         h_pool2 = self._max_pool_2x2(h_conv2)
         
         # mixup
-        h_mix2, y_one_hot = self._auto_mixup(h_pool2, y_one_hot, layer_mix, lam)
+        h_mix2, y_one_hot = self._auto_mixup(h_pool2, y_one_hot, 2, layer_mix, lam)
 
         # first fully connected layer
         W_fc1 = self._weight_variable([7 * 7 * 64, 1024])
@@ -66,8 +66,8 @@ class Model(object):
 
         self.softmax = tf.nn.softmax(self.pre_softmax)
 
-        self.y_xent = tf.nn.sparse_softmax_cross_entropy_with_logits(
-            labels=self.y_input, logits=self.pre_softmax)
+        self.y_xent = tf.nn.softmax_cross_entropy_with_logits(
+            labels=y_one_hot, logits=self.pre_softmax)
 
         self.xent = tf.reduce_sum(self.y_xent)
 
@@ -114,9 +114,9 @@ class Model(object):
     def _no_mixup_data(x, y):
         return x, y
 
-    def _auto_mixup(self, x, y, layer_mix, lam):
+    def _auto_mixup(self, x, y, i, layer_mix, lam):
         new_x, new_y = tf.cond(
-            tf.equal(layer_mix, 0),
+            tf.equal(layer_mix, i),
             lambda: self._mixup_data(x, y, lam),
             lambda: self._no_mixup_data(x, y)
         )
