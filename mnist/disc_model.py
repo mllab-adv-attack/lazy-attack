@@ -79,103 +79,87 @@ class Model(object):
 
         # basic inference
         with tf.variable_scope('', reuse=tf.AUTO_REUSE):
+
+            # scale-up input noise
             self.alg_noise = (self.x_input_alg-self.x_input)/self.delta
 
+            # Discriminator loss
             self.d_out = self.discriminator(self.x_input, self.alg_noise)
-            #print(self.d_out.get_shape().as_list())
-
             self.d_mean_out = tf.reduce_mean(tf.layers.flatten(self.d_out), axis=1)
-            #print(self.d_mean_out.get_shape().as_list())
-            #print(self.mask_input.get_shape().as_list())
-            
-            #self.d_loss = tf.reduce_mean(tf.losses.mean_squared_error(self.d_out, self.mask_input))
-            self.d_loss = tf.reduce_mean(tf.losses.mean_squared_error(self.d_mean_out, self.mask_input))
-            self.c_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=self.mask_input, logits=self.d_mean_out))
-
             self.d_decisions = tf.where(self.d_mean_out >= 0.5, real, fake)
-            #print(self.d_decisions.get_shape().as_list())
+
+            self.d_loss = tf.reduce_mean(tf.losses.mean_squared_error(self.d_mean_out, self.mask_input))
+
+            # Classification loss
             self.c_predictions = tf.nn.sigmoid(self.d_mean_out)
-            #print(self.c_predictions.get_shape().as_list())
             self.c_decisions = tf.where(self.c_predictions >= 0.5, real, fake)
-            #print(self.c_decisions.get_shape().as_list())
 
-            # d accuracy
-            self.d_num_correct_real = tf.reduce_sum(self.d_decisions * self.mask_input)
-            self.d_num_correct_fake = tf.reduce_sum((1-self.d_decisions) * (1-self.mask_input))
+            self.c_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=self.mask_input,
+                                                                                 logits=self.d_mean_out))
 
-            self.d_accuracy_real = self.d_num_correct_real / tf.reduce_sum(self.mask_input)
-            self.d_accuracy_fake = self.d_num_correct_fake / tf.reduce_sum(1-self.mask_input)
-
-            self.d_num_correct = self.d_num_correct_real + self.d_num_correct_fake
-            self.d_accuracy = tf.reduce_mean(self.d_decisions * self.mask_input +
-                                             (1-self.d_decisions) * (1-self.mask_input))
+            # Discriminator accuracy
+            self.d_num_correct_real, self.d_num_correct_fake, \
+                self.d_accuracy_real, self.d_accuracy_fake, \
+                self.d_num_correct, self.d_accuracy = \
+                self._evaluate(self.d_decisions, self.mask_input)
             
-            # c accuracy
-            self.c_num_correct_real = tf.reduce_sum(self.c_decisions * self.mask_input)
-            self.c_num_correct_fake = tf.reduce_sum((1-self.c_decisions) * (1-self.mask_input))
-
-            self.c_accuracy_real = self.c_num_correct_real / tf.reduce_sum(self.mask_input)
-            self.c_accuracy_fake = self.c_num_correct_fake / tf.reduce_sum(1-self.mask_input)
-
-            self.c_num_correct = self.c_num_correct_real + self.c_num_correct_fake
-            self.c_accuracy = tf.reduce_mean(self.c_decisions * self.mask_input +
-                                             (1-self.c_decisions) * (1-self.mask_input))
+            # Classification accuracy
+            self.c_num_correct_real, self.c_num_correct_fake, \
+                self.c_accuracy_real, self.c_accuracy_fake, \
+                self.c_num_correct, self.c_accuracy = \
+                self._evaluate(self.c_decisions, self.mask_input)
 
         # sanity check
         with tf.variable_scope('', reuse=tf.AUTO_REUSE):
             # eval original image (clean)
-            orig_pre_softmax = self.model(self.x_input)
-
-            orig_predictions = tf.argmax(orig_pre_softmax, 1)
-            self.orig_correct_prediction = tf.equal(orig_predictions, self.y_input)
-            self.orig_accuracy = tf.reduce_mean(
-                tf.cast(self.orig_correct_prediction, tf.float32))
-
-            orig_y_xent = tf.nn.sparse_softmax_cross_entropy_with_logits(
-                logits=orig_pre_softmax, labels=self.y_input)
-            self.orig_mean_xent = tf.reduce_mean(orig_y_xent)
+            self.orig_correct_prediction, self.orig_accuracy, self.orig_mean_xent = \
+                self._sanity_check(self.x_input, self.y_input)
 
             # eval original image (PGD)
             x_input_pgd = PGD(self.x_input, self.y_input, self.model, self.attack_params)
-            
-            orig_pgd_pre_softmax = self.model(x_input_pgd)
 
-            orig_pgd_predictions = tf.argmax(orig_pgd_pre_softmax, 1)
-            self.orig_pgd_correct_prediction = tf.equal(orig_pgd_predictions, self.y_input)
-            self.orig_pgd_accuracy = tf.reduce_mean(
-                tf.cast(self.orig_pgd_correct_prediction, tf.float32))
-
-            orig_pgd_y_xent = tf.nn.sparse_softmax_cross_entropy_with_logits(
-                logits=orig_pgd_pre_softmax, labels=self.y_input)
-            self.orig_pgd_mean_xent = tf.reduce_mean(orig_pgd_y_xent)
+            self.orig_pgd_correct_prediction, self.orig_pgd_accuracy, self.orig_pgd_mean_xent = \
+                self._sanity_check(x_input_pgd, self.y_input)
             
             # eval alg image (clean)
-            alg_pre_softmax = self.model(self.x_input_alg)
-
-            alg_predictions = tf.argmax(alg_pre_softmax, 1)
-            self.alg_correct_prediction = tf.equal(alg_predictions, self.y_input)
-            self.alg_accuracy = tf.reduce_mean(
-                tf.cast(self.alg_correct_prediction, tf.float32))
-
-            alg_y_xent = tf.nn.sparse_softmax_cross_entropy_with_logits(
-                logits=alg_pre_softmax, labels=self.y_input)
-            self.alg_mean_xent = tf.reduce_mean(alg_y_xent)
+            self.alg_correct_prediction, self.alg_accuracy, self.alg_mean_xent = \
+                self._sanity_check(self.x_input_alg, self.y_input)
 
             # eval alg image (PGD)
-            x_input_pgd = PGD(self.x_input_alg, self.y_input, self.model, self.attack_params)
+            x_alg_pgd = PGD(self.x_input_alg, self.y_input, self.model, self.attack_params)
             
-            alg_pgd_pre_softmax = self.model(x_input_pgd)
+            self.alg_pgd_correct_prediction, self.alg_pgd_accuracy, self.alg_pgd_mean_xent = \
+                self._sanity_check(x_alg_pgd, self.y_input)
 
-            alg_pgd_predictions = tf.argmax(alg_pgd_pre_softmax, 1)
-            self.alg_pgd_correct_prediction = tf.equal(alg_pgd_predictions, self.y_input)
-            self.alg_pgd_accuracy = tf.reduce_mean(
-                tf.cast(self.alg_pgd_correct_prediction, tf.float32))
+    @staticmethod
+    def _evaluate(decisions, mask):
+        num_correct_real = tf.reduce_sum(decisions, mask)
+        num_correct_fake = tf.reduce_sum((1-decisions) * (1-mask))
 
-            alg_pgd_y_xent = tf.nn.sparse_softmax_cross_entropy_with_logits(
-                logits=alg_pgd_pre_softmax, labels=self.y_input)
-            self.alg_pgd_mean_xent = tf.reduce_mean(alg_pgd_y_xent)
+        accuracy_real = num_correct_real / tf.reduce_sum(mask)
+        accuracy_fake = num_correct_fake / tf.reduce_sum(1-mask)
 
-    def generate_fakes(self, y, x_input_alg_li):
+        num_correct = num_correct_real + num_correct_fake
+        accuracy = tf.reduce_mean(decisions * mask + (1-decisions) * (1-mask))
+
+        return num_correct_real, num_correct_fake, accuracy_real, accuracy_fake, num_correct, accuracy
+
+    def _sanity_check(self, x, y):
+        pre_softmax = self.model(x)
+
+        predictions = tf.argmax(pre_softmax, 1)
+        correct_prediction = tf.equal(predictions, y)
+        accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+
+        y_xent = tf.nn.sparse_softmax_cross_entropy_with_logits(
+            logits=pre_softmax, labels=y
+        )
+        mean_xent = tf.reduce_mean(y_xent)
+
+        return correct_prediction, accuracy, mean_xent
+
+    @staticmethod
+    def generate_fakes(y, x_input_alg_li):
         # generate always not-equal random labels
         fake = np.copy(y)
 
@@ -220,6 +204,7 @@ class Model(object):
             return d_preds, infer_alg
 
         return d_preds
+
 
 class Model_full(object):
 
@@ -266,10 +251,6 @@ class Model_full(object):
             self.alg_noise = (self.x_input_alg-self.x_input)/self.delta
 
             self.d_out = self.discriminator(self.x_input, self.alg_noise)
-            #print(self.d_out.get_shape().as_list())
-
-            #print(self.d_mean_out.get_shape().as_list())
-            #print(self.mask_input.get_shape().as_list())
 
             self.y_xent = tf.nn.sparse_softmax_cross_entropy_with_logits(
                 labels=self.y_input, logits=self.d_out)
@@ -285,30 +266,28 @@ class Model_full(object):
         # sanity check
         with tf.variable_scope('', reuse=tf.AUTO_REUSE):
             # eval original image (clean)
-            orig_pre_softmax = self.model(self.x_input)
-
-            orig_predictions = tf.argmax(orig_pre_softmax, 1)
-            self.orig_correct_prediction = tf.equal(orig_predictions, self.y_input)
-            self.orig_accuracy = tf.reduce_mean(
-                tf.cast(self.orig_correct_prediction, tf.float32))
-
-            orig_y_xent = tf.nn.softmax_cross_entropy_with_logits(
-                logits=orig_pre_softmax, labels=self.y_input)
-            self.orig_mean_xent = tf.reduce_mean(orig_y_xent)
+            self.orig_correct_prediction, self.orig_accuracy, self.orig_mean_xent = \
+                self._sanity_check(self.x_input, self.y_input)
 
             # eval original image (PGD)
             x_input_pgd = PGD(self.x_input, self.y_input, self.model, self.attack_params)
-            
-            orig_pgd_pre_softmax = self.model(x_input_pgd)
 
-            orig_pgd_predictions = tf.argmax(orig_pgd_pre_softmax, 1)
-            self.orig_pgd_correct_prediction = tf.equal(orig_pgd_predictions, self.y_input)
-            self.orig_pgd_accuracy = tf.reduce_mean(
-                tf.cast(self.orig_pgd_correct_prediction, tf.float32))
+            self.orig_pgd_correct_prediction, self.orig_pgd_accuracy, self.orig_pgd_mean_xent = \
+                self._sanity_check(x_input_pgd, self.y_input)
 
-            orig_pgd_y_xent = tf.nn.sparse_softmax_cross_entropy_with_logits(
-                logits=orig_pgd_pre_softmax, labels=self.y_input)
-            self.orig_pgd_mean_xent = tf.reduce_mean(orig_pgd_y_xent)
+    def _sanity_check(self, x, y):
+        pre_softmax = self.model(x)
+
+        predictions = tf.argmax(pre_softmax, 1)
+        correct_prediction = tf.equal(predictions, y)
+        accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+
+        y_xent = tf.nn.sparse_softmax_cross_entropy_with_logits(
+            logits=pre_softmax, labels=y
+        )
+        mean_xent = tf.reduce_mean(y_xent)
+
+        return correct_prediction, accuracy, mean_xent
 
     def infer(self, sess, x_input, x_input_alg_li, return_images=False):
         x_input_alg_full = np.concatenate(x_input_alg_li, axis=-1)
