@@ -18,7 +18,7 @@ class Model(object):
           mode: One of 'train' and 'eval'.
         """
         self.mode = mode
-        self.mixup_alpha = 2.0
+        self.mixup_alpha = mixup_alpha
         self._build_model()
 
     def add_internal_summaries(self):
@@ -28,7 +28,7 @@ class Model(object):
         """Map a stride scalar to the stride array for tf.nn.conv2d."""
         return [1, stride, stride, 1]
 
-    def _build_model(self, x_input, y_input):
+    def _build_model(self):
         assert self.mode == 'train' or self.mode == 'eval'
         """Build the core model within the graph."""
         with tf.variable_scope('input', reuse=tf.AUTO_REUSE):
@@ -48,13 +48,10 @@ class Model(object):
             self.y_input = tf.placeholder(tf.int64, shape=None)
             y_one_hot = tf.one_hot(self.y_input, 10, on_value=1.0, off_value=0.0, dtype=tf.float32)
 
-            self.y_input2 = tf.placeholder(tf.float32, shape=[None, 10])
-            self.y_input2_argmax = tf.argmax(self.y_input2, axis=1)
-
             input_standardized = tf.map_fn(lambda img: tf.image.per_image_standardization(img),
                                            self.x_input)
             # mixup
-            x, y_one_hot = self._auto_mixup(input_standardized, y_one_hot, layer_mix, lam)
+            x, y_one_hot = self._auto_mixup(input_standardized, y_one_hot, 0, layer_mix, lam)
 
             x = self._conv('init_conv', x, 3, 3, 16, self._stride_arr(1))
 
@@ -78,7 +75,7 @@ class Model(object):
                 x = res_func(x, filters[1], filters[1], self._stride_arr(1), False)
 
         # mixup
-        x, y_one_hot = self._auto_mixup(x, y_one_hot, layer_mix, lam)
+        x, y_one_hot = self._auto_mixup(x, y_one_hot, 1, layer_mix, lam)
 
         with tf.variable_scope('unit_2_0'):
             x = res_func(x, filters[1], filters[2], self._stride_arr(strides[1]),
@@ -88,7 +85,7 @@ class Model(object):
                 x = res_func(x, filters[2], filters[2], self._stride_arr(1), False)
 
         # mixup
-        x, y_one_hot = self._auto_mixup(x, y_one_hot, layer_mix, lam)
+        x, y_one_hot = self._auto_mixup(x, y_one_hot, 2, layer_mix, lam)
 
         with tf.variable_scope('unit_3_0'):
             x = res_func(x, filters[2], filters[3], self._stride_arr(strides[2]),
@@ -112,11 +109,6 @@ class Model(object):
             tf.cast(self.correct_prediction, tf.int32))
         self.accuracy = tf.reduce_mean(
             tf.cast(self.correct_prediction, tf.float32))
-        self.correct_prediction2 = tf.equal(self.predictions, self.y_input2_argmax)
-        self.num_correct2 = tf.reduce_sum(
-            tf.cast(self.correct_prediction2, tf.int32))
-        self.accuracy2 = tf.reduce_mean(
-            tf.cast(self.correct_prediction2, tf.float32))
 
         with tf.variable_scope('costs'):
             self.y_xent = tf.nn.sparse_softmax_cross_entropy_with_logits(
@@ -127,7 +119,7 @@ class Model(object):
 
         with tf.variable_scope('costs2'):
             self.y_xent2 = tf.nn.softmax_cross_entropy_with_logits(
-                logits=self.pre_softmax, labels=self.y_input2)
+                logits=self.pre_softmax, labels=y_one_hot)
             self.xent2 = tf.reduce_sum(self.y_xent2, name='y_xent2')
             self.mean_xent2 = tf.reduce_mean(self.y_xent2)
             self.weight_decay_loss = self._decay()
@@ -242,9 +234,9 @@ class Model(object):
     def _no_mixup_data(x, y):
         return x, y
 
-    def _auto_mixup(self, x, y, layer_mix, lam):
+    def _auto_mixup(self, x, y, i, layer_mix, lam):
         new_x, new_y = tf.cond(
-            tf.equal(layer_mix, 0),
+            tf.equal(layer_mix, i),
             lambda: self._mixup_data(x, y, lam),
             lambda: self._no_mixup_data(x, y)
         )

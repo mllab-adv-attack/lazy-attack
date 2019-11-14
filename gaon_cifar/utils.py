@@ -20,6 +20,8 @@ def imp_file_name(args):
         + ('_' + str(args.imp_random_seed)) \
         + ('_' + str(args.imp_pp))
     meta_name += ('_infer' if args.label_infer else '')
+    meta_name += ('_nat_infer' if args.nat_label_infer else '')
+    meta_name += ('_cus_infer' if args.custom_label_infer else '')
     meta_name += ('_rep' if args.imp_rep else '')
     meta_name += ('_adam' if args.imp_adam else '') + ('_rms' if args.imp_rms else '') + ('_adag' if args.imp_adagrad else '')
     meta_name += ('_nosign' if args.imp_no_sign else '')

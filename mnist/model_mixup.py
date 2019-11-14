@@ -11,22 +11,23 @@ import tensorflow_probability as tfp
 
 class Model(object):
     def __init__(self, mode='train', mixup_alpha = 2.0):
-        self.mode='train' if mode=='train' else 'eval'
+        train = (mode=='train')
 
-        if self.mode=='train':
+        if train:
             layer_mix = tf.random.uniform([], 0, 3, dtype=tf.float32)
-        else:
-            layer_mix = tf.constant(-1)
 
-        dist = tfp.distributions.Beta(mixup_alpha, mixup_alpha)
-        lam = dist.sample()
+            dist = tfp.distributions.Beta(mixup_alpha, mixup_alpha)
+            lam = dist.sample()
         
         self.x_input = tf.placeholder(tf.float32, shape=[None, 28, 28, 1])
         self.y_input = tf.placeholder(tf.int64, shape=[None])
         y_one_hot = tf.one_hot(self.y_input, 10, on_value=1.0, off_value=0.0, dtype=tf.float32)
 
         # mixup
-        x, y_one_hot = self._auto_mixup(self.x_input, y_one_hot, 0, layer_mix, lam)
+        if train:
+            x, y_one_hot = self._auto_mixup(self.x_input, y_one_hot, 0, layer_mix, lam)
+        else:
+            x = self.x_input
 
         #self.x_image = tf.reshape(self.x_input, [-1, 28, 28, 1])
         self.x_image = self.x_input
@@ -39,7 +40,10 @@ class Model(object):
         h_pool1 = self._max_pool_2x2(h_conv1)
         
         # mixup
-        h_mix1, y_one_hot = self._auto_mixup(h_pool1, y_one_hot, 1, layer_mix, lam)
+        if train:
+            h_mix1, y_one_hot = self._auto_mixup(h_pool1, y_one_hot, 1, layer_mix, lam)
+        else:
+            h_mix1 = h_pool1
 
         # second convolutional layer
         W_conv2 = self._weight_variable([5,5,32,64])
@@ -49,13 +53,16 @@ class Model(object):
         h_pool2 = self._max_pool_2x2(h_conv2)
         
         # mixup
-        h_mix2, y_one_hot = self._auto_mixup(h_pool2, y_one_hot, 2, layer_mix, lam)
+        if train:
+            h_mix2, y_one_hot = self._auto_mixup(h_pool2, y_one_hot, 2, layer_mix, lam)
+        else:
+            h_mix2 = h_pool2
 
         # first fully connected layer
         W_fc1 = self._weight_variable([7 * 7 * 64, 1024])
         b_fc1 = self._bias_variable([1024])
 
-        h_pool2_flat = tf.reshape(h_pool2, [-1, 7 * 7 * 64])
+        h_pool2_flat = tf.reshape(h_mix2, [-1, 7 * 7 * 64])
         h_fc1 = tf.nn.relu(tf.matmul(h_pool2_flat, W_fc1) + b_fc1)
 
         # output layer

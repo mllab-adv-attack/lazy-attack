@@ -122,7 +122,6 @@ def result(x_imp, model, sess, x_full_batch, y_full_batch, final_name, params):
     print('nat Accuracy: {:.2f}%'.format(100.0 * accuracy))
 
     total_corr = 0
-    '''
     for ibatch in range(num_batches):
         bstart = ibatch * eval_batch_size
         bend = min(bstart + eval_batch_size, num_eval_examples)
@@ -133,9 +132,7 @@ def result(x_imp, model, sess, x_full_batch, y_full_batch, final_name, params):
         total_corr += cur_corr
 
     accuracy = total_corr / num_eval_examples
-    '''
     
-    accuracy = 0
     print('nat(PGD) Accuracy: {:.2f}%'.format(100.0 * accuracy))
 
     total_corr = 0

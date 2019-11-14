@@ -10,33 +10,76 @@ from __future__ import print_function
 import math
 import tensorflow as tf
 import numpy as np
+import sys
 
 from tensorflow.examples.tutorials.mnist import input_data
 from utils import load_imp_data
 
 from pgd_attack import LinfPGDAttack
 
+FORCE_DIR = './arr_main/'
+SAVE_DIR = './arr_save/'
 
 def merge(args):
 
-    x_imp = load_imp_data(args, args.eval, args.target)
+    if args.force_path:
+        x_org = []
+        x_imp = []
+        mask = []
+        y = []
 
-    mnist = input_data.read_data_sets('MNIST_data', one_hot=False, validation_size=0, reshape=False)
-    mnist = mnist.test if args.eval else mnist.train
-    x_org = mnist.images
-    y = mnist.labels
+        batch_size = args.batch_size
+        sample_size = args.sample_size
+        num_batches = sample_size//batch_size
+        bstart = args.bstart
+        
 
-    x_org = x_org[args.bstart: args.sample_size, ...]
-    x_imp = x_imp[args.bstart: args.sample_size, ...]
-    y = y[args.bstart: args.sample_size, ...]
+        for i in range(num_batches):
+            full_name = FORCE_DIR + args.force_path + '_' + str(bstart) + '_' + str(batch_size)
+            org_full_name = full_name + '_x_org.npy'
+            imp_full_name = full_name + '_x_imp.npy'
+            mask_full_name = full_name + '_mask_imp.npy'
+            y_full_name = full_name + '_y.npy'
 
-    '''
-    np.save(final_name + '_x_org.npy', x_org)
-    np.save(final_name + '_x_imp.npy', x_imp)
-    np.save(final_name + '_y.npy', y)
+            x_org_batch = np.load(org_full_name)
+            x_imp_batch = np.load(imp_full_name)
+            mask_batch = np.load(mask_full_name)
+            y_batch = np.load(y_full_name)
 
-    print("saved at:", final_name)
-    '''
+            x_org.append(x_org_batch)
+            x_imp.append(x_imp_batch)
+            mask.append(mask_batch)
+            y.append(y_batch)
+
+            bstart += batch_size
+
+        x_org = np.concatenate(x_org)
+        x_imp = np.concatenate(x_imp)
+        mask = np.concatenate(mask)
+        y = np.concatenate(y)
+
+        final_name = SAVE_DIR + args.force_path + '_' + str(args.bstart) + '_' + str(sample_size)
+        
+        np.save(final_name + '_x_org.npy', x_org)
+        np.save(final_name + '_x_imp.npy', x_imp)
+        np.save(final_name + '_mask.npy', mask)
+        np.save(final_name + '_y.npy', y)
+
+        print("saved at:", final_name)
+    
+    else:
+
+        x_imp = load_imp_data(args, args.eval, args.target)
+
+        mnist = input_data.read_data_sets('MNIST_data', one_hot=False, validation_size=0, reshape=False)
+        mnist = mnist.test if args.eval else mnist.train
+        x_org = mnist.images
+        y = mnist.labels
+
+        x_org = x_org[args.bstart: args.sample_size, ...]
+        x_imp = x_imp[args.bstart: args.sample_size, ...]
+        y = y[args.bstart: args.sample_size, ...]
+
 
     return x_org, x_imp, y
 
@@ -79,6 +122,7 @@ def result(x_imp, model, sess, x_full_batch, y_full_batch, args):
     eval_batch_size = min(num_eval_examples, 100)
     num_batches = int(math.ceil(num_eval_examples / eval_batch_size))
     imp_loss_li = []
+    #imp_clean_mask = []
 
     total_corr = 0
     for ibatch in range(num_batches):
@@ -125,8 +169,13 @@ def result(x_imp, model, sess, x_full_batch, y_full_batch, args):
                      feed_dict=dict_adv)
         total_corr += cur_corr
         accuracy = total_corr / num_eval_examples
+        #imp_clean_mask.append(correct_prediction)
 
     print('imp Accuracy: {:.2f}%'.format(100.0 * accuracy))
+
+    #imp_clean_mask = np.concatenate(imp_clean_mask)
+    #np.save('nat_label_infer.npy', imp_clean_mask)
+    #sys.exit()
 
     total_corr = 0
     imp_mask = []
@@ -161,13 +210,14 @@ def result(x_imp, model, sess, x_full_batch, y_full_batch, args):
 if __name__ == '__main__':
     import argparse
     import json
-    import sys
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--model_dir', default='naturally_trained', type=str)
+    parser.add_argument('--model_dir', default='adv_trained', type=str)
     parser.add_argument('--bstart', default=0, type=int)
-    parser.add_argument('--sample_size', default=1000, type=int)
+    parser.add_argument('--sample_size', default=10000, type=int)
+    parser.add_argument('--batch_size', default=1000, type=int)
     parser.add_argument('--target', default=-1, type=int)
+    parser.add_argument('--force_path', default='', type=str)
     parser.add_argument('--load_arr', default='./mnist_data/', type=str)
     parser.add_argument('--delta', default=0.3, type=float)
     parser.add_argument('--eval', action='store_true')

@@ -156,6 +156,7 @@ if __name__ == '__main__':
                 mask = y_full_batch == args.source
                 x_full_batch = x_full_batch[mask]
                 y_full_batch = y_full_batch[mask]
+                print(len(y_full_batch))
             bstart += 100
             if (len(x_full_batch) >= num_eval_examples) or bstart >= len(indices):
                 break

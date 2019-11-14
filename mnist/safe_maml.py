@@ -96,6 +96,7 @@ if __name__ == '__main__':
     parser.add_argument('--imp_no_sign', action='store_true')
     parser.add_argument('--label_infer', action='store_true')
     parser.add_argument('--nat_label_infer', action='store_true', help='label infer with natural model')
+    parser.add_argument('--custom_label_infer', default='', type=str)
     parser.add_argument('--eval_batch_size', default=100, type=int)
     # PGD (evaluation)
     parser.add_argument('--val_step_per', default=0, help="validation per val_step. =< 0 means no eval", type=int)
@@ -110,6 +111,12 @@ if __name__ == '__main__':
     assert not (args.corr_only and args.fail_only)
     assert not (args.imp_rep and args.imp_pp)
     assert not (args.imp_adam and args.imp_rms)
+
+    assert not (args.label_infer and args.nat_label_infer)
+    assert not (args.label_infer and args.custom_label_infer)
+    assert not (args.nat_label_infer and args.custom_label_infer)
+    
+    infer_flag = True if (args.label_infer or args.nat_label_infer or args.custom_label_infer) else False
 
     # numpy options
     np.set_printoptions(precision=6, suppress=True)
@@ -165,6 +172,11 @@ if __name__ == '__main__':
 
         # load data
         bstart = args.bstart
+        
+        # overwrite y_pred to customs (prep)
+        if args.custom_label_infer:
+            y_pred_custom_batch = np.load('./mnist_data/' + args.custom_label_infer + '.npy')
+       
         while True:
             '''
             x_candid = cifar.eval_data.xs[indices[bstart:bstart + 100]]
@@ -195,6 +207,9 @@ if __name__ == '__main__':
             y_pred, mask, logits = sess.run([model.predictions, model.correct_prediction, model.pre_softmax],
                                     feed_dict={model.x_input: x_candid,
                                                model.y_input: y_candid})
+            if args.custom_label_infer:
+                y_pred = y_pred_custom_batch[indices[bstart:bstart + 100]]
+            
             print(sum(mask))
             if args.corr_only and (np.mean(mask) < 1.0 - 1E-6):
                 raise Exception
@@ -222,6 +237,7 @@ if __name__ == '__main__':
         assert num_eval_examples < args.eval_batch_size or num_eval_examples%args.eval_batch_size==0
 
         num_batches = int(math.ceil(num_eval_examples / eval_batch_size))
+
         
         # return to original model
         if args.nat_label_infer:
@@ -252,7 +268,7 @@ if __name__ == '__main__':
 
             # run our algorithm
             print('fortifying image ', bstart)
-            x_batch_imp, mask_batch_imp = impenet.fortify(x_batch, y_pred_batch if (args.label_infer or args.nat_label_infer) else y_batch, sess)
+            x_batch_imp, mask_batch_imp = impenet.fortify(x_batch, y_pred_batch if infer_flag else y_batch, sess)
             print()
 
             # evaluation

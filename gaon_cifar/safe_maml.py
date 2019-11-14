@@ -17,7 +17,7 @@ from utils import imp_file_name
 
 # import os
 
-from impenetrable import Impenetrable
+from impenetrable_batch import Impenetrable
 
 def result(x_imp, model, sess, x_full_batch, y_full_batch):
     num_eval_examples = x_imp.shape[0]
@@ -93,42 +93,56 @@ if __name__ == '__main__':
     parser.add_argument('--imp_adagrad', action='store_true')
     parser.add_argument('--imp_no_sign', action='store_true')
     parser.add_argument('--label_infer', action='store_true')
+    parser.add_argument('--nat_label_infer', action='store_true')
+    parser.add_argument('--custom_label_infer', default='', type=str)
     # PGD (evaluation)
     parser.add_argument('--val_step_per', default=0, help="validation per val_step. =< 0 means no eval", type=int)
     parser.add_argument('--val_eps', default=8, help='Evaluation eps', type=float)
     parser.add_argument('--val_num_steps', default=20, help="validation PGD number of steps per PGD", type=int)
     parser.add_argument('--val_restarts', default=20, help="validation PGD restart numbers per eps", type=int)
-    params = parser.parse_args()
-    for key, val in vars(params).items():
+    args = parser.parse_args()
+    for key, val in vars(args).items():
         print('{}={}'.format(key, val))
 
-    assert not (params.corr_only and params.fail_only)
-    assert not (params.imp_rep and params.imp_pp)
-    assert not (params.imp_adam and params.imp_rms)
+    assert not (args.corr_only and args.fail_only)
+    assert not (args.imp_rep and args.imp_pp)
+    assert not (args.imp_adam and args.imp_rms)
+
+    assert not (args.label_infer and args.nat_label_infer)
+    assert not (args.label_infer and args.custom_label_infer)
+    assert not (args.nat_label_infer and args.custom_label_infer)
+
+    infer_flag = True if (args.label_infer or args.nat_label_infer or args.custom_label_infer) else False
+
 
     # numpy options
     np.set_printoptions(precision=6, suppress=True)
     
-    if params.imp_random_start > 0:
-        np.random.seed(params.imp_random_seed)
-        print('random seed set to:', params.imp_random_seed)
+    if args.imp_random_start > 0:
+        np.random.seed(args.imp_random_seed)
+        print('random seed set to:', args.imp_random_seed)
 
     # make file name
-    meta_name = imp_file_name(params)
+    meta_name = imp_file_name(args)
 
     from model import Model
 
     with open('config.json') as config_file:
         config = json.load(config_file)
 
-    model_file = tf.train.latest_checkpoint('models/' + params.model_dir)
+    model_file = tf.train.latest_checkpoint('models/' + args.model_dir)
     if model_file is None:
+        print('No model found')
+        sys.exit()
+    
+    nat_model_file = tf.train.latest_checkpoint('models/naturally_trained')
+    if nat_model_file is None:
         print('No model found')
         sys.exit()
 
     model = Model(mode='eval')
     impenet = Impenetrable(model,
-                           params)
+                           args)
     saver = tf.train.Saver()
 
     data_path = config['data_path']
@@ -138,26 +152,35 @@ if __name__ == '__main__':
     configs.gpu_options.allow_growth = True
     with tf.Session(config=configs) as sess:
         # Restore the checkpoint
-        saver.restore(sess, model_file)
+        if args.nat_label_infer:
+            saver.restore(sess, nat_model_file)
+        else:
+            saver.restore(sess, model_file)
 
         # Set number of examples to evaluate
-        num_eval_examples = params.sample_size
+        num_eval_examples = args.sample_size
 
-        if params.corr_only:
-            if params.model_dir == 'naturally_trained':
+        if args.corr_only:
+            if args.model_dir == 'naturally_trained':
                 indices = np.load('/data/home/gaon/lazy-attack/cifar10_data/nat_indices_untargeted.npy')
             else:
                 indices = np.load('/data/home/gaon/lazy-attack/cifar10_data/indices_untargeted.npy')
-        elif params.fail_only:
-            if params.model_dir == 'naturally_trained':
+        elif args.fail_only:
+            if args.model_dir == 'naturally_trained':
                 indices = np.load('/data/home/gaon/lazy-attack/cifar10_data/fail_nat_indices_untargeted.npy')
             else:
                 indices = np.load('/data/home/gaon/lazy-attack/cifar10_data/fail_indices_untargeted.npy')
         else:
-            indices = [i for i in range(params.sample_size + params.bstart)]
+            indices = [i for i in range(args.sample_size + args.bstart)]
 
         # load data
-        bstart = params.bstart
+        bstart = args.bstart
+
+        # overwrite y_pred to customs (prep)
+        if args.custom_label_infer:
+            y_pred_custom_batch = np.load('./../cifar10_data/' + args.custom_label_infer + '.npy')
+            print('loaded custom labels')
+
         while True:
             '''
             x_candid = cifar.eval_data.xs[indices[bstart:bstart + 100]]
@@ -169,7 +192,7 @@ if __name__ == '__main__':
             y_masked = y_candid[mask]
             logit_masked = logits[mask]
             print(len(x_masked))
-            if bstart == params.bstart:
+            if bstart == args.bstart:
                 x_full_batch = x_masked[:min(num_eval_examples, len(x_masked))]
                 y_full_batch = y_masked[:min(num_eval_examples, len(y_masked))]
                 logit_full_batch = logit_masked[:min(num_eval_examples, len(logit_masked))]
@@ -184,22 +207,28 @@ if __name__ == '__main__':
             '''
             x_candid = cifar.eval_data.xs[indices[bstart:bstart + 100]]
             y_candid = cifar.eval_data.ys[indices[bstart:bstart + 100]]
-            mask, logits = sess.run([model.correct_prediction, model.pre_softmax],
+            y_pred, mask, logits = sess.run([model.predictions, model.correct_prediction, model.pre_softmax],
                                     feed_dict={model.x_input: x_candid,
                                                model.y_input: y_candid})
+
+            if args.custom_label_infer:
+                y_pred = y_pred_custom_batch[indices[bstart:bstart + 100]]
+
             print(sum(mask))
-            if params.corr_only and (np.mean(mask) < 1.0 - 1E-6):
+            if args.corr_only and (np.mean(mask) < 1.0 - 1E-6):
                 raise Exception
-            if params.fail_only and (np.mean(mask) > 0.0 + 1E-6):
+            if args.fail_only and (np.mean(mask) > 0.0 + 1E-6):
                 raise Exception
-            if bstart == params.bstart:
+            if bstart == args.bstart:
                 x_full_batch = x_candid[:min(num_eval_examples, len(x_candid))]
                 y_full_batch = y_candid[:min(num_eval_examples, len(y_candid))]
+                y_pred_full_batch = y_pred[:min(num_eval_examples, len(y_pred))]
                 logit_full_batch = logits[:min(num_eval_examples, len(logits))]
             else:
                 index = min(num_eval_examples - len(x_full_batch), len(x_candid))
                 x_full_batch = np.concatenate((x_full_batch, x_candid[:index]))
                 y_full_batch = np.concatenate((y_full_batch, y_candid[:index]))
+                y_pred_full_batch = np.concatenate((y_pred_full_batch, y_pred[:index]))
                 logit_full_batch = np.concatenate((logit_full_batch, logits[:index]))
             bstart += 100
             if (len(x_full_batch) >= num_eval_examples) or bstart >= len(indices):
@@ -208,9 +237,12 @@ if __name__ == '__main__':
         # Adjust num_eval_examples. Iterate over the samples batch-by-batch
         num_eval_examples = len(x_full_batch)
 
-        eval_batch_size = 1
+        eval_batch_size = 100
 
         num_batches = int(math.ceil(num_eval_examples / eval_batch_size))
+
+        if args.nat_label_infer:
+            saver.restore(sess, model_file)
 
         print('Iterating over {} batches'.format(num_batches))
 
@@ -227,17 +259,14 @@ if __name__ == '__main__':
 
             x_batch = x_full_batch[bstart:bend, :]
             y_batch = y_full_batch[bstart:bend]
+            y_pred_batch = y_pred_full_batch[bstart:bend]
+            cur_corr = np.mean(y_pred_batch == y_batch)
 
-            dict_orig = {model.x_input: x_batch,
-                        model.y_input: y_batch}
-            cur_corr, y_pred_batch = sess.run([model.num_correct, model.predictions],
-                                              feed_dict=dict_orig)
-
-            print('original Accuracy: {:.2f}%'.format(100.0 * cur_corr/len(x_batch)))
+            print('original Accuracy: {:.2f}%'.format(100.0 * cur_corr))
 
             # run our algorithm
             print('fortifying image ', bstart)
-            x_batch_imp, step_batch_imp = impenet.fortify(x_batch, y_pred_batch if params.label_infer else y_batch, sess)
+            x_batch_imp, step_batch_imp = impenet.fortify(x_batch, y_pred_batch if infer_flag else y_batch, sess)
             print()
 
             # evaluation
@@ -260,7 +289,7 @@ if __name__ == '__main__':
 
         # save image
         folder_name = './arr' + '_main' + '/'
-        batch_name = '_' + str(params.bstart) + '_' + str(params.sample_size)
+        batch_name = '_' + str(args.bstart) + '_' + str(args.sample_size)
         common_name = folder_name + meta_name + batch_name
         
         np.save(common_name + '_x_org', x_full_batch)
