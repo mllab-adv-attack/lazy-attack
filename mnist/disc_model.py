@@ -133,7 +133,7 @@ class Model(object):
 
     @staticmethod
     def _evaluate(decisions, mask):
-        num_correct_real = tf.reduce_sum(decisions, mask)
+        num_correct_real = tf.reduce_sum(decisions * mask)
         num_correct_fake = tf.reduce_sum((1-decisions) * (1-mask))
 
         accuracy_real = num_correct_real / tf.reduce_sum(mask)
