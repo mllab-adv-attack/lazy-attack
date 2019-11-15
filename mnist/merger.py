@@ -124,6 +124,7 @@ def result(x_imp, model, sess, x_full_batch, y_full_batch, args):
     imp_loss_li = []
     #imp_clean_mask = []
 
+    #y_pred = []
     total_corr = 0
     for ibatch in range(num_batches):
         bstart = ibatch * eval_batch_size
@@ -141,7 +142,7 @@ def result(x_imp, model, sess, x_full_batch, y_full_batch, args):
     print('nat Accuracy: {:.2f}%'.format(100.0 * accuracy))
 
     total_corr = 0
-    
+    ''' 
     for ibatch in range(num_batches):
         bstart = ibatch * eval_batch_size
         bend = min(bstart + eval_batch_size, num_eval_examples)
@@ -152,7 +153,8 @@ def result(x_imp, model, sess, x_full_batch, y_full_batch, args):
         total_corr += cur_corr
 
     accuracy = total_corr / num_eval_examples
-    
+    '''
+    accuracy = 0
     print('nat(PGD) Accuracy: {:.2f}%'.format(100.0 * accuracy))
 
     total_corr = 0
@@ -169,9 +171,13 @@ def result(x_imp, model, sess, x_full_batch, y_full_batch, args):
                      feed_dict=dict_adv)
         total_corr += cur_corr
         accuracy = total_corr / num_eval_examples
+        #y_pred.append(y_pred_batch)
         #imp_clean_mask.append(correct_prediction)
 
     print('imp Accuracy: {:.2f}%'.format(100.0 * accuracy))
+    #y_pred = np.concatenate(y_pred)
+    #np.save('gt.npy', y_full_batch)
+    #np.save('preds.npy', y_pred)
 
     #imp_clean_mask = np.concatenate(imp_clean_mask)
     #np.save('nat_label_infer.npy', imp_clean_mask)
