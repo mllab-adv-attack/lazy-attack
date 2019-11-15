@@ -88,8 +88,8 @@ mnist_test = CustomDataSet(mnist.test.images, mnist.test.labels)
 imp_mnist_train_li = [load_imp_data(args, eval_flag=False, target=i) for i in range(NUM_CLASSES)]
 imp_mnist_eval_li = [load_imp_data(args, eval_flag=True, target=i) for i in range(NUM_CLASSES)]
 
-imp_mnist_train_gt = load_imp_data(args, eval_flag=False, target=-1)
-imp_mnist_eval_gt = load_imp_data(args, eval_flag=True, target=-1)
+#imp_mnist_train_gt = load_imp_data(args, eval_flag=False, target=-1)
+#imp_mnist_eval_gt = load_imp_data(args, eval_flag=True, target=-1)
 
 global_step = tf.train.get_or_create_global_step()
 
@@ -180,10 +180,12 @@ with tf.Session() as sess:
     print(np.sum([np.prod(v.get_shape().as_list()) for v in variables_to_train]))
     print(np.sum([np.prod(v.get_shape().as_list()) for v in variables_to_train_d]))
 
-    train_step_d = tf.train.AdamOptimizer(args.d_lr).minimize(
-        total_loss,
-        global_step=global_step,
-        var_list=variables_to_train_d)
+    extra_update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+    with tf.control_dependencies(extra_update_ops):
+        train_step_d = tf.train.AdamOptimizer(args.d_lr).minimize(
+            total_loss,
+            global_step=global_step,
+            var_list=variables_to_train_d)
 
     sess.run(tf.global_variables_initializer())
     opt_saver = tf.train.Saver(restore_vars)
@@ -196,7 +198,6 @@ with tf.Session() as sess:
 
     print('restore success!')
 
-    extra_update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
 
     training_time = 0.0
 
@@ -227,10 +228,10 @@ with tf.Session() as sess:
         # Train
         start = timer()
 
-        _, _, accuracy_train_batch, \
+        _, accuracy_train_batch, \
             total_loss_batch, \
             train_merged_summaries_batch, orig_model_acc_batch = \
-            sess.run([train_step_d, extra_update_ops, accuracy_train,
+            sess.run([train_step_d, accuracy_train,
                       total_loss,
                       train_merged_summaries, orig_model_acc],
                      feed_dict=nat_dict)
@@ -274,10 +275,10 @@ with tf.Session() as sess:
                 assert 0 <= np.amin(imp_batch) and np.amax(imp_batch) <= 1.0
                 assert np.amax(np.abs(imp_batch-eval_x_batch)) <= args.delta + 1e-6
 
-            _, _, accuracy_train_batch, \
+            accuracy_train_batch, \
                 total_loss_batch, \
                 eval_merged_summaries_batch, orig_model_acc_batch = \
-                sess.run([train_step_d, extra_update_ops, accuracy_train,
+                sess.run([accuracy_train,
                           total_loss,
                           eval_merged_summaries, orig_model_acc],
                          feed_dict=eval_dict)

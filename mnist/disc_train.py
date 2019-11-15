@@ -193,10 +193,12 @@ with tf.Session() as sess:
     print(np.sum([np.prod(v.get_shape().as_list()) for v in variables_to_train]))
     print(np.sum([np.prod(v.get_shape().as_list()) for v in variables_to_train_d]))
 
-    train_step_d = tf.train.AdamOptimizer(args.d_lr).minimize(
-        total_loss,
-        global_step=global_step,
-        var_list=variables_to_train_d)
+    extra_update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+    with tf.control_dependencies(extra_update_ops):
+        train_step_d = tf.train.AdamOptimizer(args.d_lr).minimize(
+            total_loss,
+            global_step=global_step,
+            var_list=variables_to_train_d)
 
     sess.run(tf.global_variables_initializer())
     opt_saver = tf.train.Saver(restore_vars)
@@ -209,7 +211,6 @@ with tf.Session() as sess:
 
     print('restore success!')
 
-    extra_update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
 
     training_time = 0.0
 
@@ -241,10 +242,10 @@ with tf.Session() as sess:
         # Train
         start = timer()
 
-        _, _, accuracy_train_batch, \
+        _, accuracy_train_batch, \
             accuracy_train_real_batch, accuracy_train_fake_batch, total_loss_batch, \
             train_merged_summaries_batch, orig_model_acc_batch = \
-            sess.run([train_step_d, extra_update_ops, accuracy_train,
+            sess.run([train_step_d, accuracy_train,
                       accuracy_train_real, accuracy_train_fake, total_loss,
                       train_merged_summaries, orig_model_acc],
                      feed_dict=nat_dict)
@@ -298,10 +299,10 @@ with tf.Session() as sess:
                 assert 0 <= np.amin(imp_batch) and np.amax(imp_batch) <= 1.0
                 assert np.amax(np.abs(imp_batch-eval_x_batch)) <= args.delta + 1e-6
 
-            _, _, accuracy_train_batch, \
+            accuracy_train_batch, \
                 accuracy_train_real_batch, accuracy_train_fake_batch, total_loss_batch, \
                 eval_merged_summaries_batch, orig_model_acc_batch = \
-                sess.run([train_step_d, extra_update_ops, accuracy_train,
+                sess.run([accuracy_train,
                           accuracy_train_real, accuracy_train_fake, total_loss,
                           eval_merged_summaries, orig_model_acc],
                          feed_dict=eval_dict)

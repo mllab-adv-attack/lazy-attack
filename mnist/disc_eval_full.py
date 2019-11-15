@@ -41,7 +41,7 @@ if __name__ == '__main__':
     parser.add_argument('--delta', default=0.3, type=float)
     parser.add_argument('--sample_size', default=10000, type=int)
     parser.add_argument('--bstart', default=0, type=int)
-    parser.add_argument('--train_mode', action='store_true', help='use train mode neural nets')
+    parser.add_argument('--train_mode', action='store_true', help='evaluate model in train mode')
 
     # GAN settings
     parser.add_argument('--dropout', action='store_true')
@@ -80,7 +80,7 @@ eval_batch_size = args.eval_batch_size
 global_step = tf.train.get_or_create_global_step()
 
 model = Model()
-full_model = Safe_model('eval', model, args)
+full_model = Safe_model('train' if args.train_mode else 'eval', model, args)
 
 # set up metrics
 total_loss = full_model.xent
@@ -147,14 +147,24 @@ with tf.Session() as sess:
     #print(restore_vars)
     #print(restore_vars_d)
 
+    '''
     sess.run(tf.global_variables_initializer())
+    vars_vals = sess.run(trainable_variables)
+    for var, val in zip(trainable_variables, vars_vals):
+        if 'batch' in var.name:
+            print("var: {}, value: {}".format(var.name, val))
+    '''
+    
     opt_saver = tf.train.Saver(restore_vars)
     opt_saver.restore(sess, model_file)
     print('restore success!')
 
-    #vars_vals = sess.run(trainable_variables)
-    #for var, val in zip(trainable_variables, vars_vals):
-    #    print("var: {}, value: {}".format(var.name, val))
+    '''
+    vars_vals = sess.run(trainable_variables)
+    for var, val in zip(trainable_variables, vars_vals):
+        if 'batch' in var.name:
+            print("var: {}, value: {}".format(var.name, val))
+    '''
 
     num_eval_examples = args.sample_size
 
