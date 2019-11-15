@@ -156,8 +156,6 @@ with tf.Session() as sess:
     #for var, val in zip(trainable_variables, vars_vals):
     #    print("var: {}, value: {}".format(var.name, val))
 
-    sys.exit()
-
     num_eval_examples = args.sample_size
 
     if args.corr_only:
