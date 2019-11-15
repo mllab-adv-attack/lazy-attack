@@ -13,7 +13,7 @@ import numpy as np
 
 from tensorflow.examples.tutorials.mnist import input_data
 
-from disc_model import Model_full as Safe_model
+from disc_model import ModelMultiClass as Safe_model
 from infer_target import Model as Model
 
 from utils import disc_file_name, load_imp_data
@@ -48,7 +48,7 @@ if __name__ == '__main__':
     parser.add_argument('--dropout_rate', default=0.3, type=float)
     parser.add_argument('--f_dim', default=64, type=int)
     parser.add_argument('--d_lr', default=1e-3, type=float)
-    parser.add_argument('--c_loss', action='store_true')
+    parser.add_argument('--multi_pass', action='store_true')
     parser.add_argument('--patch', action='store_true')
 
     # pgd (filename) settings
@@ -83,12 +83,8 @@ model = Model()
 full_model = Safe_model('eval', model, args)
 
 # set up metrics
-if args.c_loss:
-    total_loss = full_model.xent
-    accuracy_train = full_model.accuracy
-else:
-    total_loss = full_model.xent
-    accuracy_train = full_model.accuracy
+total_loss = full_model.xent
+accuracy_train = full_model.accuracy
 
 orig_model_acc = full_model.orig_accuracy
 

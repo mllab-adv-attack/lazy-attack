@@ -206,7 +206,7 @@ class Model(object):
         return d_preds
 
 
-class Model_full(object):
+class ModelMultiClass(object):
 
     def __init__(self, mode, model, args):
 
@@ -225,7 +225,7 @@ class Model_full(object):
         self.f_dim = args.f_dim
         self.drop = 0 if not args.dropout else args.dropout_rate
         self.patch = args.patch
-        self.c_loss = args.c_loss
+        self.multi_pass = args.multi_pass
 
         self._build_model()
 
@@ -233,7 +233,10 @@ class Model_full(object):
         assert self.mode == 'train' or self.mode == 'eval'
         is_train = True if self.mode == 'train' else False
 
-        self.discriminator = Discriminator(self.patch, is_train, self.f_dim, multi_class=True)
+        if self.multi_pass:
+            self.discriminator = Discriminator(self.patch, is_train, self.f_dim, multi_class=False)
+        else:
+            self.discriminator = Discriminator(self.patch, is_train, self.f_dim, multi_class=True)
 
         self.x_input = tf.placeholder(
             tf.float32,
@@ -241,16 +244,25 @@ class Model_full(object):
 
         self.x_input_alg = tf.placeholder(
             tf.float32,
-            shape=[None, 28, 28, 10]
+            shape=[None, 28, 28, 1 * NUM_CLASSES]
         )
 
         self.y_input = tf.placeholder(tf.int64, shape=None)
 
         # basic inference
         with tf.variable_scope('', reuse=tf.AUTO_REUSE):
+            # scale-up input noise
             self.alg_noise = (self.x_input_alg-self.x_input)/self.delta
 
-            self.d_out = self.discriminator(self.x_input, self.alg_noise)
+            if self.multi_pass:
+                splits = tf.split(self.alg_noise, NUM_CLASSES, axis=-1)
+
+                self.d_outs = [self.discriminator(self.x_input, noise_split) for noise_split in splits]
+                self.d_out = tf.concat(self.d_outs, axis=-1)
+
+            else:
+
+                self.d_out = self.discriminator(self.x_input, self.alg_noise)
 
             self.y_xent = tf.nn.sparse_softmax_cross_entropy_with_logits(
                 labels=self.y_input, logits=self.d_out)
@@ -290,12 +302,12 @@ class Model_full(object):
         return correct_prediction, accuracy, mean_xent
 
     def infer(self, sess, x_input, x_input_alg_li, return_images=False):
+
         x_input_alg_full = np.concatenate(x_input_alg_li, axis=-1)
-        for i in range(NUM_CLASSES):
-            feed_dict = {self.x_input: x_input,
-                         self.x_input_alg: x_input_alg_full}
-            preds = sess.run(self.predictions,
-                             feed_dict=feed_dict)
+        feed_dict = {self.x_input: x_input,
+                     self.x_input_alg: x_input_alg_full}
+        preds = sess.run(self.predictions,
+                         feed_dict=feed_dict)
 
         if return_images:
             infer_alg = np.copy(x_input_alg_li[0])
