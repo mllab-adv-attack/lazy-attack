@@ -234,8 +234,10 @@ class ModelMultiClass(object):
         is_train = True if self.mode == 'train' else False
 
         if self.multi_pass:
+            print('building multi pass model!')
             self.discriminator = Discriminator(self.patch, is_train, self.f_dim, multi_class=False)
         else:
+            print('building single pass model!')
             self.discriminator = Discriminator(self.patch, is_train, self.f_dim, multi_class=True)
 
         self.x_input = tf.placeholder(
@@ -263,6 +265,7 @@ class ModelMultiClass(object):
             else:
 
                 self.d_out = self.discriminator(self.x_input, self.alg_noise)
+            #print(self.d_out.get_shape().as_list())
 
             self.y_xent = tf.nn.sparse_softmax_cross_entropy_with_logits(
                 labels=self.y_input, logits=self.d_out)

@@ -27,7 +27,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     # save & load path
     parser.add_argument('--model_dir', default='adv_trained', type=str)
-    parser.add_argument('--save_dir', default='safe_net_2', type=str, help='safe_net saved folder')
+    parser.add_argument('--save_dir', default='safe_net_3', type=str, help='safe_net saved folder')
     parser.add_argument('--corr_only', action='store_true')
     parser.add_argument('--fail_only', action='store_true')
     parser.add_argument('--eval', action='store_true', help='use test set data. else use train set data.')
@@ -125,14 +125,6 @@ with tf.Session() as sess:
     # Restore variables if can, set optimizer
     reader = tf.train.NewCheckpointReader(model_file)
     saved_shapes = reader.get_variable_to_shape_map()
-    
-    '''
-    tvar = tf.trainable_variables()
-    for var in tvar:
-        print(var.name)
-    sys.exit()
-    '''
-
     var_names = sorted([(var.name, var.name.split(':')[0]) for var in tf.global_variables()
                         if var.name.split(':')[0] in saved_shapes])
     restore_vars = []
@@ -146,11 +138,25 @@ with tf.Session() as sess:
 
     trainable_variables = tf.trainable_variables()
     variables_to_train = [var for var in trainable_variables if var.name not in restore_vars_name_list]
+    restore_vars_d = [var for var in trainable_variables if (var.name in restore_vars_name_list and
+                                                                   'discriminator' in var.name)]
+
+    print(np.sum([np.prod(v.get_shape().as_list()) for v in restore_vars]))
+    print(np.sum([np.prod(v.get_shape().as_list()) for v in variables_to_train]))
+    print(np.sum([np.prod(v.get_shape().as_list()) for v in restore_vars_d]))
+    #print(restore_vars)
+    #print(restore_vars_d)
 
     sess.run(tf.global_variables_initializer())
     opt_saver = tf.train.Saver(restore_vars)
     opt_saver.restore(sess, model_file)
     print('restore success!')
+
+    #vars_vals = sess.run(trainable_variables)
+    #for var, val in zip(trainable_variables, vars_vals):
+    #    print("var: {}, value: {}".format(var.name, val))
+
+    sys.exit()
 
     num_eval_examples = args.sample_size
 

@@ -173,7 +173,6 @@ with tf.Session() as sess:
 
     trainable_variables = tf.trainable_variables()
     variables_to_train = [var for var in trainable_variables if var.name not in restore_vars_name_list]
-
     variables_to_train_d = [var for var in trainable_variables if (var.name not in restore_vars_name_list and
                                                                    'discriminator' in var.name)]
 
