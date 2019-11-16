@@ -127,7 +127,7 @@ class DenseDiscriminator(object):
     def __call__(self, inputs, noises):
         with tf.variable_scope('discriminator', reuse=tf.AUTO_REUSE):
 
-            inputs = tf.concat([inputs, noises])
+            inputs = tf.concat([inputs, noises], axis=-1)
             inputs = tf.layers.dense(inputs, self.f_dim)
             inputs = lkrelu(inputs, 0.2)
 

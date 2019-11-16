@@ -18,49 +18,7 @@ from utils import imp_file_name
 # import os
 
 from impenetrable_batch import Impenetrable
-
-
-def result(x_imp, model, sess, x_full_batch, y_full_batch):
-    num_eval_examples = x_imp.shape[0]
-    eval_batch_size = min(num_eval_examples, 100)
-    num_batches = int(math.ceil(num_eval_examples / eval_batch_size))
-
-    # if one-hot, decode one-hot to labels
-    if y_full_batch.size > y_full_batch.shape[0]:
-        y_full_batch = np.argmax(y_full_batch, axis=1).reshape(-1, 1)
-
-    total_corr = 0
-    for ibatch in range(num_batches):
-        bstart = ibatch * eval_batch_size
-        bend = min(bstart + eval_batch_size, num_eval_examples)
-
-        x_batch = x_full_batch[bstart:bend, :]
-        y_batch = y_full_batch[bstart:bend]
-        dict_adv = {model.x_input: x_batch,
-                    model.y_input: y_batch}
-        cur_corr, y_pred_batch = sess.run([model.num_correct, model.predictions],
-                                          feed_dict=dict_adv)
-        total_corr += cur_corr
-    accuracy = total_corr / num_eval_examples
-
-    print('nat Accuracy: {:.2f}%'.format(100.0 * accuracy))
-
-    total_corr = 0
-    for ibatch in range(num_batches):
-        bstart = ibatch * eval_batch_size
-        bend = min(bstart + eval_batch_size, num_eval_examples)
-
-        x_batch = x_imp[bstart:bend, :]
-        y_batch = y_full_batch[bstart:bend]
-        dict_adv = {model.x_input: x_batch,
-                    model.y_input: y_batch}
-        cur_corr, y_pred_batch = sess.run([model.num_correct, model.predictions],
-                                          feed_dict=dict_adv)
-        total_corr += cur_corr
-    accuracy = total_corr / num_eval_examples
-
-    print('imp Accuracy: {:.2f}%'.format(100.0 * accuracy))
-
+from merger import result
 
 if __name__ == '__main__':
     import argparse
@@ -322,6 +280,6 @@ if __name__ == '__main__':
             print('Invalid pixel range in x_imp. Expected [0,255], fount[{},{}]'.format(np.amin(x_imp),
                                                                                         np.amax(x_imp)))
         else:
-            result(x_imp, model, sess, x_full_batch, y_full_batch)
+            result(x_imp, model, sess, x_full_batch, y_full_batch, file_name='', args=args)
 
 

@@ -91,7 +91,7 @@ class Model(object):
 
             # Discriminator loss
             if self.logits:
-                self.d_out = self.discriminator(self.model(self.x_input), self.model(self.alg_noise))
+                self.d_out = self.discriminator(self.model(self.x_input), self.model(self.x_input_alg))
             else:
                 self.d_out = self.discriminator(self.x_input, self.alg_noise)
 
@@ -272,15 +272,17 @@ class ModelMultiClass(object):
             self.alg_noise = (self.x_input_alg-self.x_input)/self.delta
 
             if self.logits:
+                splits = tf.split(self.x_input_alg, NUM_CLASSES, axis=-1)
+                
                 if self.multi_pass:
-                    splits = tf.split(self.alg_noise, NUM_CLASSES, axis=-1)
-
                     self.d_outs = [self.discriminator(self.model(self.x_input), self.model(noise_split))
                                    for noise_split in splits]
                     self.d_out = tf.concat(self.d_outs, axis=-1)
 
                 else:
-                    self.d_out = self.discriminator(self.model(self.x_input), self.model(self.alg_noise))
+                    logits = [self.model(noise_split) for noise_split in splits]
+                    logits_concat = tf.concat(logits, axis=-1)
+                    self.d_out = self.discriminator(self.model(self.x_input), logits_concat)
             else:
                 if self.multi_pass:
                     splits = tf.split(self.alg_noise, NUM_CLASSES, axis=-1)

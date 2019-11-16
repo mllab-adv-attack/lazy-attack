@@ -38,7 +38,7 @@ if __name__ == '__main__':
     parser.add_argument('--pgd_num_steps', default=20, type=int)
     parser.add_argument('--pgd_step_size', default=2, type=float)
     parser.add_argument('--pgd_random_start', action='store_true')
-    parser.add_argument('--pgd_restarts', default=20, help="training PGD restart numbers per eps", type=int)
+    parser.add_argument('--pgd_restarts', default=1, help="training PGD restart numbers per eps", type=int)
     # impenetrable
     parser.add_argument('--imp_delta', default=0, help='<= 0 for no imp eps', type=float)
     parser.add_argument('--imp_random_start', default=0, help='eps for random start of image', type=float)

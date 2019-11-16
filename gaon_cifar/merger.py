@@ -177,10 +177,12 @@ def result(x_imp, model, sess, x_full_batch, y_full_batch, final_name, args):
     imp_loss = np.concatenate(imp_loss_li)
     #if args.target_y >= 0:
     #    np.save(final_name + '_loss' + str(args.target_y) + '.npy', imp_loss)
-    np.save(final_name + '_loss.npy', imp_loss)
+    if final_name:
+        np.save(final_name + '_loss.npy', imp_loss)
 
     imp_mask = np.concatenate(imp_mask)
-    np.save(final_name + '_mask.npy', imp_mask)
+    if final_name:
+        np.save(final_name + '_mask.npy', imp_mask)
 
 if __name__ == '__main__':
     import argparse
