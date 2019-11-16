@@ -40,7 +40,7 @@ if __name__ == '__main__':
     parser.add_argument('--eval_batch_size', default=100, type=int)
     parser.add_argument('--eval_on_cpu', action='store_true')
     parser.add_argument('--delta', default=0.3, type=float)
-    parser.add_argument('--sample_size', default=1000, type=int)
+    parser.add_argument('--sample_size', default=10000, type=int)
     parser.add_argument('--bstart', default=0, type=int)
     parser.add_argument('--train_mode', action='store_true', help='use train mode neural nets')
 
@@ -81,7 +81,7 @@ eval_batch_size = args.eval_batch_size
 global_step = tf.train.get_or_create_global_step()
 
 model = Model()
-full_model = Safe_model('eval', model, args)
+full_model = Safe_model('train' if args.train_mode else 'eval', model, args)
 
 # set up metrics
 if args.c_loss:
