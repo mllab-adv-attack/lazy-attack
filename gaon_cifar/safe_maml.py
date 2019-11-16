@@ -19,6 +19,7 @@ from utils import imp_file_name
 
 from impenetrable_batch import Impenetrable
 
+
 def result(x_imp, model, sess, x_full_batch, y_full_batch):
     num_eval_examples = x_imp.shape[0]
     eval_batch_size = min(num_eval_examples, 100)
@@ -95,6 +96,8 @@ if __name__ == '__main__':
     parser.add_argument('--label_infer', action='store_true')
     parser.add_argument('--nat_label_infer', action='store_true')
     parser.add_argument('--custom_label_infer', default='', type=str)
+    parser.add_argument('--source', default=-1, type=int, help='set source label if >= 0')
+    parser.add_argument('--target', default=-1, type=int, help='set target label if >= 0')
     # PGD (evaluation)
     parser.add_argument('--val_step_per', default=0, help="validation per val_step. =< 0 means no eval", type=int)
     parser.add_argument('--val_eps', default=8, help='Evaluation eps', type=float)
@@ -114,6 +117,7 @@ if __name__ == '__main__':
 
     infer_flag = True if (args.label_infer or args.nat_label_infer or args.custom_label_infer) else False
 
+    assert not (infer_flag and args.target >= 0)
 
     # numpy options
     np.set_printoptions(precision=6, suppress=True)
@@ -171,7 +175,7 @@ if __name__ == '__main__':
             else:
                 indices = np.load('/data/home/gaon/lazy-attack/cifar10_data/fail_indices_untargeted.npy')
         else:
-            indices = [i for i in range(args.sample_size + args.bstart)]
+            indices = [i for i in range(max(args.sample_size + args.bstart, 10000))]
 
         # load data
         bstart = args.bstart
@@ -230,6 +234,13 @@ if __name__ == '__main__':
                 y_full_batch = np.concatenate((y_full_batch, y_candid[:index]))
                 y_pred_full_batch = np.concatenate((y_pred_full_batch, y_pred[:index]))
                 logit_full_batch = np.concatenate((logit_full_batch, logits[:index]))
+
+            # source filtering
+            if args.source >= 0:
+                mask = y_full_batch == args.source
+                x_full_batch = x_full_batch[mask]
+                y_full_batch = y_full_batch[mask]
+                print(len(y_full_batch))
             bstart += 100
             if (len(x_full_batch) >= num_eval_examples) or bstart >= len(indices):
                 break
@@ -266,7 +277,13 @@ if __name__ == '__main__':
 
             # run our algorithm
             print('fortifying image ', bstart)
-            x_batch_imp, step_batch_imp = impenet.fortify(x_batch, y_pred_batch if infer_flag else y_batch, sess)
+            if infer_flag:
+                y_target = y_pred_batch
+            elif args.target >= 0:
+                y_target = np.ones_like(y_pred_batch).astype(int) * args.target
+            else:
+                y_target = y_batch
+            x_batch_imp, step_batch_imp = impenet.fortify(x_batch, y_target, sess)
             print()
 
             # evaluation
