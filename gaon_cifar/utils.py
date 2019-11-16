@@ -19,6 +19,8 @@ def imp_file_name(args):
         + ('_' + str(args.imp_random_start)) \
         + ('_' + str(args.imp_random_seed)) \
         + ('_' + str(args.imp_pp))
+    meta_name += ('_s{}'.format(args.source) if args.source >= 0 else '')
+    meta_name += ('_t{}'.format(args.target) if args.target >= 0 else '')
     meta_name += ('_infer' if args.label_infer else '')
     meta_name += ('_nat_infer' if args.nat_label_infer else '')
     meta_name += ('_cus_infer' if args.custom_label_infer else '')

@@ -14,13 +14,13 @@ import numpy as np
 from pgd_attack import LinfPGDAttack
 
 
-def merge(params):
-    load_arr = params.load_arr
-    save_arr = params.save_arr
-    file_name = params.file_name
-    bstart = params.bstart
-    batch_size = params.batch_size
-    sample_size = params.sample_size
+def merge(args):
+    load_arr = args.load_arr
+    save_arr = args.save_arr
+    file_name = args.file_name
+    bstart = args.bstart
+    batch_size = args.batch_size
+    sample_size = args.sample_size
 
     x_org = []
     x_imp = []
@@ -54,7 +54,7 @@ def merge(params):
     step = np.concatenate(step)
     y = np.concatenate(y)
 
-    final_name = save_arr + file_name + '_' + str(params.bstart) + '_' + str(sample_size)
+    final_name = save_arr + file_name + '_' + str(args.bstart) + '_' + str(sample_size)
 
     np.save(final_name + '_x_org.npy', x_org)
     np.save(final_name + '_x_imp.npy', x_imp)
@@ -99,7 +99,7 @@ def safe_validation(x, y, model, sess, start_eps=8, end_eps=8, val_num=1):
     return sum(true_mask), mean_loss, true_mask
 
 
-def result(x_imp, model, sess, x_full_batch, y_full_batch, final_name, params):
+def result(x_imp, model, sess, x_full_batch, y_full_batch, final_name, args):
     num_eval_examples = x_imp.shape[0]
     eval_batch_size = min(num_eval_examples, 100)
     num_batches = int(math.ceil(num_eval_examples / eval_batch_size))
@@ -128,7 +128,7 @@ def result(x_imp, model, sess, x_full_batch, y_full_batch, final_name, params):
 
         x_batch = x_full_batch[bstart:bend, :]
         y_batch = y_full_batch[bstart:bend]
-        cur_corr, cur_loss, _ = safe_validation(x_batch, y_batch, model, sess) 
+        cur_corr, cur_loss, _ = safe_validation(x_batch, y_batch, model, sess, val_num=args.val_restarts)
         total_corr += cur_corr
 
     accuracy = total_corr / num_eval_examples
@@ -160,7 +160,7 @@ def result(x_imp, model, sess, x_full_batch, y_full_batch, final_name, params):
 
         x_batch = x_imp[bstart:bend, :]
         y_batch = y_full_batch[bstart:bend]
-        cur_corr, cur_loss, cur_mask = safe_validation(x_batch, y_batch, model, sess)
+        cur_corr, cur_loss, cur_mask = safe_validation(x_batch, y_batch, model, sess, val_num=args.val_restarts)
         total_corr += cur_corr
         imp_loss_li.append(cur_loss)
         imp_mask.append(cur_mask)
@@ -175,8 +175,8 @@ def result(x_imp, model, sess, x_full_batch, y_full_batch, final_name, params):
     print('linf_dist:', linf_dist)
 
     imp_loss = np.concatenate(imp_loss_li)
-    #if params.target_y >= 0:
-    #    np.save(final_name + '_loss' + str(params.target_y) + '.npy', imp_loss)
+    #if args.target_y >= 0:
+    #    np.save(final_name + '_loss' + str(args.target_y) + '.npy', imp_loss)
     np.save(final_name + '_loss.npy', imp_loss)
 
     imp_mask = np.concatenate(imp_mask)
@@ -191,15 +191,16 @@ if __name__ == '__main__':
     parser.add_argument('--bstart', default=0, type=int)
     parser.add_argument('--batch_size', default=100, type=int)
     parser.add_argument('--sample_size', default=1000, type=int)
+    parser.add_argument('--val_restarts', default=20, type=int)
     parser.add_argument('--target_y', default=-1, type=int)
     parser.add_argument('--load_arr', default='./arr_main/', type=str)
     parser.add_argument('--save_arr', default='./arr_new/', type=str)
     parser.add_argument('--file_name', default='nat_pgd_8_20_2_20_imp_0_1000_5.0_corr_val_10_8_20_20_0', type=str)
-    params = parser.parse_args()
-    for key, val in vars(params).items():
+    args = parser.parse_args()
+    for key, val in vars(args).items():
         print('{}={}'.format(key, val))
 
-    assert params.sample_size % params.batch_size == 0
+    assert args.sample_size % args.batch_size == 0
 
     from model import Model
 
@@ -207,9 +208,9 @@ if __name__ == '__main__':
         config = json.load(config_file)
 
 
-    if params.file_name[:3]=='nat':
+    if args.file_name[:3]=='nat':
         model_dir = 'naturally_trained'
-    elif params.file_name[:3]=='adv':
+    elif args.file_name[:3]=='adv':
         model_dir = 'adv_trained'
     else:
         raise Exception
@@ -222,10 +223,10 @@ if __name__ == '__main__':
     model = Model(mode='eval')
     saver = tf.train.Saver()
 
-    x_org, x_imp, y, final_name = merge(params)
+    x_org, x_imp, y, final_name = merge(args)
 
-    if params.target_y >= 0:
-        y.fill(params.target_y)
+    if args.target_y >= 0:
+        y.fill(args.target_y)
 
     configs = tf.ConfigProto()
     configs.gpu_options.allow_growth = True
@@ -241,7 +242,7 @@ if __name__ == '__main__':
         else:
             num_tests = 1
             for _ in range(num_tests):
-                result(x_imp, model, sess, x_org, y, final_name, params)
+                result(x_imp, model, sess, x_org, y, final_name, args)
                 print()
 
 
