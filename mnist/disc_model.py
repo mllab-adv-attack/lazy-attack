@@ -3,7 +3,9 @@
 
 import tensorflow as tf
 import numpy as np
-from discriminator import pix2pixDiscriminator as Discriminator
+
+from discriminator import Pix2pixDiscriminator as Discriminator
+from discriminator import DenseDiscriminator as DenseDiscriminator
 
 NUM_CLASSES = 10
 
@@ -53,6 +55,7 @@ class Model(object):
         self.drop = 0 if not args.dropout else args.dropout_rate
         self.patch = args.patch
         self.c_loss = args.c_loss
+        self.logits = args.logits
 
         self._build_model()
 
@@ -60,7 +63,10 @@ class Model(object):
         assert self.mode == 'train' or self.mode == 'eval'
         is_train = True if self.mode == 'train' else False
 
-        self.discriminator = Discriminator(self.patch, is_train, self.f_dim)
+        if self.logits:
+            self.discriminator = DenseDiscriminator(is_train, self.f_dim)
+        else:
+            self.discriminator = Discriminator(self.patch, is_train, self.f_dim)
 
         self.x_input = tf.placeholder(
             tf.float32,
@@ -84,7 +90,11 @@ class Model(object):
             self.alg_noise = (self.x_input_alg-self.x_input)/self.delta
 
             # Discriminator loss
-            self.d_out = self.discriminator(self.x_input, self.alg_noise)
+            if self.logits:
+                self.d_out = self.discriminator(self.model(self.x_input), self.model(self.alg_noise))
+            else:
+                self.d_out = self.discriminator(self.x_input, self.alg_noise)
+
             self.d_mean_out = tf.reduce_mean(tf.layers.flatten(self.d_out), axis=1)
             self.d_decisions = tf.where(self.d_mean_out >= 0.5, real, fake)
 
@@ -226,6 +236,7 @@ class ModelMultiClass(object):
         self.drop = 0 if not args.dropout else args.dropout_rate
         self.patch = args.patch
         self.multi_pass = args.multi_pass
+        self.logits = args.logits
 
         self._build_model()
 
@@ -233,12 +244,16 @@ class ModelMultiClass(object):
         assert self.mode == 'train' or self.mode == 'eval'
         is_train = True if self.mode == 'train' else False
 
-        if self.multi_pass:
-            print('building multi pass model!')
-            self.discriminator = Discriminator(self.patch, is_train, self.f_dim, multi_class=False)
+        if self.logits:
+            if self.multi_pass:
+                self.discriminator = DenseDiscriminator(is_train, self.f_dim, multi_class=False)
+            else:
+                self.discriminator = DenseDiscriminator(is_train, self.f_dim, multi_class=True)
         else:
-            print('building single pass model!')
-            self.discriminator = Discriminator(self.patch, is_train, self.f_dim, multi_class=True)
+            if self.multi_pass:
+                self.discriminator = Discriminator(self.patch, is_train, self.f_dim, multi_class=False)
+            else:
+                self.discriminator = Discriminator(self.patch, is_train, self.f_dim, multi_class=True)
 
         self.x_input = tf.placeholder(
             tf.float32,
@@ -256,16 +271,25 @@ class ModelMultiClass(object):
             # scale-up input noise
             self.alg_noise = (self.x_input_alg-self.x_input)/self.delta
 
-            if self.multi_pass:
-                splits = tf.split(self.alg_noise, NUM_CLASSES, axis=-1)
+            if self.logits:
+                if self.multi_pass:
+                    splits = tf.split(self.alg_noise, NUM_CLASSES, axis=-1)
 
-                self.d_outs = [self.discriminator(self.x_input, noise_split) for noise_split in splits]
-                self.d_out = tf.concat(self.d_outs, axis=-1)
+                    self.d_outs = [self.discriminator(self.model(self.x_input), self.model(noise_split))
+                                   for noise_split in splits]
+                    self.d_out = tf.concat(self.d_outs, axis=-1)
 
+                else:
+                    self.d_out = self.discriminator(self.model(self.x_input), self.model(self.alg_noise))
             else:
+                if self.multi_pass:
+                    splits = tf.split(self.alg_noise, NUM_CLASSES, axis=-1)
 
-                self.d_out = self.discriminator(self.x_input, self.alg_noise)
-            #print(self.d_out.get_shape().as_list())
+                    self.d_outs = [self.discriminator(self.x_input, noise_split) for noise_split in splits]
+                    self.d_out = tf.concat(self.d_outs, axis=-1)
+
+                else:
+                    self.d_out = self.discriminator(self.x_input, self.alg_noise)
 
             self.y_xent = tf.nn.sparse_softmax_cross_entropy_with_logits(
                 labels=self.y_input, logits=self.d_out)
@@ -320,3 +344,4 @@ class ModelMultiClass(object):
             return preds, infer_alg
 
         return preds
+

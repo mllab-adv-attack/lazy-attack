@@ -49,7 +49,7 @@ class Discriminator(object):
             flat = tf.layers.flatten(conv3)
             logits = tf.layers.dense(flat, 1)
 
-            #probs = tf.nn.sigmoid(logits)
+            # probs = tf.nn.sigmoid(logits)
 
             return logits
 
@@ -80,7 +80,7 @@ def encoder_layer(inputs,
 
 
 # PatchGAN
-class pix2pixDiscriminator(object):
+class Pix2pixDiscriminator(object):
     def __init__(self, patch, is_training, f_dim=32, multi_class=False):
         self.patch = patch
         self._is_training = is_training
@@ -105,7 +105,7 @@ class pix2pixDiscriminator(object):
                     inputs = tf.layers.conv2d(inputs, 10, kernel_size=[3, 3], strides=[1, 1], padding='same')
                 else:
                     inputs = tf.layers.conv2d(inputs, 1, kernel_size=[3, 3], strides=[1, 1], padding='same')
-                #print(get_shape(inputs))
+                # print(get_shape(inputs))
             else:
                 inputs = tf.layers.flatten(inputs)
                 if self.multi_class:
@@ -115,3 +115,33 @@ class pix2pixDiscriminator(object):
 
         return inputs
 
+
+class DenseDiscriminator(object):
+    def __init__(self, is_training, f_dim=512, multi_class=False):
+        self._is_training = is_training
+
+        self._prob = 0.5  # constant from pix2pix paper
+        self.f_dim = f_dim
+        self.multi_class = multi_class
+
+    def __call__(self, inputs, noises):
+        with tf.variable_scope('discriminator', reuse=tf.AUTO_REUSE):
+
+            inputs = tf.concat([inputs, noises])
+            inputs = tf.layers.dense(inputs, self.f_dim)
+            inputs = lkrelu(inputs, 0.2)
+
+            inputs = tf.layers.dense(inputs, self.f_dim)
+            inputs = lkrelu(inputs, 0.2)
+            inputs = tf.layers.dropout(inputs, rate=0.4)
+
+            inputs = tf.layers.dense(inputs, self.f_dim)
+            inputs = lkrelu(inputs, 0.2)
+            inputs = tf.layers.dropout(inputs, rate=0.4)
+
+            if self.multi_class:
+                inputs = tf.layers.dense(inputs, 10)
+            else:
+                inputs = tf.layers.dense(inputs, 1)
+
+        return inputs

@@ -68,6 +68,7 @@ def disc_file_name(args, multi_class=False):
     meta_name += '_fdim' + str(args.f_dim)
     meta_name += ('_drop' + str(args.dropout_rate)) if args.dropout else ''
     meta_name += '_patch' if args.patch else ''
+    meta_name += '_logits' if args.logits else ''
     if not multi_class:
         meta_name += '_c' if args.c_loss else ''
     if multi_class:

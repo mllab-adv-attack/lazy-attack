@@ -20,6 +20,7 @@ from pgd_attack import LinfPGDAttack
 FORCE_DIR = './arr_main/'
 SAVE_DIR = './arr_save/'
 
+
 def merge(args):
 
     if args.force_path:
@@ -32,7 +33,6 @@ def merge(args):
         sample_size = args.sample_size
         num_batches = sample_size//batch_size
         bstart = args.bstart
-        
 
         for i in range(num_batches):
             full_name = FORCE_DIR + args.force_path + '_' + str(bstart) + '_' + str(batch_size)
@@ -212,6 +212,7 @@ def result(x_imp, model, sess, x_full_batch, y_full_batch, args):
 
     #imp_mask = np.concatenate(imp_mask)
     #np.save(final_name + '_mask.npy', imp_mask)
+
 
 if __name__ == '__main__':
     import argparse

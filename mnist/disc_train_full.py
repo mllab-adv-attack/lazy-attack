@@ -53,6 +53,7 @@ if __name__ == '__main__':
     parser.add_argument('--d_lr', default=1e-3, type=float)
     parser.add_argument('--multi_pass', action='store_true')
     parser.add_argument('--patch', action='store_true')
+    parser.add_argument('--logits', action='store_true')
 
     # pgd settings
     parser.add_argument('--eps', default=0.3, type=float)

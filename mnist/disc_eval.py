@@ -51,6 +51,7 @@ if __name__ == '__main__':
     parser.add_argument('--d_lr', default=1e-3, type=float)
     parser.add_argument('--c_loss', action='store_true')
     parser.add_argument('--patch', action='store_true')
+    parser.add_argument('--logits', action='store_true')
 
     # pgd (filename) settings
     parser.add_argument('--eps', default=0.3, type=float)
