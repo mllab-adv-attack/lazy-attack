@@ -43,8 +43,8 @@ if __name__ == '__main__':
     parser.add_argument('--imp_random_start', default=0, help='eps for random start of image', type=float)
     parser.add_argument('--imp_random_seed', default=0, help='random seed for random start of image', type=int)
     parser.add_argument('--imp_gray_start', action='store_true')
-    parser.add_argument('--imp_num_steps', default=500, help='0 for until convergence', type=int)
-    parser.add_argument('--imp_step_size', default=0.5, type=float)
+    parser.add_argument('--imp_num_steps', default=100, help='0 for until convergence', type=int)
+    parser.add_argument('--imp_step_size', default=2, type=float)
     parser.add_argument('--imp_rep', action='store_true', help='use reptile instead of MAML')
     parser.add_argument('--imp_pp', default=0, help='step intervals to sum PGD gradients. <= 0 for pure MAML', type=int)
     parser.add_argument('--imp_adam', action='store_true')
@@ -280,6 +280,6 @@ if __name__ == '__main__':
             print('Invalid pixel range in x_imp. Expected [0,255], fount[{},{}]'.format(np.amin(x_imp),
                                                                                         np.amax(x_imp)))
         else:
-            result(x_imp, model, sess, x_full_batch, y_full_batch, file_name='', args=args)
+            result(x_imp, model, sess, x_full_batch, y_full_batch, final_name='', args=args)
 
 

@@ -121,6 +121,7 @@ def result(x_imp, model, sess, x_full_batch, y_full_batch, final_name, args):
 
     print('nat Accuracy: {:.2f}%'.format(100.0 * accuracy))
 
+    '''
     total_corr = 0
     for ibatch in range(num_batches):
         bstart = ibatch * eval_batch_size
@@ -132,6 +133,8 @@ def result(x_imp, model, sess, x_full_batch, y_full_batch, final_name, args):
         total_corr += cur_corr
 
     accuracy = total_corr / num_eval_examples
+    '''
+    accuracy = 0
     
     print('nat(PGD) Accuracy: {:.2f}%'.format(100.0 * accuracy))
 
@@ -197,7 +200,7 @@ if __name__ == '__main__':
     parser.add_argument('--target_y', default=-1, type=int)
     parser.add_argument('--load_arr', default='./arr_main/', type=str)
     parser.add_argument('--save_arr', default='./arr_new/', type=str)
-    parser.add_argument('--file_name', default='nat_pgd_8_20_2_20_imp_0_1000_5.0_corr_val_10_8_20_20_0', type=str)
+    parser.add_argument('--file_name', default='adv_pgd_8_20_2_rand_1_imp_0_1000_5.0_corr_val_10_8_20_20_0', type=str)
     args = parser.parse_args()
     for key, val in vars(args).items():
         print('{}={}'.format(key, val))
