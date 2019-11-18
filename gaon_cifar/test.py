@@ -104,6 +104,12 @@ def result(x_imp, model, sess, x_full_batch, y_full_batch, args):
     eval_batch_size = min(num_eval_examples, 100)
     num_batches = int(math.ceil(num_eval_examples / eval_batch_size))
 
+    assert num_eval_examples%10 == 0
+    target_batch_size = num_eval_examples//10
+    y_target = np.copy(y_full_batch)
+    for  i in range(10):
+        y_target[100*i: 100*(i+1)] = i
+
     total_loss = np.zeros(eval_batch_size)
     total_corr = 0
     for ibatch in range(num_batches):
@@ -123,6 +129,30 @@ def result(x_imp, model, sess, x_full_batch, y_full_batch, args):
 
     print('nat Accuracy: {:.2f}%'.format(100.0 * accuracy))
     print('nat Loss: {:.6f}'.format(nat_avg_loss.mean()))
+
+    # get full loss batch
+    loss_li = []
+    for ibatch in range(num_batches):
+        bstart = ibatch * eval_batch_size
+        bend = min(bstart + eval_batch_size, num_eval_examples)
+
+        x_batch = x_full_batch[bstart:bend, :]
+        y_source_batch = y_full_batch[bstart:bend]
+        y_target_batch = y_target[bstart:bend]
+        dict_adv = {model.x_input: x_batch,
+                    model.y_input: y_target_batch}
+        cur_corr, cur_loss, y_pred_batch = sess.run([model.num_correct, model.y_xent, model.predictions],
+                                                    feed_dict=dict_adv)
+        total_corr += cur_corr
+        total_loss += cur_loss
+        loss_li.append(cur_loss)
+    loss_li = np.concatenate(loss_li)
+    loss_li = loss_li.reshape((-1, 10)).T
+
+    # detection loss
+    success_rate = np.argmax(loss_li, axis=1) == y_full_batch[0]
+    print(success_rate.mean())
+    return
 
     total_loss = np.zeros(eval_batch_size)
     total_corr = 0
@@ -199,6 +229,7 @@ def result(x_imp, model, sess, x_full_batch, y_full_batch, args):
     imp_mask = np.concatenate(imp_mask)
     np.save(final_name + '_mask.npy', imp_mask)
 
+
 if __name__ == '__main__':
     import argparse
     import json
@@ -270,24 +301,21 @@ if __name__ == '__main__':
         # Restore the checkpoint
         saver.restore(sess, model_file)
         for source in range(10):
-            for target in range(10):
-                print('target label: {}'.format(target))
+            x_org = org_full[1000*source: 1000*(source+1)]
+            x_imp = imp_full[1000*source: 1000*(source+1)]
+            y = y_full[1000*source: 1000*(source+1)]
 
-                x_org = org_full[100*target: 100*(target+1)]
-                x_imp = imp_full[100*target: 100*(target+1)]
-                y = y_full[100*target: 100*(target+1)]
+            assert np.amax(y) <= source + 1e-5 and np.amin(y) >= source - 1e-5
 
-                y_target = np.ones_like(y).astype(int) * target
-
-                if np.amax(x_imp) > 255.0001 or \
-                    np.amin(x_imp) < -0.0001 or \
-                    np.isnan(np.amax(x_imp)):
-                    print('Invalid pixel range in x_imp. Expected [0,255], fount[{},{}]'.format(np.amin(x_imp),
-                                                                                                np.amax(x_imp)))
-                else:
-                    num_tests = 1
-                    for _ in range(num_tests):
-                        result(x_imp, model, sess, x_org, y_target, source, args)
-                    print()
+            if np.amax(x_imp) > 255.0001 or \
+                np.amin(x_imp) < -0.0001 or \
+                np.isnan(np.amax(x_imp)):
+                print('Invalid pixel range in x_imp. Expected [0,255], fount[{},{}]'.format(np.amin(x_imp),
+                                                                                            np.amax(x_imp)))
+            else:
+                num_tests = 1
+                for _ in range(num_tests):
+                    result(x_imp, model, sess, x_org, y, args)
+                print()
 
 
