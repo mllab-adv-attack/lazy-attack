@@ -219,7 +219,7 @@ if __name__ == '__main__':
         x_full_batch = x_full_batch.astype(np.float32)
 
         x_imp = []  # imp accumulator
-        step_imp = []  # num steps accumulator
+        mask_imp = []  # success accumulator
         l2_li = [] # l2 distance accumulator
 
         for ibatch in range(num_batches):
@@ -242,7 +242,7 @@ if __name__ == '__main__':
                 y_target = np.ones_like(y_pred_batch).astype(int) * args.target
             else:
                 y_target = y_batch
-            x_batch_imp, step_batch_imp = impenet.fortify(x_batch, y_target, sess)
+            x_batch_imp, mask_batch_imp = impenet.fortify(x_batch, y_target, sess)
             print()
 
             # evaluation
@@ -252,7 +252,7 @@ if __name__ == '__main__':
             # suc_flag = impenet.validation(x_batch_imp, y_batch, y_batch_hard)
 
             x_imp.append(x_batch_imp)
-            step_imp.append(np.array([step_batch_imp]))
+            mask_imp.append(np.array([mask_batch_imp]))
             l2_li.append(np.linalg.norm((x_batch_imp - x_batch)/255))
             print('l2 distance (curr):', np.linalg.norm(x_batch_imp - x_batch)/255)
             print('l2 distance (total):', np.mean(l2_li))
@@ -261,7 +261,7 @@ if __name__ == '__main__':
             print('------------------------------------------------------------------------------')
 
         x_imp = np.concatenate(x_imp)
-        step_imp = np.concatenate(step_imp)
+        mask_imp = np.concatenate(mask_imp)
 
         # save image
         folder_name = './arr' + '_main' + '/'
@@ -270,7 +270,7 @@ if __name__ == '__main__':
         
         np.save(common_name + '_x_org', x_full_batch)
         np.save(common_name + '_x_imp', x_imp)
-        np.save(common_name + '_step_imp', step_imp)
+        np.save(common_name + '_mask_imp', mask_imp)
         np.save(common_name + '_y', y_full_batch)
 
         # sanity check

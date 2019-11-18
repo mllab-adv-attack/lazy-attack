@@ -103,9 +103,8 @@ def result(x_imp, model, sess, x_full_batch, y_full_batch, args):
     num_eval_examples = x_imp.shape[0]
     eval_batch_size = min(num_eval_examples, 100)
     num_batches = int(math.ceil(num_eval_examples / eval_batch_size))
-    imp_loss_li = []
 
-    total_loss = 0
+    total_loss = np.zeros(eval_batch_size)
     total_corr = 0
     for ibatch in range(num_batches):
         bstart = ibatch * eval_batch_size
@@ -115,19 +114,19 @@ def result(x_imp, model, sess, x_full_batch, y_full_batch, args):
         y_batch = y_full_batch[bstart:bend]
         dict_adv = {model.x_input: x_batch,
                     model.y_input: y_batch}
-        cur_corr, cur_loss, y_pred_batch = sess.run([model.num_correct, model.mean_xent, model.predictions],
+        cur_corr, cur_loss, y_pred_batch = sess.run([model.num_correct, model.y_xent, model.predictions],
                                           feed_dict=dict_adv)
         total_corr += cur_corr
         total_loss += cur_loss
     accuracy = total_corr / num_eval_examples
-    avg_loss = total_loss / num_batches
+    nat_avg_loss = total_loss / num_batches
 
     print('nat Accuracy: {:.2f}%'.format(100.0 * accuracy))
-    print('nat Loss: {:.6f}%'.format(avg_loss))
+    print('nat Loss: {:.6f}'.format(nat_avg_loss.mean()))
 
-    '''
-    total_loss = 0
+    total_loss = np.zeros(eval_batch_size)
     total_corr = 0
+    '''
     for ibatch in range(num_batches):
         bstart = ibatch * eval_batch_size
         bend = min(bstart + eval_batch_size, num_eval_examples)
@@ -138,15 +137,13 @@ def result(x_imp, model, sess, x_full_batch, y_full_batch, args):
         total_corr += cur_corr
         total_loss += cur_loss
 
-    accuracy = total_corr / num_eval_examples
-    avg_loss = total_loss / num_batches
     '''
-    accuracy = 0
-    avg_loss = 0
+    accuracy = total_corr / num_eval_examples
+    nat_pgd_avg_loss = total_loss / num_batches
     print('nat(PGD) Accuracy: {:.2f}%'.format(100.0 * accuracy))
-    print('nat(PGD) Loss: {:.6f}%'.format(avg_loss))
+    print('nat(PGD) Loss: {:.6f}'.format(nat_pgd_avg_loss.mean()))
 
-    total_loss = 0
+    total_loss = np.zeros(eval_batch_size)
     total_corr = 0
     for ibatch in range(num_batches):
         bstart = ibatch * eval_batch_size
@@ -157,19 +154,20 @@ def result(x_imp, model, sess, x_full_batch, y_full_batch, args):
         dict_adv = {model.x_input: x_batch,
                     model.y_input: y_batch}
         cur_corr, y_pred_batch, correct_prediction, cur_loss = \
-            sess.run([model.num_correct, model.predictions, model.correct_prediction, model.mean_xent],
+            sess.run([model.num_correct, model.predictions, model.correct_prediction, model.y_xent],
                      feed_dict=dict_adv)
         total_corr += cur_corr
         total_loss += cur_loss
 
     accuracy = total_corr / num_eval_examples
-    avg_loss = total_loss / num_batches
+    imp_avg_loss = total_loss / num_batches
 
     print('imp Accuracy: {:.2f}%'.format(100.0 * accuracy))
-    print('imp Loss: {:.6f}%'.format(avg_loss))
+    print('imp Loss: {:.6f}'.format(imp_avg_loss.mean()))
 
-    total_loss = 0
+    total_loss = np.zeros(eval_batch_size)
     total_corr = 0
+    imp_loss_li = []
     imp_mask = []
     for ibatch in range(num_batches):
         bstart = ibatch * eval_batch_size
@@ -184,25 +182,22 @@ def result(x_imp, model, sess, x_full_batch, y_full_batch, args):
         imp_mask.append(cur_mask)
 
     accuracy = total_corr / num_eval_examples
-    avg_loss = total_loss / num_batches
+    imp_pgd_avg_loss = total_loss / num_batches
 
     print('imp(PGD) Accuracy: {:.2f}%'.format(100.0 * accuracy))
-    print('imp(PGD) Loss: {:.6f}%'.format(avg_loss))
+    print('imp(PGD) Loss: {:.6f}'.format(imp_pgd_avg_loss.mean()))
 
     l2_dist = np.linalg.norm((x_imp-x_full_batch).reshape(len(x_imp), -1)/255.0, axis=1).mean()
     linf_dist = np.amax(np.abs((x_imp-x_full_batch)/255.0))
     print('l2_dist:', l2_dist)
     print('linf_dist:', linf_dist)
 
-    #imp_loss = np.concatenate(imp_loss_li)
-    #if args.target_y >= 0:
-    #    np.save(final_name + '_loss' + str(args.target_y) + '.npy', imp_loss)
-    #if final_name:
-    #    np.save(final_name + '_loss.npy', imp_loss)
+    imp_loss = np.concatenate(imp_loss_li)
+    np.save( + '_loss' + str(args.target_y) + '.npy', imp_loss)
+    np.save(final_name + '_loss.npy', imp_loss)
 
-    #imp_mask = np.concatenate(imp_mask)
-    #if final_name:
-    #    np.save(final_name + '_mask.npy', imp_mask)
+    imp_mask = np.concatenate(imp_mask)
+    np.save(final_name + '_mask.npy', imp_mask)
 
 if __name__ == '__main__':
     import argparse
@@ -274,25 +269,25 @@ if __name__ == '__main__':
 
         # Restore the checkpoint
         saver.restore(sess, model_file)
+        for source in range(10):
+            for target in range(10):
+                print('target label: {}'.format(target))
 
-        for target in range(10):
-            print('target label: {}'.format(target))
+                x_org = org_full[100*target: 100*(target+1)]
+                x_imp = imp_full[100*target: 100*(target+1)]
+                y = y_full[100*target: 100*(target+1)]
 
-            x_org = org_full[10*target, 10*(target+1)]
-            x_imp = imp_full[10*target, 10*(target+1)]
-            y = y_full[10*target, 10*(target+1)]
+                y_target = np.ones_like(y).astype(int) * target
 
-            y_target = np.copy(y).fill(target)
-
-            if np.amax(x_imp) > 255.0001 or \
-                np.amin(x_imp) < -0.0001 or \
-                np.isnan(np.amax(x_imp)):
-                print('Invalid pixel range in x_imp. Expected [0,255], fount[{},{}]'.format(np.amin(x_imp),
-                                                                                            np.amax(x_imp)))
-            else:
-                num_tests = 1
-                for _ in range(num_tests):
-                    result(x_imp, model, sess, x_org, y_target, args)
-                print()
+                if np.amax(x_imp) > 255.0001 or \
+                    np.amin(x_imp) < -0.0001 or \
+                    np.isnan(np.amax(x_imp)):
+                    print('Invalid pixel range in x_imp. Expected [0,255], fount[{},{}]'.format(np.amin(x_imp),
+                                                                                                np.amax(x_imp)))
+                else:
+                    num_tests = 1
+                    for _ in range(num_tests):
+                        result(x_imp, model, sess, x_org, y_target, source, args)
+                    print()
 
 
